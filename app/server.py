@@ -2,6 +2,7 @@ from io import StringIO
 import sqlite3
 from fastapi import Body, FastAPI, Request, Response
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 import subprocess
 
@@ -22,6 +23,13 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 try:
     spec = importlib.util.spec_from_file_location("config", "app/config/config.py")
@@ -74,6 +82,17 @@ async def gene_model(chr: str, start: int, end: int) -> Response:
         config["genes"]["model_file"], f"{chr}:{start}-{end}"
     )
 
+@app.get("/api/v1/gene_model_by_gene/{gene}/{padding}")
+async def gene_model_by_gene(gene: str, padding: int) -> Response:
+    if padding < 0:
+        return JSONResponse({"message": "padding must be non-negative"}, status_code=400)
+    try:
+        chr, start, end = request_util.get_gene_range(gene.upper())
+    except GeneNotFoundException as e:
+        return JSONResponse({"message": str(e)}, status_code=404)
+    return request_util.stream_tabix_response(
+        config["genes"]["model_file"], f"{chr}:{start-padding}-{end+padding}"
+    )
 
 @app.get("/api/v1/gene_cs/{gene}")
 async def gene_cs(gene: str, padding: int = 0) -> Response:
@@ -85,6 +104,61 @@ async def gene_cs(gene: str, padding: int = 0) -> Response:
     return request_util.stream_tabix_response(
         config["finemapped"]["file"], f"{chr}:{start-padding}-{end+padding}"
     )
+
+
+@app.post("/api/v1/dataset_metadata")
+async def dataset_metadata(request: Request) -> StreamingResponse:
+    datasets = await request.json()
+
+    def generate_tsv():
+        try:
+            conn = sqlite3.connect(config["metadata_db"], check_same_thread=False)
+            c: sqlite3.Cursor = conn.cursor()
+            output = StringIO()
+            header = [
+                "resource",
+                "data_type",
+                "dataset_id",
+                "study_id",
+                "study_label",
+                "sample_group",
+                "tissue_id",
+                "tissue_label",
+                "condition_label",
+                "sample_size",
+                "quant_method",
+            ]
+            output.write("\t".join(header) + "\n")
+            yield output.getvalue()
+            output.truncate(0)
+            output.seek(0)
+
+            query = """
+                SELECT resource, data_type, dataset_id, study_id, study_label,
+                    sample_group, tissue_id, tissue_label, condition_label,
+                    sample_size, quant_method
+                FROM dataset
+                WHERE dataset_id IN ({})
+            """.format(','.join('?' * len(datasets)))
+            
+            c.execute(query, datasets)
+
+            while True:
+                row = c.fetchone()
+                if row is None:
+                    break
+                output.write("\t".join(map(str, row)) + "\n")
+                yield output.getvalue()
+                output.truncate(0)
+                output.seek(0)
+
+            c.close()
+            conn.close()
+        except Exception as e:
+            logger.error(e)
+            yield f"!error: failed to read"
+    
+    return StreamingResponse(generate_tsv(), media_type="text/tab-separated-values")
 
 
 @app.post("/api/v1/trait_metadata")
@@ -117,27 +191,18 @@ async def trait_metadata(request: Request) -> StreamingResponse:
             output.truncate(0)
             output.seek(0)
 
-            chunk_size = 100
-            for i in range(0, len(phenotypes), chunk_size):
-                chunk = phenotypes[i : i + chunk_size]
-                conditions = []
-                params = []
-                for phenotype in chunk:
-                    conditions.append(" (resource = ? AND phenocode = ?)")
-                    params.extend([phenotype["resource"], phenotype["phenocode"]])
-                query = f"""
-                    SELECT resource, data_type, trait_type, phenocode, phenostring, category,
-                        num_samples, num_cases, num_controls,
-                        pub_author, pub_date
-                    FROM trait
-                    WHERE {" OR ".join(conditions)}
-                """
-                c.execute(query, params)
-
-                while True:
-                    row = c.fetchone()
-                    if row is None:
-                        break
+            query = """
+                SELECT resource, data_type, trait_type, phenocode, phenostring, category,
+                    num_samples, num_cases, num_controls,
+                    pub_author, pub_date
+                FROM trait
+                WHERE resource = ? AND phenocode = ?
+            """
+            
+            for p in phenotypes:
+                c.execute(query, [p['resource'], p['phenocode']])
+                row = c.fetchone()
+                if row:
                     output.write("\t".join(map(str, row)) + "\n")
                     yield output.getvalue()
                     output.truncate(0)
