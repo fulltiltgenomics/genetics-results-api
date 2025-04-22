@@ -1,6 +1,7 @@
 fastapi==0.115.6
 fastapi_login==1.10.3
 google-api-python-client==2.156.0
+itsdangerous==2.2.0
 polars==1.17.1
 PyJWT==2.10.1
 rauth==0.7.3
