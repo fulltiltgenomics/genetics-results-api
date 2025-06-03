@@ -7,13 +7,41 @@ RUN apt-get update && apt-get install -y nginx libz-dev libbz2-dev liblzma-dev z
 ARG DEPLOY_ENV 
 # finngen or public
 ARG DATA_SOURCE
-ARG HTSLIB_VER=1.21
+ARG HTSLIB_VER=1.22
 
-WORKDIR /var/www/genetics-results-api
-
+# htslib
+WORKDIR /opt/htslib
 RUN curl -LO https://github.com/samtools/htslib/releases/download/${HTSLIB_VER}/htslib-${HTSLIB_VER}.tar.bz2 && \
     tar -xvjf htslib-${HTSLIB_VER}.tar.bz2 && cd htslib-${HTSLIB_VER} && \
     ./configure && make && make install && cd .. && rm -rf htslib-${HTSLIB_VER}*
+
+# gcloud sdk
+WORKDIR /opt/gcloud
+RUN curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz && \
+    tar -xf google-cloud-cli-linux-x86_64.tar.gz && \
+    ./google-cloud-sdk/install.sh -q --usage-reporting false
+
+# init gcloud and run server at container start
+COPY <<EOF /var/www/genetics-results-api/start.sh
+#!/bin/bash
+if [ -f /mnt/disks/data/phewas-development-ff565b237edf.json ]; then
+    source /opt/gcloud/google-cloud-sdk/completion.bash.inc && \
+    source /opt/gcloud/google-cloud-sdk/path.bash.inc && \
+    gcloud auth activate-service-account --key-file=/mnt/disks/data/phewas-development-ff565b237edf.json
+else
+    echo "NOTE: No service account key file found, gcloud will not be initialized"
+fi
+# if no command provided, run server
+if [ -z "\$@" ]; then
+    exec uvicorn app.server:app --host 0.0.0.0 --port 4000
+else
+    exec "\$@"
+fi
+EOF
+
+RUN chmod +x /var/www/genetics-results-api/start.sh
+
+WORKDIR /var/www/genetics-results-api
 
 COPY requirements.txt ./
 RUN pip3 install -r requirements.txt
@@ -22,4 +50,5 @@ COPY . .
 COPY app/config/config.${DEPLOY_ENV}.${DATA_SOURCE}.py app/config/config.py
 
 EXPOSE 4000
-CMD ["uvicorn", "app.server:app", "--host", "0.0.0.0", "--port", "4000"] 
+
+ENTRYPOINT ["/var/www/genetics-results-api/start.sh"]
