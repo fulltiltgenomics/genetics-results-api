@@ -20,7 +20,3 @@ class GeneNotFoundException(NotFoundException):
 
 class PhenoNotFoundException(NotFoundException):
     pass
-
-
-class ACZeroException(Exception):
-    pass

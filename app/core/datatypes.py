@@ -51,7 +51,7 @@ class AssociationResult(TypedDict):
     dataset: str
     data_type: Datatype
     phenocode: str
-    mlogp: float
+    mlog10p: float
     beta: float
     sebeta: float
 

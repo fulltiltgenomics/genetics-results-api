@@ -42,6 +42,46 @@ class Variant(object):
             raise ParseException("only ACGT alleles are supported")
         self.varid = "{}-{}-{}-{}".format(self.chr, self.pos, self.ref, self.alt)
 
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, Variant):
+            return NotImplemented
+        return (self.chr, self.pos, self.ref, self.alt) < (
+            other.chr,
+            other.pos,
+            other.ref,
+            other.alt,
+        )
+
+    def __le__(self, other: object) -> bool:
+        if not isinstance(other, Variant):
+            return NotImplemented
+        return (self.chr, self.pos, self.ref, self.alt) <= (
+            other.chr,
+            other.pos,
+            other.ref,
+            other.alt,
+        )
+
+    def __gt__(self, other: object) -> bool:
+        if not isinstance(other, Variant):
+            return NotImplemented
+        return (self.chr, self.pos, self.ref, self.alt) > (
+            other.chr,
+            other.pos,
+            other.ref,
+            other.alt,
+        )
+
+    def __ge__(self, other: object) -> bool:
+        if not isinstance(other, Variant):
+            return NotImplemented
+        return (self.chr, self.pos, self.ref, self.alt) >= (
+            other.chr,
+            other.pos,
+            other.ref,
+            other.alt,
+        )
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Variant):
             return NotImplemented

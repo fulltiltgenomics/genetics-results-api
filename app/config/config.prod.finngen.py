@@ -1,7 +1,7 @@
 authentication = True
 authentication_file = "/mnt/disks/data/finngen_auth_prod.json"
 
-metadata_db = "/mnt/disks/data/meta_finngen_version_20241124.db"
+metadata_db = "/mnt/disks/data/meta_finngen_version_20250526.db"
 
 rsid_db = {
     "file": "/mnt/disks/data/gnomad/gnomad.genomes.exomes.v4.0.rsid.db",
@@ -17,6 +17,18 @@ gnomad = {
 genes = {
     "model_file": "/mnt/disks/data/ensembl_anno_coding_canonical_105.tsv.gz",
     "start_end_file": "/mnt/disks/data/ensembl_gene_pos_coding_canonical_105.tsv",
+}
+
+variant_set_files = {
+    "FinnGen_enriched_202505": {
+        "file": "/mnt/disks/data/variant_sets/FinnGen_enriched_202505",
+    },
+    "COVID19_HGI_all": {
+        "file": "/mnt/disks/data/variant_sets/COVID19_HGI_all",
+    },
+    "COVID19_HGI_severity": {
+        "file": "/mnt/disks/data/variant_sets/COVID19_HGI_severity",
+    },
 }
 
 coding_set = set(
@@ -48,306 +60,365 @@ ld_assoc = {
     ],
 }
 
-ignore_phenos = {
-    "assoc": [
-        "FinnGen_MVP_UKBB_meta:G6_SLEEPAPNO_INCLAVO",
-        "FinnGen_MVP_UKBB_meta:K11_CARIES_1_OPER_ONLYAVO",
-        "FinnGen_drugs:ATC_D01_IRN",  # antifungals; in assoc data but not finemapped
-    ]
-}
+assoc_files = [
+    {
+        "file": "/mnt/disks/data/FinnGen_MVP_UKBB_meta_sumstats_p0.005.tsv.gz",
+        "resource": "FinnGen_MVP_UKBB_meta",
+        "version": "R12",
+        "data_types": ["GWAS"],
+        "n_traits": "330",
+        "ignore_phenos": ["G6_SLEEPAPNO_INCLAVO", "K11_CARIES_1_OPER_ONLYAVO"],
+        "url": "https://mvp-ukbb.finngen.fi/about",
+        "pheno_urls": [
+            {
+                "url": "https://https://mvp-ukbb.finngen.fi/pheno/[PHENOCODE]",
+                "label": "FinnGen/MVP/UKBB meta Pheweb",
+            },
+            {
+                "url": "https://risteys.finngen.fi/endpoints/[PHENOCODE]",
+                "label": "FinnGen Risteys",
+            },
+        ],
+        "p_thres": 5e-3,
+    },
+    {
+        "file": "/mnt/disks/data/FinnGen_R12_UKBB_meta_sumstats_p0.005.tsv.gz",
+        "resource": "FinnGen_UKBB_meta",
+        "version": "R12",
+        "data_types": ["GWAS"],
+        "n_traits": "873",
+        "url": "https://metaresults-ukbb.finngen.fi/about",
+        "pheno_urls": [
+            {
+                "url": "https://metaresults-ukbb.finngen.fi/pheno/[PHENOCODE]",
+                "label": "FinnGen/UKBB meta Pheweb",
+            },
+            {
+                "url": "https://risteys.finngen.fi/endpoints/[PHENOCODE]",
+                "label": "FinnGen Risteys",
+            },
+        ],
+        "p_thres": 5e-3,
+    },
+    {
+        "file": "/mnt/disks/data/FinnGen_R12_sumstats_p0.005.tsv.gz",
+        "resource": "FinnGen",
+        "version": "R12",
+        "data_types": ["GWAS"],
+        "n_traits": "2,469",
+        "url": "https://finngen.gitbook.io/documentation/methods/phewas",
+        "pheno_urls": [
+            {
+                "url": "https://r12.finngen.fi/pheno/[PHENOCODE]",
+                "label": "FinnGen Pheweb",
+            },
+            {
+                "url": "https://risteys.finngen.fi/endpoints/[PHENOCODE]",
+                "label": "FinnGen Risteys",
+            },
+        ],
+        "p_thres": 5e-3,
+    },
+    {
+        "file": "/mnt/disks/data/FinnGen_kanta_sumstats_20250315_p0.005.tsv.gz",
+        "resource": "FinnGen_kanta",
+        "version": "R12",
+        "data_types": ["GWAS"],
+        "n_traits": "382",
+        "url": "https://www.finngen.fi/en/for_researchers",
+        "pheno_urls": [
+            {
+                "url": "https://kanta.finngen.fi/pheno/[PHENOCODE]",
+                "label": "FinnGen Pheweb",
+            },
+            {
+                "url": "https://risteys.finngen.fi/lab-tests/[PHENOCODE]",
+                "label": "FinnGen Risteys",
+            },
+        ],
+        "p_thres": 5e-3,
+    },
+    {
+        "file": "/mnt/disks/data/FinnGen_R12drugs_sumstats_p0.005.tsv.gz",
+        "resource": "FinnGen_drugs",
+        "version": "R12",
+        "data_types": ["GWAS"],
+        "n_traits": "126",
+        "ignore_phenos": ["ATC_D01_IRN"],
+        "url": "https://www.finngen.fi/en/for_researchers",
+        "pheno_urls": [
+            {
+                "url": "https://drugs.finngen.fi/pheno/[PHENOCODE]",
+                "label": "FinnGen Pheweb",
+            },
+        ],
+        "p_thres": 5e-3,
+    },
+    {
+        "file": "/mnt/disks/data/FinnGen_Olink_meta_sumstats_2025-03-20_SomaScan_2023-03-02_sumstats_p0.005.tsv.gz",
+        "resource": "FinnGen_pQTL",
+        "version": "2025-03-20",
+        "data_types": ["pQTL"],
+        "n_traits": "2,826 Olink, 7,596 SomaScan",
+        "url": "https://finngen.gitbook.io/documentation/methods/pqtl-analysis",
+        "pheno_urls": [
+            {
+                "url": "https://r12.finngen.fi/gene/[GENE]",
+                "label": "FinnGen Pheweb",
+            }
+        ],
+        "p_thres": 5e-3,
+    },
+    {
+        "file": "/mnt/disks/data/FinnGen_snRNAseq_2023-10-05_sumstats.tsv.gz",
+        "resource": "FinnGen_eQTL",
+        "version": "2023-10-05",
+        "data_types": ["eQTL"],
+        "n_traits": "26,624 genes, 35 predicted cell types",
+        "url": "https://www.finngen.fi/en/for_researchers",
+        "pheno_urls": [
+            {
+                "url": "https://r12.finngen.fi/gene/[GENE]",
+                "label": "FinnGen Pheweb",
+            }
+        ],
+        "p_thres": 5e-3,
+    },
+    {
+        "file": "/mnt/disks/data/UKBB_Olink_sumstats_2024-04-12_p0.005.tsv.gz",
+        "resource": "UKBB_pQTL",
+        "version": "2024-04-12",
+        "data_types": ["pQTL"],
+        "n_traits": "2,655",
+        # "url": "https://www.biorxiv.org/content/10.1101/2022.06.17.496443v1.full",
+        "url": None,
+        "pheno_urls": [
+            {
+                "url": "https://www.finngen.fi/en/for_researchers",
+                "label": "FinnGen analysis",
+            }
+        ],
+        "p_thres": 5e-3,
+    },
+    {
+        "file": "/mnt/disks/data/ot_sa_gwas_no_finngen_22.09.tsv.gz",
+        "resource": "Open_Targets",
+        "version": "October 2022 (associations), March 2025 (credible sets)",
+        "data_types": ["GWAS"],
+        "n_traits": "6,033 (associations), 14,350 (credible sets)",
+        "url": "https://platform.opentargets.org",
+        "pheno_urls": [
+            {
+                "url": "https://platform.opentargets.org/study/[PHENOCODE]",
+                "label": "Open Targets study",
+            }
+        ],
+        "p_thres": 5e-3,
+    },
+    {
+        "file": "/mnt/disks/data/eQTL_Catalogue_R7_sumstats_p0.005.tsv.gz",
+        "resource": "eQTL_Catalogue_R7",
+        "version": "R7",
+        "data_types": ["eQTL", "pQTL", "sQTL"],
+        "n_traits": "1,000,000+",
+        "url": "https://www.ebi.ac.uk/eqtl/",
+        "pheno_urls": [
+            {
+                "url": "https://www.ebi.ac.uk/eqtl/Studies",
+                "label": "eQTL Catalogue studies",
+            }
+        ],
+        "p_thres": 5e-3,
+    },
+    {
+        "file": "/mnt/disks/data/deCODE_pQTLs_NatGen2021_aligned_p0.005.tsv.gz",
+        "resource": "deCODE",
+        "version": "2021",
+        "data_types": ["pQTL"],
+        "n_traits": "4,907",
+        "url": "https://doi.org/10.1038/s41588-021-00978-w",
+        "pheno_urls": [
+            {
+                "url": "https://doi.org/10.1038/s41588-021-00978-w",
+                "label": "Nat Genet 2021",
+            }
+        ],
+        "p_thres": 5e-3,
+    },
+    {
+        "file": "/mnt/disks/data/GTEx_v8_edQTL.tsv.gz",
+        "resource": "GTEx_v8_edQTL",
+        "version": "2022",
+        "data_types": ["edQTL"],
+        "n_traits": "156,396",
+        "url": "https://doi.org/10.1038/s41586-022-05052-x",
+        "pheno_urls": [
+            {
+                "url": "https://doi.org/10.1038/s41586-022-05052-x",
+                "label": "Nature 2022",
+            }
+        ],
+        "p_thres": 1e-6,
+    },
+    {
+        "file": "/mnt/disks/data/NMR_sumstats_p0.005.tsv.gz",
+        "resource": "NMR",
+        "version": "2024",
+        "data_types": ["metaboQTL"],
+        "n_traits": "250",
+        "url": "https://www.medrxiv.org/content/10.1101/2023.06.09.23291213v1",
+        "pheno_urls": [
+            {
+                "url": "https://www.medrxiv.org/content/10.1101/2023.06.09.23291213v1",
+                "label": "medRxiv 2023",
+            }
+        ],
+        "p_thres": 5e-3,
+    },
+]
 
-assoc = {
-    "file": "/mnt/disks/data/assoc_resources_finngen_version_20241221.tsv.gz",
-    # not all resources in the data file need to be listed here
-    # if a resource is not listed here, data for it will not be shown in the UI
-    "resources": [
-        {
-            "resource": "FinnGen_MVP_UKBB_meta",
-            "version": "R12",
-            "data_types": ["GWAS"],
-            "n_traits": "330",
-            "url": "https://mvp-ukbb.finngen.fi/about",
-            "pheno_urls": [
-                {
-                    "url": "https://https://mvp-ukbb.finngen.fi/pheno/[PHENOCODE]",
-                    "label": "FinnGen/MVP/UKBB meta Pheweb",
-                },
-                {
-                    "url": "https://risteys.finngen.fi/endpoints/[PHENOCODE]",
-                    "label": "FinnGen Risteys",
-                },
-            ],
-            "p_thres": 5e-3,
-        },
-        {
-            "resource": "FinnGen_UKBB_meta",
-            "version": "R12",
-            "data_types": ["GWAS"],
-            "n_traits": "873",
-            "url": "https://metaresults-ukbb.finngen.fi/about",
-            "pheno_urls": [
-                {
-                    "url": "https://metaresults-ukbb.finngen.fi/pheno/[PHENOCODE]",
-                    "label": "FinnGen/UKBB meta Pheweb",
-                },
-                {
-                    "url": "https://risteys.finngen.fi/endpoints/[PHENOCODE]",
-                    "label": "FinnGen Risteys",
-                },
-            ],
-            "p_thres": 5e-3,
-        },
-        {
-            "resource": "FinnGen",
-            "version": "R12",
-            "data_types": ["GWAS"],
-            "n_traits": "2,469",
-            "url": "https://finngen.gitbook.io/documentation/methods/phewas",
-            "pheno_urls": [
-                {
-                    "url": "https://r12.finngen.fi/pheno/[PHENOCODE]",
-                    "label": "FinnGen Pheweb",
-                },
-                {
-                    "url": "https://risteys.finngen.fi/endpoints/[PHENOCODE]",
-                    "label": "FinnGen Risteys",
-                },
-            ],
-            "p_thres": 5e-3,
-        },
-        {
-            "resource": "FinnGen_kanta",
-            "version": "R12",
-            "data_types": ["GWAS"],
-            "n_traits": "382",
-            "url": "https://www.finngen.fi/en/for_researchers",
-            "pheno_urls": [
-                {
-                    "url": "https://kanta.finngen.fi/pheno/[PHENOCODE]",
-                    "label": "FinnGen Pheweb",
-                },
-                {
-                    "url": "https://risteys.finngen.fi/lab-tests/[PHENOCODE]",
-                    "label": "FinnGen Risteys",
-                },
-            ],
-            "p_thres": 5e-3,
-        },
-        {
-            "resource": "FinnGen_drugs",
-            "version": "R12",
-            "data_types": ["GWAS"],
-            "n_traits": "126",
-            "url": "https://www.finngen.fi/en/for_researchers",
-            "pheno_urls": [
-                {
-                    "url": "https://drugs.finngen.fi/pheno/[PHENOCODE]",
-                    "label": "FinnGen Pheweb",
-                },
-            ],
-            "p_thres": 5e-3,
-        },
-        {
-            "resource": "FinnGen_pQTL",
-            "version": "SomaScan 2023-03-02, Olink 2023-10-11",
-            "data_types": ["pQTL"],
-            "n_traits": "SomaScan 7,596, Olink 2,925",
-            "url": "https://finngen.gitbook.io/documentation/methods/pqtl-analysis",
-            "pheno_urls": [
-                {
-                    "url": "https://r12.finngen.fi/gene/[GENE]",
-                    "label": "FinnGen Pheweb",
-                }
-            ],
-            "p_thres": 5e-3,
-        },
-        {
-            "resource": "FinnGen_eQTL",
-            "version": "2023-10-05",
-            "data_types": ["eQTL"],
-            "n_traits": "26,624 genes, 35 predicted cell types",
-            "url": "https://www.finngen.fi/en/for_researchers",
-            "pheno_urls": [
-                {
-                    "url": "https://r12.finngen.fi/gene/[GENE]",
-                    "label": "FinnGen Pheweb",
-                }
-            ],
-            "p_thres": 5e-3,
-        },
-        {
-            "resource": "UKBB_pQTL",
-            "version": "2024-01-30",
-            "data_types": ["pQTL"],
-            "n_traits": "Olink 2,655",
-            # "url": "https://www.biorxiv.org/content/10.1101/2022.06.17.496443v1.full",
-            "url": None,
-            "pheno_urls": [
-                {
-                    "url": "https://www.finngen.fi/en/for_researchers",
-                    "label": "FinnGen analysis",
-                }
-            ],
-            "p_thres": 5e-3,
-        },
-        {
-            "resource": "Open_Targets",
-            "version": "October 2022",
-            "data_types": ["GWAS"],
-            "n_traits": "54,385",
-            "url": "https://genetics.opentargets.org",
-            "pheno_urls": [
-                {
-                    "url": "https://genetics.opentargets.org/study/[PHENOCODE]",
-                    "label": "Open Targets study",
-                }
-            ],
-            "p_thres": 5e-3,
-        },
-        {
-            "resource": "eQTL_Catalogue_R7",
-            "version": "R7",
-            "data_types": ["eQTL", "pQTL", "sQTL"],
-            "n_traits": "1,000,000+",
-            "url": "https://www.ebi.ac.uk/eqtl/",
-            "pheno_urls": [
-                {
-                    "url": "https://www.ebi.ac.uk/eqtl/Studies",
-                    "label": "eQTL Catalogue studies",
-                }
-            ],
-            "p_thres": 5e-3,
-        },
-        {
-            "resource": "deCODE",
-            "version": "2021",
-            "data_types": ["pQTL"],
-            "n_traits": "4,907",
-            "url": "https://doi.org/10.1038/s41588-021-00978-w",
-            "pheno_urls": [
-                {
-                    "url": "https://doi.org/10.1038/s41588-021-00978-w",
-                    "label": "Nat Genet 2021",
-                }
-            ],
-            "p_thres": 5e-3,
-        },
-        {
-            "resource": "GTEx_v8_edQTL",
-            "version": "2022",
-            "data_types": ["edQTL"],
-            "n_traits": "156,396",
-            "url": "https://doi.org/10.1038/s41586-022-05052-x",
-            "pheno_urls": [
-                {
-                    "url": "https://doi.org/10.1038/s41586-022-05052-x",
-                    "label": "Nature 2022",
-                }
-            ],
-            "p_thres": 1e-6,
-        },
-        {
-            "resource": "NMR",
-            "version": "2024",
-            "data_types": ["metaboQTL"],
-            "n_traits": "250",
-            "url": "https://www.medrxiv.org/content/10.1101/2023.06.09.23291213v1",
-            "pheno_urls": [
-                {
-                    "url": "https://www.medrxiv.org/content/10.1101/2023.06.09.23291213v1",
-                    "label": "medRxiv 2023",
-                }
-            ],
-            "p_thres": 5e-3,
-        },
-    ],
-}
+# finemapped = {
+#     "file": "/mnt/disks/data/finemapped_resources_finngen_version_20250526_eqtlcat_ge_aptamer_genenamesmapped.annotated.tsv.gz",
+#     "trans_file": "/mnt/disks/data/finemapped_resources_finngen_version_20250526_eqtlcat_ge_aptamer_genenamesmapped_eqtlpqtl_sortbygenepos.annotated.tsv.gz",
+# }
 
-# TODO: remove file2
 finemapped = {
-    "file": "/mnt/disks/data/finemapped_resources_finngen_version_20241221.tsv.gz",
-    "file2": "/mnt/disks/data/finemapped_resources_finngen_version_20250315_eqtlcat_ge_aptamer_genenamesmapped.annotated.tsv.gz",
+    "file": "/mnt/disks/data/finemapped_resources_finngen_version_20250315_eqtlcat_ge_aptamer_genenamesmapped.annotated.tsv.gz",
     "trans_file": "/mnt/disks/data/finemapped_resources_finngen_version_20250315_eqtlcat_ge_aptamer_genenamesmapped_eqtlpqtl_sortbygenepos.annotated.tsv.gz",
-    "resources": [
-        {
-            "resource": "eQTL_Catalogue_R7",
-            "version": "R7",
-            "data_types": ["eQTL", "pQTL", "sQTL"],
-            "n_traits": "1,000,000+",
-            "url": "https://www.ebi.ac.uk/eqtl/",
-        },
-        {
-            "resource": "FinnGen",
-            "version": "R12",
-            "data_types": ["GWAS"],
-            "n_traits": "2,469",
-            "url": "https://finngen.gitbook.io/documentation/methods/phewas",
-        },
-        {
-            "resource": "FinnGen_kanta",
-            "version": "R12",
-            "data_types": ["GWAS"],
-            "n_traits": "382",
-            "url": "https://www.finngen.fi/en/for_researchers",
-        },
-        {
-            "resource": "FinnGen_drugs",
-            "version": "R12",
-            "data_types": ["GWAS"],
-            "n_traits": "126",
-            "url": "https://www.finngen.fi/en/for_researchers",
-        },
-        {
-            "resource": "FinnGen_pQTL",
-            "version": "SomaScan 2023-03-02, Olink 2023-10-11",
-            "data_types": ["pQTL"],
-            "n_traits": "SomaScan 7,596, Olink 2,925",
-            "url": "https://finngen.gitbook.io/documentation/methods/pqtl-analysis",
-        },
-        {
-            "resource": "FinnGen_eQTL",
-            "version": "2023-10-05",
-            "data_types": ["eQTL"],
-            "n_traits": "26,624 genes, 35 predicted cell types",
-            "url": "https://www.finngen.fi/en/for_researchers",
-        },
-        {
-            "resource": "UKBB_pQTL",
-            "version": "2024-01-30",
-            "data_types": ["pQTL"],
-            "n_traits": "Olink 2,655",
-            # "url": "https://www.biorxiv.org/content/10.1101/2022.06.17.496443v1.full",
-            "url": None,
-            "pheno_urls": [
-                {
-                    "url": "https://www.finngen.fi/en/for_researchers",
-                    "label": "FinnGen analysis",
-                }
-            ],
-            "p_thres": 5e-3,
-        },
-        {
-            "resource": "UKBB_119",
-            "version": "2021",
-            "data_types": ["GWAS"],
-            "n_traits": "119",
-            "url": "https://www.medrxiv.org/content/10.1101/2021.09.03.21262975v1.full",
-        },
-        {
-            "resource": "BBJ_79",
-            "version": "2021",
-            "data_types": ["GWAS"],
-            "n_traits": "79",
-            "url": "https://www.medrxiv.org/content/10.1101/2021.09.03.21262975v1.full",
-        },
-        {
-            "resource": "NMR",
-            "version": "2024",
-            "data_types": ["metaboQTL"],
-            "n_traits": "250",
-            "url": "https://www.medrxiv.org/content/10.1101/2023.06.09.23291213v1",
-        },
-    ],
 }
+
+finemapped_files = [
+    {
+        "file": "/mnt/disks/data/ot_cs_gwas_no_finngen_25.03.tsv.gz",
+        "resource": "Open_Targets",
+        "version": "October 2022 (associations), March 2025 (credible sets)",
+        "data_types": ["GWAS"],
+        "n_traits": "6,033 (association results), 14,350 (credible set results)",
+        "url": "https://platform.opentargets.org",
+        "pheno_urls": [
+            {
+                "url": "https://platform.opentargets.org/study/[PHENOCODE]",
+                "label": "Open Targets study",
+            }
+        ],
+    },
+    {
+        "file": "/mnt/disks/data/FinnGen_R12_credible_sets.tsv.gz",
+        "resource": "FinnGen",
+        "version": "R12",
+        "data_types": ["GWAS"],
+        "n_traits": "2,469",
+        "url": "https://finngen.gitbook.io/documentation/methods/phewas",
+        "pheno_urls": [
+            {
+                "url": "https://r12.finngen.fi/pheno/[PHENOCODE]",
+                "label": "FinnGen Pheweb",
+            },
+            {
+                "url": "https://risteys.finngen.fi/endpoints/[PHENOCODE]",
+                "label": "FinnGen Risteys",
+            },
+        ],
+    },
+    {
+        "file": "/mnt/disks/data/FinnGen_kanta_credible_sets_20250315.tsv.gz",
+        "resource": "FinnGen_kanta",
+        "version": "2025-03-15",
+        "data_types": ["GWAS"],
+        "n_traits": "382",
+        "url": "https://www.finngen.fi/en/for_researchers",
+        "pheno_urls": [
+            {
+                "url": "https://kanta.finngen.fi/pheno/[PHENOCODE]",
+                "label": "FinnGen Pheweb",
+            },
+        ],
+    },
+    {
+        "file": "/mnt/disks/data/FinnGen_drugs_credible_sets.tsv.gz",
+        "resource": "FinnGen_drugs",
+        "version": "2025-03-15",
+        "data_types": ["GWAS"],
+        "n_traits": "126",
+        "ignore_phenos": ["ATC_D01_IRN"],
+        "url": "https://www.finngen.fi/en/for_researchers",
+        "pheno_urls": [
+            {
+                "url": "https://drugs.finngen.fi/pheno/[PHENOCODE]",
+                "label": "FinnGen Pheweb",
+            },
+        ],
+    },
+    {
+        "file": "/mnt/disks/data/UKBB_pQTL_2024-04-12_credible_sets.tsv.gz",
+        "resource": "UKBB_pQTL",
+        "version": "2024-01-30",
+        "data_types": ["pQTL"],
+        "n_traits": "Olink 2,655",
+        # "url": "https://www.biorxiv.org/content/10.1101/2022.06.17.496443v1.full",
+        "url": None,
+        "pheno_urls": [
+            {
+                "url": "https://www.finngen.fi/en/for_researchers",
+                "label": "FinnGen analysis",
+            }
+        ],
+        "p_thres": 5e-3,
+    },
+    {
+        "file": "/mnt/disks/data/FinnGen_snRNAseq_2023-10-05_credible_sets.tsv.gz",
+        "resource": "FinnGen_eQTL",
+        "version": "2023-10-05",
+        "data_types": ["eQTL"],
+        "n_traits": "26,624 genes, 35 predicted cell types",
+        "url": "https://www.finngen.fi/en/for_researchers",
+        "pheno_urls": [
+            {
+                "url": "https://r12.finngen.fi/gene/[GENE]",
+                "label": "FinnGen Pheweb",
+            }
+        ],
+    },
+    {
+        "file": "/mnt/disks/data/ukbb_119_credible_sets.tsv.gz",
+        "resource": "UKBB_119",
+        "version": "2021",
+        "data_types": ["GWAS"],
+        "n_traits": "119",
+        "url": "https://www.medrxiv.org/content/10.1101/2021.09.03.21262975v1.full",
+    },
+    {
+        "file": "/mnt/disks/data/bbj_79_credible_sets.tsv.gz",
+        "resource": "BBJ_79",
+        "version": "2021",
+        "data_types": ["GWAS"],
+        "n_traits": "79",
+        "url": "https://www.medrxiv.org/content/10.1101/2021.09.03.21262975v1.full",
+    },
+    {
+        "file": "/mnt/disks/data/FinnGen_SomaScan_2023-03-02_Olink_meta_2025-03-20_credible_sets.tsv.gz",
+        "resource": "FinnGen_pQTL",
+        "version": "2025-03-20",
+        "data_types": ["pQTL"],
+        "n_traits": "2,826 Olink, 7,596 SomaScan",
+        "url": "https://finngen.gitbook.io/documentation/methods/pqtl-analysis",
+    },
+    {
+        "file": "/mnt/disks/data/NMR_credible_sets.tsv.gz",
+        "resource": "NMR",
+        "version": "2024",
+        "data_types": ["metaboQTL"],
+        "n_traits": "250",
+        "url": "https://www.medrxiv.org/content/10.1101/2023.06.09.23291213v1",
+    },
+    {
+        "file": "/mnt/disks/data/eQTL_Catalogue_R7_credible_sets.tsv.gz",
+        "resource": "eQTL_Catalogue_R7",
+        "version": "R7",
+        "data_types": ["eQTL", "pQTL", "sQTL"],
+        "n_traits": "1,000,000+",
+        "url": "https://www.ebi.ac.uk/eqtl/",
+    },
+]
 
 max_query_variants = 2000

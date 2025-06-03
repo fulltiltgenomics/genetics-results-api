@@ -1,13 +1,19 @@
 import gzip
-import subprocess
+import logging
 from typing import Any, Optional, TypedDict
 import timeit
 import json
 from collections import OrderedDict as od, defaultdict as dd
-from app.core.exceptions import ACZeroException, DataException, VariantNotFoundException
+from app.core.exceptions import DataException, VariantNotFoundException
 from app.core.singleton import Singleton
 from app.core.variant import Variant
+from app.core.logging_config import setup_logging
 from typing import TypedDict
+import tempfile
+import asyncio
+
+setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class Csq(TypedDict):
@@ -25,53 +31,78 @@ class GnomAD(object, metaclass=Singleton):
         self.conf = conf
         self._init_tabix()
 
-    def get_gnomad_range(self, tabix_range: str, gene: str | None) -> dict[str, Any]:
+    def _init_tabix(self) -> None:
+        with gzip.open(self.conf["gnomad"]["file"], "rt") as f:
+            headers = f.readline().strip().split("\t")
+        self.gnomad_headers: dict[str, int] = od({h: i for i, h in enumerate(headers)})
+
+    async def _fetch(
+        self,
+        tabix_ranges_tab_delim: str,
+        variants: list[Variant] | None,
+        gene: str | None,
+    ) -> dict[str, Any]:
         start_time: float = timeit.default_timer()
-        try:
-            result = subprocess.run(
-                [
-                    "tabix",
-                    self.conf["gnomad"]["file"],
-                    tabix_range,
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
+        with tempfile.NamedTemporaryFile(mode="w") as tmp:
+            tmp.write(tabix_ranges_tab_delim)
+            tmp.flush()
+            process = await asyncio.create_subprocess_exec(
+                "tabix",
+                "-R",
+                tmp.name,
+                self.conf["gnomad"]["file"],
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-        except subprocess.CalledProcessError as e:
-            raise DataException from e
-        if result.stderr:
-            raise DataException(result.stderr)
-        if not result.stdout:
-            raise VariantNotFoundException(f"No variants found")
-
-        gnomad_results = dd(lambda: {"exomes": None, "genomes": None})
-        for row in result.stdout.strip().split("\n"):
-            if row == "":
-                continue
-            data = row.split("\t")
-            # if (
-            #     data[self.gnomad_headers["AF"]] == "NA"
-            #     or float(data[self.gnomad_headers["AF"]]) > 1e-4
-            # ) and (
-            #     gene is None
-            #     or data[self.gnomad_headers["gene_most_severe"]] == gene.upper()
-            # ):
-            if (
-                gene is None
-                or data[self.gnomad_headers["gene_most_severe"]].upper() == gene.upper()
-            ):
-                data = self._get_gnomad_fields(data)
-                variant = str(
-                    Variant(f'{data["#chr"]}:{data["pos"]}:{data["ref"]}:{data["alt"]}')
+            stdout, stderr = await process.communicate()
+            if process.returncode != 0 or stderr:
+                raise DataException(
+                    stderr.decode() if stderr else "Non-zero return code from tabix"
                 )
-                if data["genome_or_exome"] == "e":
-                    gnomad_results[variant]["exomes"] = data
-                elif data["genome_or_exome"] == "g":
-                    gnomad_results[variant]["genomes"] = data
+            if not stdout:
+                raise VariantNotFoundException(f"No variants found")
+            result = stdout.decode()
 
-        uniq_variants = list(gnomad_results.keys())
-        if len(uniq_variants) == 0:
+        ac0_variants = set()
+        found_variants = set()
+        gnomad_results = dd(lambda: {"exomes": None, "genomes": None})
+        for row in result.strip().split("\n"):
+            data = row.split("\t")
+            variant = Variant(
+                f"{data[self.gnomad_headers['#chr']]}:{data[self.gnomad_headers['pos']]}:{data[self.gnomad_headers['ref']]}:{data[self.gnomad_headers['alt']]}"
+            )
+            if (
+                row == ""
+                or (variants is not None and variant not in variants)
+                or (
+                    gene is not None
+                    and data[self.gnomad_headers["gene_most_severe"]].upper()
+                    != gene.upper()
+                )
+            ):
+                continue
+            found_variants.add(str(variant))
+            data = self._get_gnomad_fields(data)
+            if data["genome_or_exome"] == "e":
+                gnomad_results[str(variant)]["exomes"] = data
+            elif data["genome_or_exome"] == "g":
+                gnomad_results[str(variant)]["genomes"] = data
+            if (
+                gnomad_results[str(variant)]["exomes"] is None
+                or (
+                    gnomad_results[str(variant)]["exomes"]["filters"] is not None
+                    and "AC0" in gnomad_results[str(variant)]["exomes"]["filters"]
+                )
+            ) and (
+                gnomad_results[str(variant)]["genomes"] is None
+                or (
+                    gnomad_results[str(variant)]["genomes"]["filters"] is not None
+                    and "AC0" in gnomad_results[str(variant)]["genomes"]["filters"]
+                )
+            ):
+                ac0_variants.add(str(variant))
+
+        if len(found_variants) == 0:
             raise VariantNotFoundException(f"No variants found")
 
         # calculate min and max AFs over populations
@@ -102,111 +133,41 @@ class GnomAD(object, metaclass=Singleton):
             ):
                 gnomad_results[v]["preferred"] = "exomes"
 
-        end_time: float = timeit.default_timer() - start_time
-
-        return {
-            "range": tabix_range,
-            "gene": gene,
-            "gnomad": gnomad_results,
-            "time": end_time,
-        }
-
-    def get_gnomad(self, variant: Variant) -> dict[str, Any]:
-        start_time: float = timeit.default_timer()
         try:
-            result = subprocess.run(
-                [
-                    "tabix",
-                    self.conf["gnomad"]["file"],
-                    f"{variant.chr}:{variant.pos}-{variant.pos}",
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-        except subprocess.CalledProcessError as e:
-            raise DataException from e
-        if result.stderr:
-            raise DataException(result.stderr)
-        if not result.stdout:
-            raise VariantNotFoundException(f"variant {variant} not found")
-
-        gnomad = {"exomes": None, "genomes": None}
-        for row in result.stdout.strip().split("\n"):
-            if row == "":
-                continue
-            data = row.split("\t")
-            if (
-                data[self.gnomad_headers["ref"]] == variant.ref
-                and data[self.gnomad_headers["alt"]] == variant.alt
-            ):
-                data = self._get_gnomad_fields(data)
-                if data["genome_or_exome"] == "e":
-                    gnomad["exomes"] = data
-                elif data["genome_or_exome"] == "g":
-                    gnomad["genomes"] = data
-
-        if gnomad["exomes"] is None and gnomad["genomes"] is None:
-            raise VariantNotFoundException(f"variant {variant} not found")
-
-        if (
-            gnomad["exomes"] is None
-            or (
-                gnomad["exomes"]["filters"] is not None
-                and "AC0" in gnomad["exomes"]["filters"]
-            )
-        ) and (
-            gnomad["genomes"] is None
-            or (
-                gnomad["genomes"]["filters"] is not None
-                and "AC0" in gnomad["genomes"]["filters"]
-            )
-        ):
-            raise ACZeroException(f"AC0 for {variant}")
-
-        # calculate min and max AFs over populations
-        for ge in ["exomes", "genomes"]:
-            if gnomad[ge] is not None:
-                popmax_pop = "NA"
-                popmax_af = 0
-                popmin_pop = "NA"
-                popmin_af = 1
-                for k in gnomad[ge].keys():
-                    if k.startswith("AF_") and gnomad[ge][k] is not None:
-                        if gnomad[ge][k] > popmax_af:
-                            popmax_af = gnomad[ge][k]
-                            popmax_pop = k.replace("AF_", "")
-                        if gnomad[ge][k] < popmin_af:
-                            popmin_af = gnomad[ge][k]
-                            popmin_pop = k.replace("AF_", "")
-                gnomad[ge]["popmax"] = {"pop": popmax_pop, "af": popmax_af}
-                gnomad[ge]["popmin"] = {"pop": popmin_pop, "af": popmin_af}
-
-        # prefer exomes over genomes only if AN in exomes is higher than AN in genomes
-        gnomad["preferred"] = "genomes"
-        if gnomad["genomes"] is None or (
-            gnomad["exomes"] is not None
-            and gnomad["exomes"]["AN"] > gnomad["genomes"]["AN"]
-        ):
-            gnomad["preferred"] = "exomes"
+            freq_summary = self.summarize_freq(list(gnomad_results.values()))
+        except IndexError as e:
+            logger.error(e)
+            freq_summary = []
 
         end_time: float = timeit.default_timer() - start_time
+        logger.info(f"gnomad fetch time (s): {end_time}")
 
         return {
-            "variant": str(variant),
-            "gnomad": gnomad,
+            "found_variants": list(found_variants),
+            "ac0_variants": list(ac0_variants),
+            "data": gnomad_results,
+            "freq_summary": freq_summary,
             "time": end_time,
         }
 
-    def _init_tabix(self) -> None:
-        with gzip.open(self.conf["gnomad"]["file"], "rt") as f:
-            headers = f.readline().strip().split("\t")
-        self.gnomad_headers: dict[str, int] = od({h: i for i, h in enumerate(headers)})
+    async def fetch_ranges(
+        self, tabix_ranges_tab_delim: str, gene: str | None
+    ) -> dict[str, Any]:
+        return await self._fetch(tabix_ranges_tab_delim, None, gene)
 
-    def summarize_freq(self, data: list[Any]) -> list[dict[str, str | int | float]]:
-        gn = [d["gnomad"] for d in data]
+    async def fetch_variants(
+        self, variants: list[Variant], gene: str | None
+    ) -> dict[str, Any]:
+        tabix_ranges_tab_delim = "\n".join(
+            [f"{v.chr}\t{v.pos}\t{v.pos}" for v in variants]
+        )
+        return await self._fetch(tabix_ranges_tab_delim, variants, gene)
+
+    def summarize_freq(
+        self, data: list[Any]
+    ) -> list[dict[str, str | int | float]]:  # TODO type
         max_freqs: dict[str, float] = {}
-        for c in gn:
+        for c in data:
             max_freq = max(
                 (
                     (k.split("_")[1], v)
@@ -219,7 +180,7 @@ class GnomAD(object, metaclass=Singleton):
             max_freqs[max_freq[0]] = max_freqs.get(max_freq[0], 0) + 1
 
         min_freqs: dict[str, float] = {}
-        for c in gn:
+        for c in data:
             min_freq = min(
                 (
                     (k.split("_")[1], v)
@@ -232,17 +193,17 @@ class GnomAD(object, metaclass=Singleton):
             min_freqs[min_freq[0]] = min_freqs.get(min_freq[0], 0) + 1
 
         try:
-            keys = data[0]["gnomad"]["genomes"].keys()
+            keys = data[0]["genomes"].keys()
         except AttributeError:
-            keys = data[0]["gnomad"]["exomes"].keys()
+            keys = data[0]["exomes"].keys()
         all_pops = [k.split("_")[1] for k in keys if k.startswith("AF_")]
         all_pops_freqs = [
             {
                 "pop": pop,
                 "max": max_freqs.get(pop, 0),
-                "maxPerc": max_freqs.get(pop, 0) / len(gn),
+                "maxPerc": max_freqs.get(pop, 0) / len(data),
                 "min": min_freqs.get(pop, 0),
-                "minPerc": min_freqs.get(pop, 0) / len(gn),
+                "minPerc": min_freqs.get(pop, 0) / len(data),
             }
             for pop in all_pops
         ]
