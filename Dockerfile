@@ -9,6 +9,8 @@ ARG DEPLOY_ENV
 ARG DATA_SOURCE
 ARG HTSLIB_VER=1.22
 
+RUN pip install uv --upgrade
+
 # htslib
 WORKDIR /opt/htslib
 RUN curl -LO https://github.com/samtools/htslib/releases/download/${HTSLIB_VER}/htslib-${HTSLIB_VER}.tar.bz2 && \
@@ -31,6 +33,7 @@ if [ -f /mnt/disks/data/phewas-development-ff565b237edf.json ]; then
 else
     echo "NOTE: No service account key file found, gcloud will not be initialized"
 fi
+source .venv/bin/activate
 # if no command provided, run server
 if [ -z "\$@" ]; then
     exec uvicorn app.server:app --host 0.0.0.0 --port 4000
@@ -43,10 +46,8 @@ RUN chmod +x /var/www/genetics-results-api/start.sh
 
 WORKDIR /var/www/genetics-results-api
 
-COPY requirements.txt ./
-RUN pip3 install -r requirements.txt
-
 COPY . .
+RUN uv venv && . .venv/bin/activate && uv pip install -r requirements.txt
 COPY app/config/config.${DEPLOY_ENV}.${DATA_SOURCE}.py app/config/config.py
 
 EXPOSE 4000
