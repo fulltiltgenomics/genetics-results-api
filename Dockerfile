@@ -50,6 +50,8 @@ COPY . .
 RUN uv venv && . .venv/bin/activate && uv pip install -r requirements.txt
 COPY app/config/config.${DEPLOY_ENV}.${DATA_SOURCE}.py app/config/config.py
 
+ENV ENVIRONMENT=${DEPLOY_ENV}
+
 EXPOSE 4000
 
 ENTRYPOINT ["/var/www/genetics-results-api/start.sh"]

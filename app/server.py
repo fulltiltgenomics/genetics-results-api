@@ -13,6 +13,7 @@ import importlib.util
 import logging
 from starlette.middleware.sessions import SessionMiddleware
 import asyncio
+import os
 
 from app.core.cache import create_cached_decorator
 from app.core.exceptions import (
@@ -51,12 +52,15 @@ app.add_middleware(
     expose_headers=["X-Login-URL", "Set-Cookie"],
 )
 
+environment = os.getenv("ENVIRONMENT", "development")
+is_production = environment in ("prod", "production")
+
 app.add_middleware(
     SessionMiddleware,
     secret_key="secret-key",
     max_age=24 * 60 * 60 * 365,  # 1 year
     same_site="lax",
-    https_only=True,
+    https_only=is_production,  # allow HTTP in development
     session_cookie="session",
     path="/",
 )
