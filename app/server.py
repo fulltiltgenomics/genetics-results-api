@@ -121,7 +121,6 @@ async def auth_required(
         return None
     if user is None:
         # Use x-Forwarded-Host header which contains the original host requested by the client
-        logger.debug(request.headers)
         host = request.headers.get("x-forwarded-host") or request.headers.get(
             "host", "localhost:4000"
         )
@@ -767,13 +766,10 @@ async def gene_results(gene: str) -> Any | tuple[Any, int]:
 @is_public
 async def login(request: Request, frontend_url: str | None = None):
     logger.debug(f"Login attempt - Frontend URL: {frontend_url}")
-    logger.debug(f"Request headers: {dict(request.headers)}")
 
     next_url = frontend_url or "/"
     request.session["next"] = next_url
     request.session["frontend_url"] = frontend_url
-
-    logger.debug(f"Session after setting next URL: {dict(request.session)}")
 
     # use X-Forwarded-Host header which contains the original host requested by the client
     host = request.headers.get("x-forwarded-host") or request.headers.get(
@@ -783,22 +779,13 @@ async def login(request: Request, frontend_url: str | None = None):
     base_url = f"{scheme}://{host}"
     redirect_uri = f"{base_url}/api/v1/callback/google"
 
-    logger.debug(f"Redirect URI: {redirect_uri}")
-
     authorization_url = google_auth.get_authorization_url(redirect_uri)
-    logger.debug(f"Google authorization URL: {authorization_url}")
-
     return RedirectResponse(authorization_url, status_code=303)
 
 
 @app.get("/api/v1/callback/google")
 @is_public
 async def oauth_callback_google(request: Request, code: str):
-    logger.debug(f"Google callback - Code received: {code[:10]}...")
-    logger.debug(f"Request headers: {dict(request.headers)}")
-    logger.debug(f"Session before processing: {dict(request.session)}")
-
-    logger.debug(request.headers)
     host = request.headers.get("x-forwarded-host") or request.headers.get(
         "host", "localhost:4000"
     )
@@ -809,7 +796,6 @@ async def oauth_callback_google(request: Request, code: str):
     try:
         user_info = await google_auth.get_user_info(code, redirect_uri)
         email = user_info["email"]
-        logger.debug(f"User info received: {email}")
 
         if not verify_membership(email):
             logger.error(f"Unauthorized email: {email}")
@@ -817,16 +803,11 @@ async def oauth_callback_google(request: Request, code: str):
 
         request.session["user_email"] = email
         request.session["authenticated"] = True
-        logger.debug(f"Session after setting email: {dict(request.session)}")
+        logger.info(f"Authenticated user: {email}")
 
         frontend_url = request.session.get("frontend_url")
-        logger.debug(f"Frontend URL from session: {frontend_url}")
 
         response = RedirectResponse(frontend_url, status_code=303)
-
-        logger.debug(
-            f"Response cookies: {response.headers.get('set-cookie', 'No cookies set!')}"
-        )
 
         return response
 
@@ -850,10 +831,7 @@ async def logout(request: Request):
 
 @app.get("/api/v1/auth")
 @is_public
-async def debug_auth(request: Request):
-    logger.debug(f"Debug Auth - Headers: {dict(request.headers)}")
-    logger.debug(f"Debug Auth - Cookies: {request.cookies}")
-    logger.debug(f"Debug Auth - Session: {dict(request.session)}")
+async def auth(request: Request):
     return JSONResponse(
         {
             "session": dict(request.session),

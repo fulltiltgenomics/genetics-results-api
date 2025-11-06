@@ -50,6 +50,8 @@ if config["authentication"]:
 
 class GoogleAuth:
     def __init__(self):
+        if not config["authentication"]:
+            return
         self.client_id = GOOGLE_CLIENT_ID
         self.client_secret = GOOGLE_CLIENT_SECRET
         google_params = self._get_google_info()
