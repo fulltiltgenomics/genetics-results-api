@@ -57,6 +57,7 @@ class LDDatafetch(object, metaclass=Singleton):
         except Exception as e:
             raise DataException(str(e))
 
+        resource = "Open_Targets"  # TODO include in data file
         for row in tabix_result.strip().split("\n"):
             if row == "":
                 continue
@@ -67,7 +68,6 @@ class LDDatafetch(object, metaclass=Singleton):
             lead_pos = int(d[self.ld_assoc_headers["lead_pos"]])
             lead_ref = d[self.ld_assoc_headers["lead_ref"]]
             lead_alt = d[self.ld_assoc_headers["lead_alt"]]
-            resource = "Open_Targets"  # TODO include in data file
             if variant in variants:
                 dataset = "Open_Targets_22.09"  # TODO include in data file
                 data_type = "GWAS"  # TODO include in data file
