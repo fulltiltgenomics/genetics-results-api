@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 import asyncio
 import aiohttp.client_exceptions
@@ -31,6 +32,7 @@ class GCloudTabixBase:
         self.session = None
         self.credentials = None
         self.project = None
+        self._token_lock = threading.Lock()
         self._init_storage()
         self._set_gcs_oauth_token()
 
@@ -77,16 +79,18 @@ class GCloudTabixBase:
 
     def _ensure_valid_token(self) -> None:
         """Check if token is still valid and refresh if needed."""
-        # this could be done periodically in a background task instead of at each request
-        # but it's quite fast so should be fine
         if not self.credentials:
             self._set_gcs_oauth_token()
             return
 
-        if (
-            self.credentials.expiry
-            and self.credentials.expiry <= datetime.now() + timedelta(minutes=5)
-        ):
+        # use lock to prevent concurrent refreshes
+        with self._token_lock:
+            # double-check after acquiring lock
+            if (
+                self.credentials.expiry
+                and self.credentials.expiry > datetime.now() + timedelta(minutes=5)
+            ):
+                return
             logger.info("Token expired or expiring soon, refreshing...")
             try:
                 self.credentials.refresh(Request())
@@ -94,7 +98,6 @@ class GCloudTabixBase:
                 logger.info(f"Token refreshed, new expiry: {self.credentials.expiry}")
             except Exception as e:
                 logger.error(f"Error refreshing token: {e}")
-                # Try to get new credentials
                 self._set_gcs_oauth_token()
 
     def _get_header(self, gs_path: str) -> list[bytes]:
