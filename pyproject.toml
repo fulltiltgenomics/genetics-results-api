@@ -11,6 +11,7 @@ dependencies = [
     "gcloud-aio-storage==9.5.0",
     "gcsfs==2025.9.0",
     "google-api-python-client==2.179.0",
+    "google-cloud-logging==3.13.0",
     "google-cloud-storage==3.3.0",
     "itsdangerous==2.2.0",
     "polars==1.32.3",

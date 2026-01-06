@@ -5,6 +5,7 @@ Emits structured JSON logs for each request, which can be routed to BigQuery
 via a GCP log sink filter on log_type="endpoint_access".
 """
 
+from datetime import datetime, timezone
 import logging
 import time
 from typing import Optional
@@ -96,14 +97,25 @@ class UsageLoggingMiddleware:
         finally:
             duration_ms = (time.perf_counter() - start_time) * 1000
 
+            # get route template for privacy (e.g., "/api/v1/search/{query}" instead of actual query)
+            route = scope.get("route")
+            endpoint_template = route.path if route else path
+
+            query_string = scope.get("query_string", b"").decode("utf-8", errors="ignore")
+            full_path = f"{path}?{query_string}" if query_string else path
+
+            # log as dict for Cloud Logging to parse as jsonPayload
             logger.info(
-                "endpoint access",
-                extra={
+                {
+                    "message": "endpoint access",
                     "log_type": "endpoint_access",
+                    "log_source": f"genetics-results-api-{config.deploy_env}",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "user_email": user_email,
-                    "endpoint_path": path,
+                    "endpoint_path": endpoint_template,
+                    "full_path": full_path,  # included in stdout, stripped for Cloud Logging
                     "http_method": method,
                     "status_code": status_code,
                     "duration_ms": round(duration_ms, 2),
-                },
+                }
             )

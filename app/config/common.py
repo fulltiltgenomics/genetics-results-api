@@ -8,9 +8,14 @@ chunk sizes, and other common constants.
 import os
 
 log_level = "INFO"
+deploy_env = os.environ.get("DEPLOY_ENV", "dev1")
+
+# use Cloud Logging API directly on VM
+# on GKE, stdout is captured automatically so this should be False
+use_cloud_logging_api = deploy_env.startswith("dev")
 
 # usage logging (for BigQuery export via GCP log sink)
-usage_logging_enabled = False
+usage_logging_enabled = True
 usage_logging_excluded_paths = {
     "/healthz",
     "/docs",
