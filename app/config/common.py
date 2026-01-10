@@ -107,6 +107,8 @@ variant_set_files = {
     },
 }
 
+phenotype_markdown_template = "gs://finngen-commons/results_api_data/phenotype_reports/{resource}/{phenocode}_gene_summary.md"
+
 coding_set = set(
     [
         "missense_variant",

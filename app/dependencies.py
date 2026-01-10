@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from app.services.data_access_chromatin_peaks import DataAccessChromatinPeaks
     from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
     from app.services.gene_disease_data import GeneDiseaseData
+    from app.services.phenotype_markdown_service import PhenotypeMarkdownService
 
 logger = logging.getLogger(__name__)
 
@@ -108,3 +109,8 @@ def get_gene_name_mapping() -> "GeneNameAndPositionMapping":
 def get_gene_disease_data() -> "GeneDiseaseData":
     """Get GeneDiseaseData service instance."""
     return container.get("gene_disease_data")
+
+
+def get_phenotype_markdown_service() -> "PhenotypeMarkdownService":
+    """Get PhenotypeMarkdownService instance."""
+    return container.get("phenotype_markdown_service")

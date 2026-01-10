@@ -120,6 +120,10 @@ def _register_services():
         from app.services.datafetch import Datafetch
         return Datafetch()
 
+    def create_phenotype_markdown_service():
+        from app.services.phenotype_markdown_service import PhenotypeMarkdownService
+        return PhenotypeMarkdownService()
+
     # register all services
     container.register("request_util", create_request_util)
     container.register("search_index", create_search_index)
@@ -136,6 +140,7 @@ def _register_services():
     container.register("dataset_mapping", create_dataset_mapping)
     container.register("ld_datafetch", create_ld_datafetch)
     container.register("datafetch", create_datafetch)
+    container.register("phenotype_markdown_service", create_phenotype_markdown_service)
 
 
 # register services on module load

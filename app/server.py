@@ -18,6 +18,7 @@ from app.routers import (
     chromatin_peaks,
     exome_results,
     search,
+    phenotype,
 )
 
 
@@ -49,6 +50,7 @@ app.include_router(gene_disease.router, prefix="/api/v1", tags=["gene-disease"])
 app.include_router(gene_based.router, prefix="/api/v1", tags=["gene-based"])
 app.include_router(chromatin_peaks.router, prefix="/api/v1", tags=["chromatin-peaks"])
 app.include_router(exome_results.router, prefix="/api/v1", tags=["exome-results"])
+app.include_router(phenotype.router, prefix="/api/v1", tags=["phenotype"])
 
 
 def get_all_endpoints():
