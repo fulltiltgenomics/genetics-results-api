@@ -118,6 +118,18 @@ def _validate_gene_disease():
     _ = gene_disease_data.get_by_gene_symbol("BRCA1")
 
 
+async def _cleanup_services():
+    """Clean up aiohttp sessions from data access objects to avoid 'Unclosed client session' warnings."""
+    for service_name in ["data_access", "data_access_coloc", "data_access_expression", "data_access_chromatin_peaks"]:
+        if container.is_initialized(service_name):
+            service = container.get(service_name)
+            # clean up any cached resource access objects that have aiohttp sessions
+            if hasattr(service, "_resource_access_objects"):
+                for obj in service._resource_access_objects.values():
+                    if hasattr(obj, "cleanup"):
+                        await obj.cleanup()
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python run_server.py <port>")
@@ -133,7 +145,11 @@ if __name__ == "__main__":
         asyncio.run(_validate_qtl_gene())
         asyncio.run(_validate_coloc())
         _validate_gene_disease()
-        uvicorn.run("app.server:app", host="0.0.0.0", port=port, reload=True)
+        # clean up aiohttp sessions before resetting container
+        asyncio.run(_cleanup_services())
+        # use asyncio event loop instead of uvloop - uvloop uses sockets instead of pipes
+        # for subprocess stdin, which can break tabix's -R /dev/stdin option (uvloop issue #532)
+        uvicorn.run("app.server:app", host="0.0.0.0", port=port, reload=True, loop="asyncio")
     except Exception as e:
         # log error without exposing full traceback to stdout in production
         import logging
