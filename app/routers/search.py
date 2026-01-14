@@ -12,7 +12,7 @@ router = APIRouter()
 
 @router.get(
     "/search",
-    summary="Search and autocomplete for phenotypes and genes",
+    summary="Search and autocomplete for phenotypes and genes (supports comma-separated queries)",
     responses={
         200: {
             "description": "Successful response",
@@ -75,8 +75,14 @@ router = APIRouter()
     },
 )
 async def search_autocomplete(
-    q: str = Query(..., description="Search query", min_length=1),
-    limit: int = Query(default=10, description="Maximum results", ge=1, le=100),
+    q: str = Query(
+        ...,
+        description="Search query (comma-separated for multiple terms, e.g. 'SLC26A3,CLCA')",
+        min_length=1,
+    ),
+    limit: int = Query(
+        default=10, description="Maximum results per query term", ge=1, le=100
+    ),
     types: str | None = Query(
         default=None,
         description="Comma-separated types to search: 'phenotypes', 'genes' (default: both)",
@@ -88,6 +94,9 @@ async def search_autocomplete(
 ):
     """
     Search and autocomplete for phenotypes and genes with fuzzy matching.
+
+    Supports comma-separated queries (e.g., 'SLC26A3,CLCA,PCSK9') to search
+    for multiple terms in a single request.
 
     Results are ranked by:
     1. Exact matches first
@@ -110,8 +119,25 @@ async def search_autocomplete(
                     detail=f"Invalid types: {invalid}. Valid types: {valid_types}",
                 )
 
-        # perform search
-        results = search_index.search(query=q, limit=limit, types=type_list)
+        # split query by comma and search for each term
+        query_terms = [term.strip() for term in q.split(",") if term.strip()]
+        if not query_terms:
+            raise HTTPException(status_code=422, detail="Empty query")
+
+        # collect results from all query terms, avoiding duplicates
+        seen_ids = set()
+        results = []
+        for term in query_terms:
+            term_results = search_index.search(query=term, limit=limit, types=type_list)
+            for result in term_results:
+                # use code (phenotype) or symbol (gene) as unique identifier
+                result_id = (
+                    result["type"],
+                    result.get("code") or result.get("symbol"),
+                )
+                if result_id not in seen_ids:
+                    seen_ids.add(result_id)
+                    results.append(result)
 
         # format response
         if format == "json":

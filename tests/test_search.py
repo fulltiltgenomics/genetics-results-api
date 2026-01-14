@@ -446,3 +446,126 @@ class TestSearchAutocomplete:
 
         # All requests should succeed
         assert all(r.status_code == 200 for r in responses)
+
+    def test_search_comma_separated_genes(self, server_url):
+        """Test searching for multiple genes with comma-separated query."""
+        response = requests.get(
+            f"{server_url}/api/v1/search",
+            params={"q": "PCSK9,BRCA1,TP53", "types": "genes", "limit": 5, "format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        symbols = [item["symbol"] for item in data if item.get("type") == "gene"]
+        assert "PCSK9" in symbols
+        assert "BRCA1" in symbols
+        assert "TP53" in symbols
+
+    def test_search_comma_separated_phenotypes(self, server_url):
+        """Test searching for multiple phenotypes with comma-separated query."""
+        response = requests.get(
+            f"{server_url}/api/v1/search",
+            params={"q": "diabetes,cancer", "types": "phenotypes", "limit": 10, "format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) > 0
+
+        # should have results related to both terms
+        names = [item.get("name", "").lower() for item in data]
+        has_diabetes = any("diabetes" in n for n in names)
+        has_cancer = any("cancer" in n for n in names)
+        assert has_diabetes or has_cancer
+
+    def test_search_comma_separated_mixed_types(self, server_url):
+        """Test comma-separated query without type filter returns mixed results."""
+        response = requests.get(
+            f"{server_url}/api/v1/search",
+            params={"q": "BRCA1,diabetes", "limit": 10, "format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        types = set(item["type"] for item in data)
+        # should have both genes and phenotypes
+        assert "gene" in types or "phenotype" in types
+
+    def test_search_comma_separated_deduplication(self, server_url):
+        """Test that duplicate results are removed when same item matches multiple terms."""
+        response = requests.get(
+            f"{server_url}/api/v1/search",
+            params={"q": "PCSK9,PCSK9", "types": "genes", "limit": 10, "format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # should not have duplicate PCSK9 entries
+        symbols = [item["symbol"] for item in data if item.get("symbol") == "PCSK9"]
+        assert len(symbols) == 1
+
+    def test_search_comma_separated_with_spaces(self, server_url):
+        """Test comma-separated query with spaces around terms."""
+        response = requests.get(
+            f"{server_url}/api/v1/search",
+            params={"q": " PCSK9 , BRCA1 , TP53 ", "types": "genes", "limit": 5, "format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        symbols = [item["symbol"] for item in data if item.get("type") == "gene"]
+        assert "PCSK9" in symbols
+        assert "BRCA1" in symbols
+
+    def test_search_comma_separated_tsv_format(self, server_url):
+        """Test comma-separated query with TSV format."""
+        response = requests.get(
+            f"{server_url}/api/v1/search",
+            params={"q": "PCSK9,BRCA1", "types": "genes", "limit": 5, "format": "tsv"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        assert "text/tab-separated-values" in response.headers.get("content-type", "")
+        assert "PCSK9" in response.text
+        assert "BRCA1" in response.text
+
+    def test_search_comma_separated_empty_terms_ignored(self, server_url):
+        """Test that empty terms in comma-separated query are ignored."""
+        response = requests.get(
+            f"{server_url}/api/v1/search",
+            params={"q": "PCSK9,,BRCA1,", "types": "genes", "limit": 5, "format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        symbols = [item["symbol"] for item in data if item.get("type") == "gene"]
+        assert "PCSK9" in symbols
+        assert "BRCA1" in symbols
+
+    def test_search_single_term_still_works(self, server_url):
+        """Test that single term queries still work as before."""
+        response = requests.get(
+            f"{server_url}/api/v1/search",
+            params={"q": "PCSK9", "types": "genes", "limit": 5, "format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) > 0
+        assert data[0]["symbol"] == "PCSK9"
