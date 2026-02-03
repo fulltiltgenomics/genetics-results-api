@@ -79,6 +79,7 @@ data_files = [
             "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_core/r13_20251024/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
             "suffix_95": ".SUSIE.munged.tsv",
             "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_core/r13_20251024/FinnGen_R13_credible_sets.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_core/r13_20251024/credible_set_stats.tsv",
         },
         "metadata": {
             "metadata_file": "/mnt/disks/data/finngen_r13_pheno_202509.json",
@@ -98,6 +99,7 @@ data_files = [
             "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_kanta/r12_20251024/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
             "suffix_95": ".SUSIE.munged.tsv",
             "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_kanta/r12_20251024/FinnGen_R12kanta_credible_sets.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_kanta/r12_20251024/credible_set_stats.tsv",
         },
         "metadata": {
             "metadata_file": "/mnt/disks/data/Kanta_metadata_202503.tsv",
@@ -117,6 +119,7 @@ data_files = [
             "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_drugs/r12_20251024/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
             "suffix_95": ".SUSIE.munged.tsv",
             "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_drugs/r12_20251024/FinnGen_R12drugs_credible_sets.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_drugs/r12_20251024/credible_set_stats.tsv",
         },
         "metadata": {
             "metadata_file": "/mnt/disks/data/drugs_pheno.json",
@@ -137,6 +140,7 @@ data_files = [
             "suffix_95": ".SUSIE.munged.tsv",
             "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_olink/20251024/FinnGen_Olink_1-4_credible_sets.tsv.gz",
             "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_olink/20251024/FinnGen_Olink_1-4_credible_sets.qtl.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_olink/20251024/credible_set_stats.tsv",
         },
     },
     {
@@ -150,6 +154,7 @@ data_files = [
             "suffix_95": ".SUSIE.munged.tsv",
             "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ukb_ppp/20251024/UKB_PPP_credible_sets.tsv.gz",
             "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/ukb_ppp/20251024/UKB_PPP_credible_sets.qtl.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/ukb_ppp/20251024/credible_set_stats.tsv",
         },
     },
     {
@@ -175,6 +180,7 @@ data_files = [
             "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_atacseq/20251118/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
             "suffix_95": ".SUSIE.munged.tsv",
             "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_atacseq/20251118/FinnGen_ATACseq_202509_credible_sets.tsv.gz",
+            # this contains all peak ids so a lot "stats_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_atacseq/20251118/credible_set_stats.tsv",
         },
     },
     {
@@ -206,6 +212,7 @@ data_files = [
             "prefix": "gs://finngen-commons/results_api_data/credible_sets/open_targets/202512/individual/",
             "suffix_95": ".SUSIE.munged.tsv",
             "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets/202512/Open_Targets_25.12_credible_sets.tsv.gz",
+            # add back when comprehensively annotated variants "stats_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets/202512/credible_set_stats.tsv",
         },
         "metadata": {
             "metadata_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets/202512/ot_2512_data_studies.json",

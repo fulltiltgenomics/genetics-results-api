@@ -6,8 +6,10 @@ from app.dependencies import (
     get_request_util,
     get_data_access,
     get_gene_name_mapping,
+    get_credible_set_stats_service,
 )
 from app.core.responses import TimedStreamingResponse, TimedJSONResponse, range_response
+from app.core.streams import filter_stream_by_cs_id
 from app.core.variant import Variant
 from app.core.exceptions import (
     GeneNotFoundException,
@@ -155,6 +157,108 @@ async def credible_sets_by_phenotype(
         except NotFoundException as e:
             raise HTTPException(status_code=404, detail=str(e))
         except Exception as e:
+            raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get(
+    "/credible_sets_by_id/{resource}/{phenotype_or_study}/{cs_id:path}",
+    summary="Get credible set variants by cs_id",
+    responses={
+        200: {
+            "description": "Successful response",
+            "content": {
+                "text/tab-separated-values": {
+                    "schema": {"type": "string"},
+                    "example": "dataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\tmost_severe\tgene_most_severe\nFinnGen_R13\tGWAS\tK11_IBD_STRICT\tK11_IBD_STRICT\tNA\t1\t7535440\tT\tA\t8.19\t-3.946e-02\t6.797e-03\t0.06\tchr1:6535440-9535440_1\t12\t0.9919\tintron_variant\tCAMTA1\n...",
+                },
+                "application/json": {
+                    "schema": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                        },
+                    },
+                    "example": [
+                        {
+                            "dataset": "FinnGen_R13",
+                            "data_type": "GWAS",
+                            "trait": "K11_IBD_STRICT",
+                            "cs_id": "chr1:6535440-9535440_1",
+                        },
+                    ],
+                },
+            },
+        },
+        401: {"description": "Not authenticated"},
+        404: {"description": "Resource, phenotype, or cs_id not found"},
+        422: {"description": "Invalid interval or format parameter"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def credible_sets_by_id(
+    request: Request,
+    resource: str = Path(..., description="Data resource", example="finngen"),
+    phenotype_or_study: str = Path(
+        ..., description="Phenotype or study code", example="K11_IBD_STRICT"
+    ),
+    cs_id: str = Path(
+        ..., description="Credible set ID", example="chr1:6535440-9535440_1"
+    ),
+    interval: int = Query(
+        default=95, description="Credible set threshold (95 or 99)", ge=95, le=99
+    ),
+    format: Literal["tsv", "json"] = Query(
+        default="tsv", description="Response format"
+    ),
+    data_access: DataAccess = Depends(get_data_access),
+) -> Response:
+    """
+    Get all variants in a specific credible set by its cs_id.
+    """
+    start_time = time.time()
+    if interval not in (95, 99):
+        raise HTTPException(status_code=422, detail="Interval must be 95 or 99")
+    if interval == 99:
+        raise HTTPException(status_code=422, detail="Interval 99 is not supported yet")
+
+    if not await data_access.check_phenotype_exists(resource, phenotype_or_study, interval):
+        raise HTTPException(status_code=404, detail=f"Phenotype not found: {phenotype_or_study}")
+
+    if format == "tsv":
+        try:
+            raw_stream = await data_access.stream_phenotype(
+                resource, phenotype_or_study, interval, config_common.read_chunk_size
+            )
+            filtered_stream = filter_stream_by_cs_id(raw_stream, cs_id)
+            return TimedStreamingResponse(
+                filtered_stream, request.url, start_time, media_type="text/tab-separated-values"
+            )
+        except NotFoundException as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            logger.error(f"Error streaming cs_id {cs_id}: {e}")
+            raise HTTPException(status_code=500, detail="Error streaming credible set data")
+
+    elif format == "json":
+        try:
+            rows = await data_access.json_phenotype(
+                resource,
+                phenotype_or_study,
+                interval,
+                config_credible_sets.cs_header_schema,
+                "cs",
+                config_common.read_chunk_size,
+            )
+            filtered_rows = [r for r in rows if r.get("cs_id") == cs_id]
+            if not filtered_rows:
+                raise HTTPException(status_code=404, detail=f"cs_id not found: {cs_id}")
+            return TimedJSONResponse(filtered_rows, request.url, start_time)
+        except NotFoundException as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting JSON for cs_id {cs_id}: {e}")
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -728,3 +832,64 @@ async def credible_sets_by_qtl_gene(
         format,
         start_time,
     )
+
+
+@router.get(
+    "/credible_sets/{id_or_resource}/stats",
+    summary="Get statistics for a credible set data file or resource",
+    responses={
+        200: {
+            "description": "Statistics for the data file(s)",
+            "content": {
+                "text/tab-separated-values": {
+                    "schema": {"type": "string"},
+                    "example": "phenotype\tn_credible_sets\tn_variants\nT2D_WIDE\t15\t127\n...",
+                },
+                "application/json": {
+                    "schema": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
+                    "example": [
+                        {"phenotype": "T2D_WIDE", "n_credible_sets": "15", "n_variants": "127"},
+                    ],
+                },
+            },
+        },
+        401: {"description": "Not authenticated"},
+        404: {"description": "Data file/resource not found or no stats available"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def get_credible_set_stats(
+    id_or_resource: str = Path(
+        ...,
+        description="Data file ID (e.g., finngen_gwas) or resource name (e.g., finngen)",
+        example="finngen_gwas",
+    ),
+    format: Literal["tsv", "json"] = Query(
+        default="tsv", description="Response format"
+    ),
+    stats_service: "CredibleSetStatsService" = Depends(get_credible_set_stats_service),
+) -> Response:
+    """
+    Get statistics for a credible set data file or resource.
+
+    If a data file ID is provided, returns stats for that file.
+    If a resource name is provided, returns combined stats for all data files in that resource.
+    """
+    from fastapi.responses import PlainTextResponse, JSONResponse
+
+    try:
+        result = stats_service.get_stats(id_or_resource, format)
+
+        if format == "tsv":
+            return PlainTextResponse(result, media_type="text/tab-separated-values")
+        else:
+            return JSONResponse(result)
+
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error fetching stats for {id_or_resource}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")

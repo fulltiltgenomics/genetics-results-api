@@ -480,6 +480,51 @@ async def tsv_stream_to_list(
     return rows
 
 
+async def filter_stream_by_cs_id(
+    stream: AsyncGenerator[bytes, None],
+    target_cs_id: str,
+    cs_id_column_index: int = 13,
+) -> AsyncGenerator[bytes, None]:
+    """
+    Filter a TSV byte stream to only rows matching the target cs_id.
+    Yields header line and matching data lines.
+
+    Args:
+        stream: Async generator yielding byte chunks
+        target_cs_id: The cs_id value to filter by
+        cs_id_column_index: Column index for cs_id (default 13)
+    """
+    target_cs_id_bytes = target_cs_id.encode("utf-8")
+    buffer = b""
+    first_line = True
+
+    async for chunk in stream:
+        data = buffer + chunk
+        lines = data.split(b"\n")
+
+        for line in lines[:-1]:
+            if line.strip() == b"":
+                continue
+
+            if first_line:
+                # always yield header
+                yield line + b"\n"
+                first_line = False
+                continue
+
+            fields = line.split(b"\t")
+            if len(fields) > cs_id_column_index and fields[cs_id_column_index] == target_cs_id_bytes:
+                yield line + b"\n"
+
+        buffer = lines[-1]
+
+    # process remaining buffer
+    if buffer.strip() != b"":
+        fields = buffer.split(b"\t")
+        if len(fields) > cs_id_column_index and fields[cs_id_column_index] == target_cs_id_bytes:
+            yield buffer + b"\n"
+
+
 async def chunk_iterator(
     line_iterator: AsyncIterator[list[bytes]],
     header_line: bytes,

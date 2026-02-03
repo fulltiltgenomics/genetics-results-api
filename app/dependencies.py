@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
     from app.services.gene_disease_data import GeneDiseaseData
     from app.services.phenotype_markdown_service import PhenotypeMarkdownService
+    from app.services.credible_set_stats_service import CredibleSetStatsService
 
 logger = logging.getLogger(__name__)
 
@@ -114,3 +115,8 @@ def get_gene_disease_data() -> "GeneDiseaseData":
 def get_phenotype_markdown_service() -> "PhenotypeMarkdownService":
     """Get PhenotypeMarkdownService instance."""
     return container.get("phenotype_markdown_service")
+
+
+def get_credible_set_stats_service() -> "CredibleSetStatsService":
+    """Get CredibleSetStatsService instance."""
+    return container.get("credible_set_stats_service")

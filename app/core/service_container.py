@@ -124,6 +124,10 @@ def _register_services():
         from app.services.phenotype_markdown_service import PhenotypeMarkdownService
         return PhenotypeMarkdownService()
 
+    def create_credible_set_stats_service():
+        from app.services.credible_set_stats_service import CredibleSetStatsService
+        return CredibleSetStatsService()
+
     # register all services
     container.register("request_util", create_request_util)
     container.register("search_index", create_search_index)
@@ -141,6 +145,7 @@ def _register_services():
     container.register("ld_datafetch", create_ld_datafetch)
     container.register("datafetch", create_datafetch)
     container.register("phenotype_markdown_service", create_phenotype_markdown_service)
+    container.register("credible_set_stats_service", create_credible_set_stats_service)
 
 
 # register services on module load
