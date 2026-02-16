@@ -14,39 +14,36 @@ class GeneNameAndPositionMapping:
         self._init_gene_name_mapping()
         self._init_gene_position_mapping()
 
-    # TODO TBCE should only point to ENSG00000284770 in 49 but also points to ENSG00000285053 because that's in older gencodes
     def _init_gene_name_mapping(self) -> None:
-        # gene_name_mapping is gene name -> gencode version -> set of names
+        # gene_name_mapping: gene name -> gencode version -> set of ENSG IDs
         # gene names can change across gencode versions
-        # and a gene name in one version can map to multiple ENSG ids
-        # those ENSG ids may have a different gene name in another version
-        # so a key in gene_name_mapping maps to all matching gene names by gencode version
-        #
-        # e.g. C4orf36 has ENSG ids ENSG00000163633 and ENSG00000285458 in gencode v49
-        # ENSG00000163633 is C4orf36 across gencode v49, v39, v32
-        # ENSG00000285458 is C4orf36 in gencode v49, but ENSG00000285458 in v39, and AC093827.5 in v32
+        # and a gene name in one version can map to multiple ENSG IDs
+        # those ENSG IDs may have a different gene name in another version
+        # so a key in gene_name_mapping maps to all matching ENSG IDs by gencode version
         self.gene_name_mapping = dd(lambda: dd(set))
         # case-insensitive lookup: lowercase gene name -> actual gene name in gene_name_mapping
         self._gene_name_lowercase_to_actual: dict[str, str] = {}
         path = genes["gene_name_mapping_file"]
         gencode_versions = genes["gencode_versions"]
+        # ensg -> {version: name}, used for version-aware dedup below
+        ensg_names_by_version: dict[str, dict[int, str]] = {}
         # use fsspec to support both local files and gs:// URLs
         with fsspec.open(path, "rt") as f:
             header = f.readline().strip().split("\t")
             for line in f:
                 s = line.strip().split("\t")
-                # TODO upper
+                ensg = s[header.index("ensg")].strip()
                 names_by_version = {
                     version: s[header.index(f"gene_name_{version}")].strip()
                     for version in gencode_versions
                 }
+                ensg_names_by_version[ensg] = names_by_version
                 for anchor in names_by_version.values():
                     if anchor == "NA":
                         continue
                     for version in gencode_versions:
-                        self.gene_name_mapping[anchor][version].add(
-                            names_by_version[version]
-                        )
+                        if names_by_version[version] != "NA":
+                            self.gene_name_mapping[anchor][version].add(ensg)
 
         # add hgnc alias and prev symbols to gene name mapping
         # for each alias and prev symbol whose real symbol is in the gene name mapping, add the alias and prev symbol with the same content
@@ -78,13 +75,19 @@ class GeneNameAndPositionMapping:
                             gene["symbol"]
                         ]
 
-        # remove mapped names if the anchor name itself is mapped
-        # because a gene name in one gencode release can have multiple ENSG ids, some of which are removed in later releases
-        # e.g. TBCE
-        for anchor in self.gene_name_mapping.keys():
+        # version-aware dedup: if a gene name maps to multiple ENSGs in a version,
+        # keep only the ones that actually have that gene name in that version
+        for anchor in list(self.gene_name_mapping.keys()):
             for version in self.gene_name_mapping[anchor].keys():
-                if anchor in self.gene_name_mapping[anchor][version]:
-                    self.gene_name_mapping[anchor][version] = {anchor}
+                ensg_ids = self.gene_name_mapping[anchor][version]
+                if len(ensg_ids) > 1:
+                    matching = {
+                        ensg
+                        for ensg in ensg_ids
+                        if ensg_names_by_version.get(ensg, {}).get(version) == anchor
+                    }
+                    if matching:
+                        self.gene_name_mapping[anchor][version] = matching
 
         # build case-insensitive lookup mapping
         for gene_name in self.gene_name_mapping.keys():
@@ -143,7 +146,6 @@ class GeneNameAndPositionMapping:
             logger.error(f"Error reading gene position file: {e}")
             raise DataException(f"Error reading gene position file")
 
-    # TODO maybe actually use ensg id as gene identifier in gene_name_mapping
     def get_coordinates_by_gene_name(
         self, gene_name: str
     ) -> dict[str, list[dict[str, str | int]]] | None:
@@ -171,12 +173,12 @@ class GeneNameAndPositionMapping:
             else:
                 raise GeneNotFoundException(f"Gene {gene_name} not found")
 
-        names = self.gene_name_mapping[actual_gene_name]
+        ensg_ids_by_version = self.gene_name_mapping[actual_gene_name]
         coords = {}
-        for version in names.keys():
+        for version in ensg_ids_by_version.keys():
             coords[version] = (
                 self.gene_positions[version]
-                .filter((pl.col("gene_name").is_in(names[version])))
+                .filter(pl.col("ensg").is_in(ensg_ids_by_version[version]))
                 .select(["chrom", "gene_start", "gene_end"])
                 .to_dicts()
             )
