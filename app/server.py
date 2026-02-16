@@ -20,6 +20,7 @@ from app.routers import (
     search,
     phenotype,
     resources,
+    rsid,
 )
 
 
@@ -53,6 +54,7 @@ app.include_router(chromatin_peaks.router, prefix="/api/v1", tags=["chromatin-pe
 app.include_router(exome_results.router, prefix="/api/v1", tags=["exome-results"])
 app.include_router(phenotype.router, prefix="/api/v1", tags=["phenotype"])
 app.include_router(resources.router, prefix="/api/v1", tags=["resources"])
+app.include_router(rsid.router, prefix="/api/v1", tags=["rsid"])
 
 
 def get_all_endpoints():

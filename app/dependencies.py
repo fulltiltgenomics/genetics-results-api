@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from app.services.gene_disease_data import GeneDiseaseData
     from app.services.phenotype_markdown_service import PhenotypeMarkdownService
     from app.services.credible_set_stats_service import CredibleSetStatsService
+    from app.services.rsid_db import RsidDB
 
 logger = logging.getLogger(__name__)
 
@@ -120,3 +121,8 @@ def get_phenotype_markdown_service() -> "PhenotypeMarkdownService":
 def get_credible_set_stats_service() -> "CredibleSetStatsService":
     """Get CredibleSetStatsService instance."""
     return container.get("credible_set_stats_service")
+
+
+def get_rsid_db() -> "RsidDB":
+    """Get RsidDB service instance."""
+    return container.get("rsid_db")

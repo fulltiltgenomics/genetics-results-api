@@ -98,7 +98,7 @@ def _register_services():
 
     def create_rsid_db():
         from app.services.rsid_db import RsidDB
-        return RsidDB()
+        return RsidDB({"rsid_db": config.rsid_db})
 
     def create_metadata():
         from app.services.metadata import Metadata
