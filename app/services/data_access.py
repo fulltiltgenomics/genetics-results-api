@@ -223,6 +223,7 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
 
         all_harmonized = []
         harmonizer = MetadataHarmonizer()
+        seen_metadata_files = set()
 
         for data_file_id in data_file_ids:
             if data_file_id not in data_file_by_id:
@@ -234,6 +235,11 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
             metadata_file = metadata_config.get("metadata_file")
             if not metadata_file:
                 continue
+
+            # skip if already processed this metadata file
+            if metadata_file in seen_metadata_files:
+                continue
+            seen_metadata_files.add(metadata_file)
 
             # read raw metadata for this data file
             compression = (
