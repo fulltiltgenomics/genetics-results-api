@@ -18,8 +18,8 @@ gene_based_data_files = [
             "metadata_file": "/mnt/disks/data/pheno_results.txt.bgz",
             "type": "genebass",
             "author": "GeneBass",
-            "publication_date": "2022-01-01",
-            "version_label": "500k",
+            "publication_date": "2022-09-14",
+            "version_label": "N_394841",
         },
     },
 ]
