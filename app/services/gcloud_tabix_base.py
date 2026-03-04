@@ -2,6 +2,7 @@ import logging
 import threading
 import time
 import asyncio
+import aiohttp
 import aiohttp.client_exceptions
 from typing import AsyncGenerator
 from asyncio.unix_events import subprocess
@@ -53,8 +54,11 @@ class GCloudTabixBase:
 
     def _init_storage(self):
         """Initialize the storage client and session."""
-        self.storage = Storage()
-        self.session = self.storage.session
+        # short keepalive prevents stale connections after inactivity,
+        # which cause TimeoutError in gcloud-aio-auth's acquire_access_token
+        connector = aiohttp.TCPConnector(keepalive_timeout=15)
+        self.session = aiohttp.ClientSession(connector=connector)
+        self.storage = Storage(session=self.session)
 
     def _set_gcs_oauth_token(self):
         """
