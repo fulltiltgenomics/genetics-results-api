@@ -126,3 +126,8 @@ def get_credible_set_stats_service() -> "CredibleSetStatsService":
 def get_rsid_db() -> "RsidDB":
     """Get RsidDB service instance."""
     return container.get("rsid_db")
+
+
+def ensure_gcs_token() -> None:
+    """Ensure GCS OAuth token is valid before tabix subprocess calls."""
+    container.get("data_access")._ensure_valid_token()

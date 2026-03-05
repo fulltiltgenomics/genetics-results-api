@@ -82,7 +82,7 @@ data_files = [
             "stats_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_core/r13_20251024/credible_set_stats.tsv",
         },
         "metadata": {
-            "metadata_file": "/mnt/disks/data/finngen_r13_pheno_202509.json",
+            "metadata_file": "gs://finngen-commons/results_api_data/mapping_files/finngen_r13_pheno_202509.json",
             "type": "finngen_r13",
             "author": "FinnGen Consortium",
             "publication_date": "2025-09-01",
@@ -102,7 +102,7 @@ data_files = [
             "stats_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_kanta/r12_20251024/credible_set_stats.tsv",
         },
         "metadata": {
-            "metadata_file": "/mnt/disks/data/Kanta_metadata_202503.tsv",
+            "metadata_file": "gs://finngen-commons/results_api_data/mapping_files/Kanta_metadata_202503.tsv",
             "type": "finngen_kanta",
             "author": "FinnGen Consortium",
             "publication_date": "2025-03-01",
@@ -122,7 +122,7 @@ data_files = [
             "stats_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_drugs/r12_20251024/credible_set_stats.tsv",
         },
         "metadata": {
-            "metadata_file": "/mnt/disks/data/drugs_pheno.json",
+            "metadata_file": "gs://finngen-commons/results_api_data/mapping_files/finngen_r12_drugs_pheno.json",
             "type": "finngen_drugs",
             "author": "FinnGen Consortium",
             "publication_date": "2024-01-01",
@@ -196,7 +196,7 @@ data_files = [
             "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r7/eQTL_Catalogue_R7.qtl.tsv.gz",
         },
         "metadata": {
-            "metadata_file": "/mnt/disks/data/eqtl_catalogue_r7/dataset_metadata.tsv",
+            "metadata_file": "gs://finngen-commons/results_api_data/mapping_files/eqtl_catalogue_r7_dataset_metadata.tsv",
             "type": "eqtl_catalogue",
             "publication_date": "2020-01-01",
             "version_label": "R7",

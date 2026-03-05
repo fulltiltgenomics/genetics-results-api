@@ -1,36 +1,44 @@
 import re
-import sqlite3
-import threading
-from collections import defaultdict as dd
-from typing import Any
+import asyncio
+import logging
+import tempfile
 from app.core.exceptions import ParseException
 from app.core.variant import Variant
+from app.services.gcloud_tabix_base import GCloudTabixBase
+
+logger = logging.getLogger(__name__)
 
 RSID_REGEX: re.Pattern[str] = re.compile(r"^rs\d+$", re.IGNORECASE)
+INDEX_CACHE_DIR = "/tmp/tbi_cache"
 
 
-class RsidDB:
-    def __init__(self, conf: dict[str, Any]) -> None:
-        self.rsid_conn: dict[int, sqlite3.Connection] = dd(
-            lambda: sqlite3.connect(conf["rsid_db"]["file"])
-        )
+class RsidDB(GCloudTabixBase):
+    def __init__(self, rsid_file: str) -> None:
+        super().__init__()
+        self.rsid_file = rsid_file
 
-    def get_variants_by_rsid(self, rsid: str) -> list[Variant]:
+    async def get_variants_by_rsid(self, rsid: str) -> list[Variant]:
         rsid = rsid.lower()
         if RSID_REGEX.match(rsid) is None:
             raise ParseException("invalid rsid")
-        if self.rsid_conn[threading.get_ident()].row_factory is None:
-            self.rsid_conn[threading.get_ident()].row_factory = sqlite3.Row
-        c: sqlite3.Cursor = self.rsid_conn[threading.get_ident()].cursor()
-        c.execute("SELECT chr, pos, ref, alt FROM rsid WHERE rsid = ?", (rsid,))
-        return [
-            Variant(
-                row["chr"] + "-" + str(row["pos"]) + "-" + row["ref"] + "-" + row["alt"]
-            )
-            for row in c.fetchall()
-        ]
+        rsid_num = rsid[2:]
+        self._ensure_valid_token()
+        process = await asyncio.create_subprocess_exec(
+            "tabix",
+            "--csi",
+            self.rsid_file,
+            f"rs:{rsid_num}-{rsid_num}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=INDEX_CACHE_DIR,
+        )
+        stdout, stderr = await process.communicate()
+        if process.returncode != 0:
+            logger.error(f"tabix rsid lookup failed: {stderr.decode()}")
+            return []
+        return self._parse_variants(stdout)
 
-    def get_variants_by_rsids(self, rsids: list[str]) -> dict[str, list[str]]:
+    async def get_variants_by_rsids(self, rsids: list[str]) -> dict[str, list[str]]:
         """Batch lookup of variants by rsids.
 
         Args:
@@ -44,22 +52,54 @@ class RsidDB:
             return {}
 
         normalized = [r.lower() for r in rsids]
+        result: dict[str, list[str]] = {r: [] for r in normalized}
         unique_rsids = list(set(normalized))
 
-        conn = self.rsid_conn[threading.get_ident()]
-        if conn.row_factory is None:
-            conn.row_factory = sqlite3.Row
-        c = conn.cursor()
+        regions = []
+        for rsid in unique_rsids:
+            rsid_num = rsid[2:]
+            regions.append(f"rs\t{rsid_num}\t{rsid_num}")
 
-        placeholders = ",".join("?" * len(unique_rsids))
-        c.execute(
-            f"SELECT chr, pos, ref, alt, rsid FROM rsid WHERE rsid IN ({placeholders})",
-            unique_rsids,
-        )
+        self._ensure_valid_token()
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".regions") as tmp:
+            tmp.write("\n".join(regions))
+            tmp.flush()
+            process = await asyncio.create_subprocess_exec(
+                "tabix",
+                "--csi",
+                "-R",
+                tmp.name,
+                self.rsid_file,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=INDEX_CACHE_DIR,
+            )
+            stdout, stderr = await process.communicate()
 
-        result: dict[str, list[str]] = {r: [] for r in normalized}
-        for row in c.fetchall():
-            variant_str = f"{row['chr']}:{row['pos']}:{row['ref']}:{row['alt']}"
-            result[row["rsid"]].append(variant_str)
+        if process.returncode != 0:
+            logger.error(f"tabix rsid batch lookup failed: {stderr.decode()}")
+            return result
+
+        for line in stdout.decode().strip().split("\n"):
+            if not line:
+                continue
+            fields = line.split("\t")
+            # format: chr(rs), pos(rsid_num), rsid, real_chr, real_pos, real_ref, real_alt
+            rsid = fields[2]
+            variant_str = f"{fields[3]}:{fields[4]}:{fields[5]}:{fields[6]}"
+            if rsid in result:
+                result[rsid].append(variant_str)
 
         return result
+
+    def _parse_variants(self, stdout: bytes) -> list[Variant]:
+        variants = []
+        for line in stdout.decode().strip().split("\n"):
+            if not line:
+                continue
+            fields = line.split("\t")
+            # format: chr(rs), pos(rsid_num), rsid, real_chr, real_pos, real_ref, real_alt
+            variants.append(
+                Variant(f"{fields[3]}-{fields[4]}-{fields[5]}-{fields[6]}")
+            )
+        return variants

@@ -43,16 +43,14 @@ authentication = False
 authentication_file = "/mnt/disks/data/finngen_auth_dev.json"
 
 # data paths
-hgnc_file = "/mnt/disks/data/hgnc_complete_set.txt"
-
-metadata_db = "/mnt/disks/data/meta_finngen_version_20250526.db"
+hgnc_file = "gs://finngen-commons/results_api_data/mapping_files/hgnc_complete_set.txt"
 
 rsid_db = {
-    "file": "/mnt/disks/data/gnomad/gnomad.genomes.exomes.v4.0.rsid.db",
+    "file": "gs://finngen-commons/results_api_data/gnomad/gnomad.genomes.exomes.v4.0.rsid.tsv.gz",
 }
 
 gnomad = {
-    "file": "/mnt/disks/data/gnomad/gnomad.genomes.exomes.v4.0.sites.v2.tsv.bgz",
+    "file": "gs://finngen-commons/results_api_data/gnomad/gnomad.genomes.exomes.v4.0.sites.v2.tsv.bgz",
     "populations": ["afr", "amr", "asj", "eas", "fin", "mid", "nfe", "oth", "sas"],
     "url": "https://gnomad.broadinstitute.org/variant/[VARIANT]?dataset=gnomad_r4",
     "version": "4.0",
@@ -81,7 +79,7 @@ dataset_to_resource = {
 
 dataset_mapping_files = [
     (
-        "/mnt/disks/data/eqtl_catalogue_r7/dataset_metadata.tsv",
+        "gs://finngen-commons/results_api_data/mapping_files/eqtl_catalogue_r7_dataset_metadata.tsv",
         "dataset_id",
         "eqtl_catalogue",
         "R7",
@@ -97,13 +95,13 @@ max_query_variants = 2000
 
 variant_set_files = {
     "FinnGen_enriched_202505": {
-        "file": "/mnt/disks/data/variant_sets/FinnGen_enriched_202505",
+        "file": "gs://finngen-commons/results_api_data/variant_sets/FinnGen_enriched_202505",
     },
     "COVID19_HGI_all": {
-        "file": "/mnt/disks/data/variant_sets/COVID19_HGI_all",
+        "file": "gs://finngen-commons/results_api_data/variant_sets/COVID19_HGI_all",
     },
     "COVID19_HGI_severity": {
-        "file": "/mnt/disks/data/variant_sets/COVID19_HGI_severity",
+        "file": "gs://finngen-commons/results_api_data/variant_sets/COVID19_HGI_severity",
     },
 }
 

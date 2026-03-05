@@ -64,7 +64,7 @@ async def get_rsid_variants(
     If an rsid is not found, it is included with an empty variants array.
     """
     validated_rsids = parse_and_validate_rsids(rsids)
-    variants_map = rsid_db.get_variants_by_rsids(validated_rsids)
+    variants_map = await rsid_db.get_variants_by_rsids(validated_rsids)
 
     seen = set()
     result = []
@@ -93,7 +93,7 @@ async def post_rsid_variants(
     rsids_input = body.decode("utf-8")
 
     validated_rsids = parse_and_validate_rsids(rsids_input)
-    variants_map = rsid_db.get_variants_by_rsids(validated_rsids)
+    variants_map = await rsid_db.get_variants_by_rsids(validated_rsids)
 
     seen = set()
     result = []

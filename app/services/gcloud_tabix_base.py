@@ -34,6 +34,7 @@ class GCloudTabixBase:
         self.credentials = None
         self.project = None
         self._token_lock = threading.Lock()
+        os.makedirs("/tmp/tbi_cache", exist_ok=True)
         self._init_storage()
         self._set_gcs_oauth_token()
 
@@ -127,6 +128,7 @@ class GCloudTabixBase:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 check=True,
+                cwd="/tmp/tbi_cache",
             )
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode()
@@ -251,6 +253,7 @@ class GCloudTabixBase:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd="/tmp/tbi_cache",
         )
         process.stdin.write(
             "\n".join(f"{c}\t{s}\t{e}" for c, s, e in zip(chr, start, end)).encode()

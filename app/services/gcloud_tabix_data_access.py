@@ -5,11 +5,12 @@ from app.services.data_access import DataAccessObject
 from app.services.gcloud_tabix_base import GCloudTabixBase
 from app.config.credible_sets import data_file_by_id as cs_data_file_by_id
 from app.config.exome_results import exome_data_file_by_id
+from app.config.gene_based_results import gene_based_data_file_by_id
 import aiohttp.client_exceptions
 import time
 
-# merge both config dicts
-data_file_by_id = {**cs_data_file_by_id, **exome_data_file_by_id}
+# merge all config dicts
+data_file_by_id = {**cs_data_file_by_id, **exome_data_file_by_id, **gene_based_data_file_by_id}
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
         df = data_file_by_id[data_file_id]
 
         # check if this data file supports the requested data type
-        valid_data_types = {"cs", "assoc", "exome"}
+        valid_data_types = {"cs", "assoc", "exome", "gene_based"}
         if data_type not in df:
             available = [k for k in df.keys() if k in valid_data_types]
             raise ValueError(
