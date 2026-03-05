@@ -1,3 +1,4 @@
+import os
 import re
 import asyncio
 import logging
@@ -14,7 +15,8 @@ INDEX_CACHE_DIR = "/tmp/tbi_cache"
 
 class RsidDB(GCloudTabixBase):
     def __init__(self, rsid_file: str) -> None:
-        super().__init__()
+        os.makedirs(INDEX_CACHE_DIR, exist_ok=True)
+        ensure_gcs_token()
         self.rsid_file = rsid_file
 
     async def get_variants_by_rsid(self, rsid: str) -> list[Variant]:
