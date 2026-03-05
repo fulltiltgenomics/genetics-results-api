@@ -4,7 +4,7 @@ import logging
 import tempfile
 from app.core.exceptions import ParseException
 from app.core.variant import Variant
-from app.services.gcloud_tabix_base import GCloudTabixBase
+from app.services.gcloud_tabix_base import GCloudTabixBase, ensure_gcs_token
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class RsidDB(GCloudTabixBase):
         if RSID_REGEX.match(rsid) is None:
             raise ParseException("invalid rsid")
         rsid_num = rsid[2:]
-        self._ensure_valid_token()
+        ensure_gcs_token()
         process = await asyncio.create_subprocess_exec(
             "tabix",
             "--csi",
@@ -60,7 +60,7 @@ class RsidDB(GCloudTabixBase):
             rsid_num = rsid[2:]
             regions.append(f"rs\t{rsid_num}\t{rsid_num}")
 
-        self._ensure_valid_token()
+        ensure_gcs_token()
         with tempfile.NamedTemporaryFile(mode="w", suffix=".regions") as tmp:
             tmp.write("\n".join(regions))
             tmp.flush()

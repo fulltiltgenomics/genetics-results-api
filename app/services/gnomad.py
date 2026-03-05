@@ -7,7 +7,7 @@ from collections import OrderedDict as od, defaultdict as dd
 from app.core.exceptions import DataException, VariantNotFoundException
 from app.core.variant import Variant
 from app.core.logging_config import setup_logging
-from app.services.gcloud_tabix_base import GCloudTabixBase
+from app.services.gcloud_tabix_base import GCloudTabixBase, ensure_gcs_token
 from typing import TypedDict
 import tempfile
 import asyncio
@@ -40,7 +40,7 @@ class GnomAD(GCloudTabixBase):
         self._init_tabix()
 
     def _init_tabix(self) -> None:
-        self._ensure_valid_token()
+        ensure_gcs_token()
         result = subprocess.run(
             ["tabix", "-H", self.conf.gnomad["file"]],
             stdout=subprocess.PIPE,
@@ -62,7 +62,7 @@ class GnomAD(GCloudTabixBase):
         gene: str | None,
     ) -> dict[str, Any]:
         start_time: float = timeit.default_timer()
-        self._ensure_valid_token()
+        ensure_gcs_token()
         with tempfile.NamedTemporaryFile(mode="w") as tmp:
             tmp.write(tabix_ranges_tab_delim)
             tmp.flush()

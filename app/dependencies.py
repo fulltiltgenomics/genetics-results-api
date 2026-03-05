@@ -12,6 +12,7 @@ from fastapi import Depends, HTTPException, Request
 import app.config.common as config
 from app.core.auth import get_current_user
 from app.core.service_container import container
+from app.services.gcloud_tabix_base import ensure_gcs_token  # noqa: F401 - re-exported for router dependencies
 
 if TYPE_CHECKING:
     from app.services.request_util import RequestUtil
@@ -128,6 +129,3 @@ def get_rsid_db() -> "RsidDB":
     return container.get("rsid_db")
 
 
-def ensure_gcs_token() -> None:
-    """Ensure GCS OAuth token is valid before tabix subprocess calls."""
-    container.get("data_access")._ensure_valid_token()
