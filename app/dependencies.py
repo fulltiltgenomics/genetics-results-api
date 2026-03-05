@@ -7,10 +7,10 @@ This module provides Depends() functions for injecting services into route handl
 import logging
 from typing import TYPE_CHECKING
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 
 import app.config.common as config
-from app.core.auth import get_current_user
+from app.core.auth import get_verified_user
 from app.core.service_container import container
 from app.services.gcloud_tabix_base import ensure_gcs_token  # noqa: F401 - re-exported for router dependencies
 
@@ -37,35 +37,14 @@ def is_public_endpoint(request: Request) -> bool:
     return False
 
 
-async def auth_required(
-    request: Request,
-    user: str | None = Depends(get_current_user),
-) -> str:
-    if not config.authentication:
+async def auth_required(request: Request) -> str | None:
+    if not config.require_auth:
         return None
     if is_public_endpoint(request):
         return None
+    user = get_verified_user(request)
     if user is None:
-        # log only safe headers to avoid exposing sensitive data
-        safe_headers = {
-            "host": request.headers.get("host"),
-            "user-agent": request.headers.get("user-agent"),
-            "x-forwarded-for": request.headers.get("x-forwarded-for"),
-        }
-        logger.debug(f"Auth required but no user: {safe_headers}")
-        host = request.headers.get("x-forwarded-host") or request.headers.get(
-            "host", "localhost:4000"
-        )
-        scheme = request.headers.get("x-forwarded-proto", "http")
-        base_url = f"{scheme}://{host}"
-
-        raise HTTPException(
-            status_code=401,
-            detail="Not authenticated",
-            headers={
-                "X-Login-URL": f"{base_url}/api/v1/login",
-            },
-        )
+        raise HTTPException(status_code=401, detail="Not authenticated")
     return user
 
 
@@ -127,5 +106,3 @@ def get_credible_set_stats_service() -> "CredibleSetStatsService":
 def get_rsid_db() -> "RsidDB":
     """Get RsidDB service instance."""
     return container.get("rsid_db")
-
-

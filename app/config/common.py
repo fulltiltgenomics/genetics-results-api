@@ -28,19 +28,17 @@ usage_logging_excluded_paths = {
 cors_origins = [
     "https://anno.finngen.fi",
     "https://annopublic.finngen.fi",
+    "https://finngenie.finngen.fi",
+    "https://finngenie.fi",
 ]
 
-# session settings
-_session_secret_key = os.environ.get("SESSION_SECRET_KEY")
-if not _session_secret_key:
-    raise RuntimeError("SESSION_SECRET_KEY environment variable must be set")
-session_secret_key = _session_secret_key
-session_max_age = 24 * 60 * 60 * 365  # 1 year
-session_https_only = True
+# when True, require X-Goog-Authenticated-User-Email header (set by IAP or oauth2-proxy)
+# set REQUIRE_AUTH=true in environments where IAP/oauth2-proxy is in front of the service
+require_auth = os.environ.get("REQUIRE_AUTH", "").lower() in ("1", "true", "yes")
 
-# authentication
-authentication = False
-authentication_file = "/mnt/disks/data/finngen_auth_dev.json"
+# authorization via Google Workspace group membership + whitelist
+authorization = False
+authorization_file = "/mnt/disks/data/finngen_auth_dev.json"
 
 # data paths
 hgnc_file = "gs://finngen-commons/results_api_data/mapping_files/hgnc_complete_set.txt"

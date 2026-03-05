@@ -10,7 +10,6 @@ import logging
 import time
 from typing import Optional
 
-from itsdangerous import URLSafeTimedSerializer, BadSignature
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 import app.config.common as config
@@ -23,39 +22,14 @@ def _should_log_path(path: str) -> bool:
     return path not in config.usage_logging_excluded_paths
 
 
-def _extract_user_from_session(scope: Scope) -> Optional[str]:
-    """
-    Extract user email from session cookie.
-
-    The session is signed using itsdangerous (Starlette's SessionMiddleware).
-    We decode it here since we're in pure ASGI middleware.
-    """
+def _extract_user_from_header(scope: Scope) -> Optional[str]:
+    """Extract user email from the X-Goog-Authenticated-User-Email header (set by IAP or oauth2-proxy)."""
     headers = dict(scope.get("headers", []))
-    cookie_header = headers.get(b"cookie", b"").decode("utf-8", errors="ignore")
-
-    if not cookie_header:
+    iap_email = headers.get(b"x-goog-authenticated-user-email", b"").decode("utf-8", errors="ignore")
+    if not iap_email:
         return None
-
-    cookies = {}
-    for item in cookie_header.split(";"):
-        item = item.strip()
-        if "=" in item:
-            key, value = item.split("=", 1)
-            cookies[key.strip()] = value.strip()
-
-    session_cookie = cookies.get("session")
-    if not session_cookie:
-        return None
-
-    try:
-        serializer = URLSafeTimedSerializer(config.session_secret_key)
-        session_data = serializer.loads(
-            session_cookie,
-            max_age=config.session_max_age,
-        )
-        return session_data.get("user_email")
-    except (BadSignature, Exception):
-        return None
+    # header format: "accounts.google.com:user@domain.com"
+    return iap_email.split(":")[-1] if ":" in iap_email else iap_email
 
 
 class UsageLoggingMiddleware:
@@ -84,7 +58,7 @@ class UsageLoggingMiddleware:
         method = scope.get("method", "UNKNOWN")
         start_time = time.perf_counter()
         status_code: int = 0
-        user_email = _extract_user_from_session(scope)
+        user_email = _extract_user_from_header(scope)
 
         async def send_wrapper(message: Message) -> None:
             nonlocal status_code

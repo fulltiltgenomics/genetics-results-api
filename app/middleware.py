@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 import app.config.common as config
@@ -66,15 +65,4 @@ def setup_middleware(app: FastAPI):
             "Content-Type",
             "Authorization",
         ],
-        expose_headers=["X-Login-URL"],
-    )
-
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key=config.session_secret_key,
-        max_age=config.session_max_age,
-        same_site="lax",
-        https_only=config.session_https_only,
-        session_cookie="session",
-        path="/",
     )
