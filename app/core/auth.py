@@ -1,46 +1,30 @@
-"""Authentication via X-Goog-Authenticated-User-Email header (set by IAP or oauth2-proxy).
-
-Authorization is optionally checked against Google Workspace groups and a whitelist
-loaded from the authentication_file when config.authorization is True.
+"""Authentication via X-Goog-Authenticated-User-Email header (set by IAP or oauth2-proxy)
+and Authorization: Bearer token (shared secret or Google Identity Token).
 """
 
-import json
+import hmac
 import logging
 import threading
-from collections import defaultdict
-from typing import Any, Dict
 
 from fastapi import HTTPException, Request
 
-from app.config.common import authorization, authorization_file
+import app.config.common as config
 
 logger = logging.getLogger(__name__)
 
-if authorization:
-    with open(authorization_file) as f:
-        auth_json = json.load(f)
+# lazily initialized Google auth transport for JWKS caching
+_google_request = None
+_google_request_lock = threading.Lock()
 
-    GROUP_NAMES = auth_json["group_auth"]["GROUPS"]
-    SERVICE_ACCOUNT_FILE = auth_json["group_auth"]["SERVICE_ACCOUNT_FILE"]
-    DELEGATED_ACCOUNT = auth_json["group_auth"]["DELEGATED_ACCOUNT"]
-    WHITELIST = auth_json["login"].get("WHITELIST", [])
 
-    SERVICE_ACCOUNT_SCOPES = [
-        "https://www.googleapis.com/auth/admin.directory.group.readonly",
-        "https://www.googleapis.com/auth/admin.directory.user.readonly",
-        "https://www.googleapis.com/auth/admin.directory.group.member.readonly",
-    ]
-
-    from google.oauth2 import service_account
-    from googleapiclient.discovery import build
-
-    creds = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SERVICE_ACCOUNT_SCOPES
-    )
-    delegated_creds = creds.with_subject(DELEGATED_ACCOUNT)
-    services: Dict[int, Any] = defaultdict(
-        lambda: build("admin", "directory_v1", credentials=delegated_creds)
-    )
+def _get_google_request():
+    global _google_request
+    if _google_request is None:
+        with _google_request_lock:
+            if _google_request is None:
+                from google.auth.transport import requests as google_requests
+                _google_request = google_requests.Request()
+    return _google_request
 
 
 def get_authenticated_user(request: Request) -> str | None:
@@ -52,27 +36,51 @@ def get_authenticated_user(request: Request) -> str | None:
     return iap_email.split(":")[-1] if ":" in iap_email else iap_email
 
 
-def verify_membership(username: str) -> bool:
-    """Check if user is in the whitelist or a member of an authorized Google group."""
-    if not authorization or username in WHITELIST:
-        return True
-    for name in GROUP_NAMES:
-        r = (
-            services[threading.get_ident()]
-            .members()
-            .hasMember(groupKey=name, memberKey=username)
-            .execute()
-        )
-        if r["isMember"] is True:
-            return True
-    return False
+def get_bearer_token_user(request: Request) -> str | None:
+    """Validate a bearer token from the Authorization header.
+
+    Checks in order: shared internal secret, then Google Identity Token (JWT).
+    Returns user identity if valid, None if no bearer token present.
+    Raises HTTPException(401/403) if token is present but invalid.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+
+    token = auth_header[7:]
+
+    # check shared secret for internal service-to-service auth
+    if config.internal_api_secret and hmac.compare_digest(token, config.internal_api_secret):
+        return "mcp-tool"
+
+    # try Google Identity Token validation
+    from google.oauth2 import id_token
+    try:
+        payload = id_token.verify_oauth2_token(token, _get_google_request())
+    except ValueError as e:
+        logger.warning(f"invalid bearer token: {e}")
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Token does not contain email")
+
+    if not payload.get("email_verified", False):
+        raise HTTPException(status_code=401, detail="Email not verified")
+
+    # domain restriction
+    domain = email.split("@")[-1] if "@" in email else ""
+    if email not in config.allowed_emails and domain not in config.allowed_email_domains:
+        raise HTTPException(status_code=403, detail="Email domain not allowed")
+
+    return email
 
 
 def get_verified_user(request: Request) -> str | None:
-    """Get authenticated user and verify group membership if authorization is enabled."""
-    email = get_authenticated_user(request)
+    """Get authenticated user from bearer token or oauth2-proxy header."""
+    # try bearer token first (programmatic API access / internal service calls)
+    email = get_bearer_token_user(request)
     if email is None:
-        return None
-    if not verify_membership(email):
-        raise HTTPException(status_code=403, detail="Unauthorized")
+        # fall back to oauth2-proxy header (browser sessions)
+        email = get_authenticated_user(request)
     return email

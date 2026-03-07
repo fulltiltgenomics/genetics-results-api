@@ -36,9 +36,16 @@ cors_origins = [
 # set REQUIRE_AUTH=true in environments where IAP/oauth2-proxy is in front of the service
 require_auth = os.environ.get("REQUIRE_AUTH", "").lower() in ("1", "true", "yes")
 
-# authorization via Google Workspace group membership + whitelist
-authorization = False
-authorization_file = "/mnt/disks/data/finngen_auth_dev.json"
+# shared secret for internal service-to-service auth
+internal_api_secret = os.environ.get("INTERNAL_API_SECRET", "")
+
+# bearer token auth: allowed email domains and specific emails
+allowed_email_domains = {
+    d.strip() for d in os.environ.get("ALLOWED_EMAIL_DOMAINS", "finngen.fi").split(",") if d.strip()
+}
+allowed_emails = {
+    e.strip() for e in os.environ.get("ALLOWED_EMAILS", "").split(",") if e.strip()
+}
 
 # data paths
 hgnc_file = "gs://finngen-commons/results_api_data/mapping_files/hgnc_complete_set.txt"
