@@ -47,12 +47,10 @@ source /opt/gcloud/google-cloud-sdk/path.bash.inc
 if [ -n "\$GOOGLE_APPLICATION_CREDENTIALS" ] && [ -f "\$GOOGLE_APPLICATION_CREDENTIALS" ]; then
     echo "Using GOOGLE_APPLICATION_CREDENTIALS: \$GOOGLE_APPLICATION_CREDENTIALS"
     gcloud auth activate-service-account --key-file="\$GOOGLE_APPLICATION_CREDENTIALS"
-	export GCS_OAUTH_TOKEN=`gcloud auth print-access-token`
 else
-    echo "NOTE: No GOOGLE_APPLICATION_CREDENTIALS found, gcloud will not be authenticated"
-    echo "Set GOOGLE_APPLICATION_CREDENTIALS to point to a service account file in the container to authenticate gcloud if needed"
-    echo "Tabix will not be able to access gs:// URLs without proper authentication"
+    echo "No GOOGLE_APPLICATION_CREDENTIALS, using Workload Identity / metadata server"
 fi
+export GCS_OAUTH_TOKEN=\$(gcloud auth print-access-token 2>/dev/null || true)
 
 # if no command provided, run server
 if [ -z "\$@" ]; then
