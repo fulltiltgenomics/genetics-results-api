@@ -34,10 +34,13 @@ cors_origins = [
 
 # when True, require X-Goog-Authenticated-User-Email header (set by IAP or oauth2-proxy)
 # set REQUIRE_AUTH=true in environments where IAP/oauth2-proxy is in front of the service
-require_auth = os.environ.get("REQUIRE_AUTH", "").lower() in ("1", "true", "yes")
+require_auth = os.environ.get("REQUIRE_AUTH", "true").lower() in ("1", "true", "yes")
 
 # shared secret for internal service-to-service auth
 internal_api_secret = os.environ.get("INTERNAL_API_SECRET", "")
+
+# chat backend URL for user token validation (optional, empty = disabled)
+chat_backend_url = os.environ.get("CHAT_BACKEND_URL", "")
 
 # bearer token auth: allowed email domains and specific emails
 allowed_email_domains = {

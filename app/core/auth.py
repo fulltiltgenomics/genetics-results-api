@@ -36,10 +36,35 @@ def get_authenticated_user(request: Request) -> str | None:
     return iap_email.split(":")[-1] if ":" in iap_email else iap_email
 
 
+def _validate_user_api_token(token: str) -> str | None:
+    """Validate a user API token via the chat backend. Returns user_id or None."""
+    if not config.chat_backend_url:
+        return None
+    try:
+        import requests
+        headers = {}
+        if config.internal_api_secret:
+            headers["Authorization"] = f"Bearer {config.internal_api_secret}"
+        resp = requests.post(
+            f"{config.chat_backend_url}/v1/tokens/validate",
+            json={"token": token},
+            headers=headers,
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("valid"):
+                return data["user_id"]
+    except Exception as e:
+        logger.warning(f"user token validation failed: {e}")
+    return None
+
+
 def get_bearer_token_user(request: Request) -> str | None:
     """Validate a bearer token from the Authorization header.
 
-    Checks in order: shared internal secret, then Google Identity Token (JWT).
+    Checks in order: shared internal secret, then routes by format —
+    JWTs (contain dots) go to Google validation, others to user token validation.
     Returns user identity if valid, None if no bearer token present.
     Raises HTTPException(401/403) if token is present but invalid.
     """
@@ -53,13 +78,21 @@ def get_bearer_token_user(request: Request) -> str | None:
     if config.internal_api_secret and hmac.compare_digest(token, config.internal_api_secret):
         return "mcp-tool"
 
-    # try Google Identity Token validation
-    from google.oauth2 import id_token
-    try:
-        payload = id_token.verify_oauth2_token(token, _get_google_request())
-    except ValueError as e:
-        logger.warning(f"invalid bearer token: {e}")
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    # route by token format: JWTs have dots, user tokens don't
+    if "." in token:
+        # Google Identity Token (JWT) — no HTTP call needed
+        from google.oauth2 import id_token
+        try:
+            payload = id_token.verify_oauth2_token(token, _get_google_request())
+        except ValueError as e:
+            logger.warning(f"invalid bearer token: {e}")
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+    else:
+        # user API token — validate via chat backend
+        user = _validate_user_api_token(token)
+        if user:
+            return user
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     email = payload.get("email")
     if not email:
