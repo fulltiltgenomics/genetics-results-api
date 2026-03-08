@@ -3,7 +3,7 @@ import logging
 from typing import AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.responses import StreamingResponse
-from app.dependencies import get_gene_name_mapping
+from app.dependencies import get_gene_name_mapping, ensure_gcs_token
 from app.core.exceptions import GeneNotFoundException
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 from app.config.gene_based_results import gene_based_data_files
@@ -29,6 +29,7 @@ router = APIRouter()
 async def gene_based(
     gene: str = Path(..., description="Gene symbol or comma-separated list of gene symbols", example="BRCA1"),
     gene_name_and_position_mapping: GeneNameAndPositionMapping = Depends(get_gene_name_mapping),
+    _=Depends(ensure_gcs_token),
 ):
     """
     Get gene-based burden results for a specific gene or comma-separated list of genes.
@@ -65,6 +66,7 @@ async def gene_based(
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        cwd="/tmp/tbi_cache",
     )
     # write regions for all matching gene coordinates
     regions = "\n".join(

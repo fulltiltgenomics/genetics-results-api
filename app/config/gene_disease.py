@@ -11,7 +11,7 @@ from multiple sources that are harmonized at load time.
 
 gene_disease = {
     "gencc": {
-        "file": "/mnt/disks/data/submissions-export-tsv",
+        "file": "gs://finngen-commons/results_api_data/gene_disease/gencc-submissions-export-tsv",
         "columns": {
             "uuid": "uuid",
             "gene_symbol": "gene_symbol",
@@ -23,7 +23,7 @@ gene_disease = {
         },
     },
     "monarch": {
-        "file": "/mnt/disks/data/causal_gene_to_disease_association.all.tsv",
+        "file": "gs://finngen-commons/results_api_data/gene_disease/monarch-causal_gene_to_disease_association.all.tsv",
         "columns": {
             "uuid": "uuid",
             "gene_symbol": "subject_label",

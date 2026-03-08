@@ -1,5 +1,5 @@
-import gzip
 import logging
+import subprocess
 from typing import Any, Optional, TypedDict
 import timeit
 import json
@@ -7,12 +7,15 @@ from collections import OrderedDict as od, defaultdict as dd
 from app.core.exceptions import DataException, VariantNotFoundException
 from app.core.variant import Variant
 from app.core.logging_config import setup_logging
+from app.services.gcloud_tabix_base import GCloudTabixBase, ensure_gcs_token
 from typing import TypedDict
 import tempfile
 import asyncio
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+TBI_CACHE_DIR = "/tmp/tbi_cache"
 
 
 class Csq(TypedDict):
@@ -25,14 +28,31 @@ class Csq_dict(TypedDict):
     consequence: str
 
 
-class GnomAD:
-    def __init__(self, conf: dict[str, Any]) -> None:
-        self.conf = conf
+class GnomAD(GCloudTabixBase):
+    def _init_storage(self):
+        # GnomAD only uses tabix subprocesses, not the aiohttp GCS client
+        pass
+
+    def __init__(self) -> None:
+        super().__init__()
+        import app.config.common as config
+        self.conf = config
         self._init_tabix()
 
     def _init_tabix(self) -> None:
-        with gzip.open(self.conf["gnomad"]["file"], "rt") as f:
-            headers = f.readline().strip().split("\t")
+        ensure_gcs_token()
+        result = subprocess.run(
+            ["tabix", "-H", self.conf.gnomad["file"]],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=TBI_CACHE_DIR,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to read gnomAD header: {result.stderr.decode()}")
+        headers = result.stdout.decode().strip().split("\t")
+        # remove leading '#' from first header column
+        if headers and headers[0].startswith("#"):
+            headers[0] = headers[0][1:]
         self.gnomad_headers: dict[str, int] = od({h: i for i, h in enumerate(headers)})
 
     async def _fetch(
@@ -42,6 +62,7 @@ class GnomAD:
         gene: str | None,
     ) -> dict[str, Any]:
         start_time: float = timeit.default_timer()
+        ensure_gcs_token()
         with tempfile.NamedTemporaryFile(mode="w") as tmp:
             tmp.write(tabix_ranges_tab_delim)
             tmp.flush()
@@ -49,9 +70,10 @@ class GnomAD:
                 "tabix",
                 "-R",
                 tmp.name,
-                self.conf["gnomad"]["file"],
+                self.conf.gnomad["file"],
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=TBI_CACHE_DIR,
             )
             stdout, stderr = await process.communicate()
             if process.returncode != 0 or stderr:

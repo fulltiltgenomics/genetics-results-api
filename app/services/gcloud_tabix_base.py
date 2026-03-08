@@ -15,6 +15,34 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+# module-level GCS token management shared by all GCloudTabixBase instances
+_gcs_credentials = None
+_gcs_token_lock = threading.Lock()
+
+
+def ensure_gcs_token() -> None:
+    """Ensure GCS OAuth token env var is valid for tabix subprocess calls."""
+    global _gcs_credentials
+    if _gcs_credentials is None:
+        _gcs_credentials, _ = default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        _gcs_credentials.refresh(Request())
+        os.environ["GCS_OAUTH_TOKEN"] = _gcs_credentials.token
+        logger.info(f"GCS_OAUTH_TOKEN set, expires at: {_gcs_credentials.expiry}")
+        return
+
+    with _gcs_token_lock:
+        if (
+            _gcs_credentials.expiry
+            and _gcs_credentials.expiry > datetime.now() + timedelta(minutes=5)
+        ):
+            return
+        logger.info("GCS token expired or expiring soon, refreshing...")
+        _gcs_credentials.refresh(Request())
+        os.environ["GCS_OAUTH_TOKEN"] = _gcs_credentials.token
+        logger.info(f"Token refreshed, new expiry: {_gcs_credentials.expiry}")
+
 
 class GCloudTabixBase:
     """
@@ -31,11 +59,9 @@ class GCloudTabixBase:
     def __init__(self):
         self.storage = None
         self.session = None
-        self.credentials = None
-        self.project = None
-        self._token_lock = threading.Lock()
+        os.makedirs("/tmp/tbi_cache", exist_ok=True)
         self._init_storage()
-        self._set_gcs_oauth_token()
+        ensure_gcs_token()
 
     async def __aenter__(self):
         """Async context manager entry."""
@@ -60,50 +86,6 @@ class GCloudTabixBase:
         self.session = aiohttp.ClientSession(connector=connector)
         self.storage = Storage(session=self.session)
 
-    def _set_gcs_oauth_token(self):
-        """
-        Get access token and set GCS_OAUTH_TOKEN environment variable, needed by tabix.
-
-        Note: storing tokens in env vars is required by tabix for GCS authentication.
-        The token is short-lived (~1 hour) and automatically refreshed.
-        """
-        try:
-            self.credentials, self.project = default(
-                scopes=["https://www.googleapis.com/auth/cloud-platform"]
-            )
-            self.credentials.refresh(Request())
-            os.environ["GCS_OAUTH_TOKEN"] = self.credentials.token
-            logger.info(
-                f"GCS_OAUTH_TOKEN set successfully, expires at: {self.credentials.expiry}"
-            )
-
-        except Exception as e:
-            logger.error(f"Error setting GCS_OAUTH_TOKEN: {e}")
-            raise e
-
-    def _ensure_valid_token(self) -> None:
-        """Check if token is still valid and refresh if needed."""
-        if not self.credentials:
-            self._set_gcs_oauth_token()
-            return
-
-        # use lock to prevent concurrent refreshes
-        with self._token_lock:
-            # double-check after acquiring lock
-            if (
-                self.credentials.expiry
-                and self.credentials.expiry > datetime.now() + timedelta(minutes=5)
-            ):
-                return
-            logger.info("Token expired or expiring soon, refreshing...")
-            try:
-                self.credentials.refresh(Request())
-                os.environ["GCS_OAUTH_TOKEN"] = self.credentials.token
-                logger.info(f"Token refreshed, new expiry: {self.credentials.expiry}")
-            except Exception as e:
-                logger.error(f"Error refreshing token: {e}")
-                self._set_gcs_oauth_token()
-
     def _get_header(self, gs_path: str) -> list[bytes]:
         """
         Get the header for a tabix-indexed file.
@@ -119,7 +101,7 @@ class GCloudTabixBase:
         Raises:
             RuntimeError: If tabix operation fails
         """
-        self._ensure_valid_token()
+        ensure_gcs_token()
 
         try:
             process = subprocess.run(
@@ -127,6 +109,7 @@ class GCloudTabixBase:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 check=True,
+                cwd="/tmp/tbi_cache",
             )
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode()
@@ -242,7 +225,7 @@ class GCloudTabixBase:
         # coordinates for tabix are 1-based, prevent 0
         start = [max(1, s) for s in start]
 
-        self._ensure_valid_token()
+        ensure_gcs_token()
         process = await asyncio.create_subprocess_exec(
             "tabix",
             "-R",
@@ -251,6 +234,7 @@ class GCloudTabixBase:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd="/tmp/tbi_cache",
         )
         process.stdin.write(
             "\n".join(f"{c}\t{s}\t{e}" for c, s, e in zip(chr, start, end)).encode()

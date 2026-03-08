@@ -3,14 +3,12 @@ import subprocess
 from typing import Literal
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Response
 from fastapi.responses import StreamingResponse, PlainTextResponse
-from app.dependencies import get_request_util, get_gene_name_mapping
+from app.dependencies import get_gene_name_mapping, ensure_gcs_token
 from app.core.variant import Variant
 from app.core.exceptions import (
     ParseException,
 )
-from app.services.request_util import RequestUtil
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
-import app.config.genes as config
 import app.config.common as config_common
 
 logger = logging.getLogger(__name__)
@@ -327,6 +325,7 @@ async def variant_annotation_range(
     start: str,
     end: str,
     variants: list[str] = Body(...),
+    _=Depends(ensure_gcs_token),
 ) -> StreamingResponse:
     try:
         start = int(start)
@@ -345,6 +344,7 @@ async def variant_annotation_range(
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            cwd="/tmp/tbi_cache",
         )
         try:
             n = 0
@@ -386,6 +386,7 @@ async def variant_annotation_range(
 )
 async def variant_annotation(
     variants: list[str] = Body(...),
+    _=Depends(ensure_gcs_token),
 ) -> StreamingResponse:
     variant_dict = {v.encode("utf-8"): True for v in variants}
 
@@ -405,6 +406,7 @@ async def variant_annotation(
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            cwd="/tmp/tbi_cache",
         )
         # send regions to tabix's stdin
         process.stdin.write(regions.encode())

@@ -98,15 +98,11 @@ def _register_services():
 
     def create_rsid_db():
         from app.services.rsid_db import RsidDB
-        return RsidDB({"rsid_db": config.rsid_db})
+        return RsidDB(config.rsid_db["file"])
 
     def create_metadata():
         from app.services.metadata import Metadata
         return Metadata()
-
-    def create_gnomad():
-        from app.services.gnomad import GnomAD
-        return GnomAD()
 
     def create_dataset_mapping():
         from app.services.dataset_mapping import DatasetMapping
@@ -140,7 +136,6 @@ def _register_services():
     container.register("finemapped", create_finemapped)
     container.register("rsid_db", create_rsid_db)
     container.register("metadata", create_metadata)
-    container.register("gnomad", create_gnomad)
     container.register("dataset_mapping", create_dataset_mapping)
     container.register("ld_datafetch", create_ld_datafetch)
     container.register("datafetch", create_datafetch)

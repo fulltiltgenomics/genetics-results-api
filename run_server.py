@@ -136,8 +136,9 @@ if __name__ == "__main__":
         sys.exit(1)
     port = int(sys.argv[1])
     try:
-        # remove all .tbi files to force re-download in case they have been downloaded but have changed in the cloud since
-        for file in glob.glob("*.tbi"):
+        # create tbi cache dir and clean stale index files
+        os.makedirs("/tmp/tbi_cache", exist_ok=True)
+        for file in glob.glob("/tmp/tbi_cache/*.tbi") + glob.glob("/tmp/tbi_cache/*.csi"):
             os.remove(file)
         _validate_metadata_files()
         asyncio.run(_validata_example_phenos())
