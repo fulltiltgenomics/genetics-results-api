@@ -463,6 +463,19 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 # data file doesn't support this data type, expected - skip silently
                 continue
 
+        # skip resources whose gencode version has no coordinates for the queried gene
+        accesses = [
+            access
+            for access in accesses
+            if access.gencode_version in coords
+            and len(coords[access.gencode_version]) > 0
+        ]
+
+        if len(accesses) == 0:
+            raise NotFoundException(
+                f"No data found for resources: {resources}"
+            )
+
         chunk_iterators = [
             await access.stream_range(
                 [pos["chrom"] for pos in coords[access.gencode_version]],
