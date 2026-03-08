@@ -525,13 +525,16 @@ async def exome_results_by_gene(
             + ", ".join(config_exome_results.resource_to_exome_data_file_ids.keys()),
         )
 
-    stream = await data_access.stream_range_by_coords(
-        coords=all_coords,
-        resources=resources,
-        data_type="exome",
-        in_chunk_size=config_common.read_chunk_size,
-        out_chunk_size=config_common.response_chunk_size,
-    )
+    try:
+        stream = await data_access.stream_range_by_coords(
+            coords=all_coords,
+            resources=resources,
+            data_type="exome",
+            in_chunk_size=config_common.read_chunk_size,
+            out_chunk_size=config_common.response_chunk_size,
+        )
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=str(e))
     return await range_response(
         str(request.url),
         stream,
