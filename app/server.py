@@ -32,9 +32,9 @@ app = FastAPI(
     description="API for accessing genetic association data and annotations. Available resources: "
     + ", ".join(config_util.get_resources()),
     version="0.1.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url="/api/v1/docs",
+    redoc_url="/api/v1/redoc",
+    openapi_url="/api/v1/openapi.json",
     swagger_ui_parameters={"defaultModelsExpandDepth": -1},  # hide schemas by default
     dependencies=[Depends(auth_required)],
 )
@@ -62,8 +62,8 @@ def get_all_endpoints():
     endpoints = {}
 
     endpoints["health"] = "/healthz"
-    endpoints["documentation"] = "/docs"
-    endpoints["redoc"] = "/redoc"
+    endpoints["documentation"] = "/api/v1/docs"
+    endpoints["redoc"] = "/api/v1/redoc"
 
     for route in app.routes:
         if not isinstance(route, APIRoute):

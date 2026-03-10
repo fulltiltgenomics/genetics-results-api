@@ -18,9 +18,9 @@ use_cloud_logging_api = deploy_env.startswith("dev")
 usage_logging_enabled = True
 usage_logging_excluded_paths = {
     "/healthz",
-    "/docs",
-    "/redoc",
-    "/openapi.json",
+    "/api/v1/docs",
+    "/api/v1/redoc",
+    "/api/v1/openapi.json",
     "/favicon.ico",
 }
 
@@ -34,7 +34,7 @@ cors_origins = [
 
 # when True, require X-Goog-Authenticated-User-Email header (set by IAP or oauth2-proxy)
 # set REQUIRE_AUTH=true in environments where IAP/oauth2-proxy is in front of the service
-require_auth = os.environ.get("REQUIRE_AUTH", "true").lower() in ("1", "true", "yes")
+require_auth = os.environ.get("REQUIRE_AUTH", "false").lower() in ("1", "true", "yes")
 
 # shared secret for internal service-to-service auth
 internal_api_secret = os.environ.get("INTERNAL_API_SECRET", "")
