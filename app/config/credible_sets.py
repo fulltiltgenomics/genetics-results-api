@@ -70,6 +70,82 @@ qtl_columns = {
 
 data_files = [
     {
+        "id": "finngen_mvp_ukbb",
+        "resource": "finngen_mvp_ukbb",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "AB1_DERMATOPHYTOSIS",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_mvp_ukbb_pseudo/r13/",
+            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_mvp_ukbb_pseudo/r13/FinnGen_R13_MVP_UKBB_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+        },
+        "metadata": {
+            "metadata_file": "gs://finngen-commons/results_api_data/mapping_files/finngen_r13_mvp_ukbb_nonlabs.json",
+            "type": "finngen_r13",
+            "author": "FinnGen Consortium",
+            "publication_date": "2025-12-19",
+            "version_label": "R13",
+        },
+    },
+    {
+        "id": "finngen_mvp_ukbb_labs",
+        "resource": "finngen_mvp_ukbb",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "3000963",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_mvp_ukbb_labs_pseudo/r13/",
+            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_mvp_ukbb_labs_pseudo/r13/FinnGen_R13_MVP_UKBB_labs_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+        },
+        "metadata": {
+            "metadata_file": "gs://finngen-commons/results_api_data/mapping_files/finngen_r13_mvp_ukbb_labs.json",
+            "type": "finngen_r13",
+            "author": "FinnGen Consortium",
+            "publication_date": "2025-12-19",
+            "version_label": "R13",
+        },
+    },
+    {
+        "id": "finngen_ukbb",
+        "resource": "finngen_ukbb",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "AB1_DERMATOPHYTOSIS",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_ukbb_pseudo/r13/",
+            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_ukbb_pseudo/r13/FinnGen_R13_UKBB_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+        },
+        "metadata": {
+            "metadata_file": "gs://finngen-commons/results_api_data/mapping_files/finngen_r13_ukbb_nonlabs.json",
+            "type": "finngen_r13",
+            "author": "FinnGen Consortium",
+            "publication_date": "2025-12-19",
+            "version_label": "R13",
+        },
+    },
+    {
+        "id": "finngen_ukbb_labs",
+        "resource": "finngen_ukbb",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "3000963",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_ukbb_labs_pseudo/r13/",
+            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_ukbb_labs_pseudo/r13/FinnGen_R13_UKBB_labs_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+        },
+        "metadata": {
+            "metadata_file": "gs://finngen-commons/results_api_data/mapping_files/finngen_r13_ukbb_labs.json",
+            "type": "finngen_r13",
+            "author": "FinnGen Consortium",
+            "publication_date": "2025-12-19",
+            "version_label": "R13",
+        },
+    },
+    {
         "id": "finngen_gwas",
         "resource": "finngen",
         "data_source": "gcloud",
