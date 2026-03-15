@@ -96,7 +96,12 @@ def get_all_endpoints():
             endpoints[tag_key] = {}
 
         path = route.path
-        endpoints[tag_key][path] = http_methods
+        if path in endpoints[tag_key]:
+            existing = set(endpoints[tag_key][path])
+            existing.update(http_methods)
+            endpoints[tag_key][path] = sorted(existing)
+        else:
+            endpoints[tag_key][path] = http_methods
 
     return endpoints
 
