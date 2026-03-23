@@ -190,7 +190,7 @@ async def genes_in_region(
         422: {"description": "Invalid variant"},
         500: {"description": "Internal server error"},
     },
-    include_in_schema=False,
+    include_in_schema=True,
 )
 async def nearest_genes(
     variant: str = Path(
