@@ -2,6 +2,7 @@ import time
 import logging
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
+from pydantic import BaseModel
 from app.dependencies import (
     get_request_util,
     get_data_access,
@@ -561,6 +562,95 @@ async def credible_sets_by_variant(
         config_common.read_chunk_size,
         config_common.response_chunk_size,
         var,
+    )
+    return await range_response(
+        str(request.url),
+        stream,
+        config_credible_sets.cs_header_schema,
+        format,
+        start_time,
+    )
+
+
+class VariantsRequest(BaseModel):
+    variants: str
+
+
+@router.post(
+    "/credible_sets_by_variant",
+    summary="Get credible sets across resources for multiple variants",
+    responses={
+        200: {
+            "description": "Successful response",
+            "content": {
+                "text/tab-separated-values": {
+                    "schema": {"type": "string"},
+                },
+                "application/json": {
+                    "schema": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
+                },
+            },
+        },
+        401: {"description": "Not authenticated"},
+        422: {"description": "Invalid variant, interval or format"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def credible_sets_by_variant_post(
+    request: Request,
+    body: VariantsRequest,
+    resources: list[str] | None = Query(
+        default=None,
+        description="Comma-separated list of resources to get data from (if not given, all available resources are used)",
+    ),
+    interval: int = Query(
+        default=95, description="Credible set threshold (95 or 99)", ge=95, le=99
+    ),
+    format: Literal["tsv", "json"] = Query(
+        default="tsv", description="Response format"
+    ),
+    request_util: RequestUtil = Depends(get_request_util),
+    data_access: DataAccess = Depends(get_data_access),
+) -> Response:
+    """
+    Get credible sets across resources for multiple variants.
+    Accepts a newline-separated list of variants in the request body.
+    """
+    start_time = time.time()
+    if interval not in (95, 99):
+        raise HTTPException(status_code=422, detail="Interval must be 95 or 99")
+    if interval == 99:
+        raise HTTPException(status_code=422, detail="Interval 99 is not supported yet")
+
+    variant_strings = [v.strip() for v in body.variants.strip().split("\n") if v.strip()]
+    if not variant_strings:
+        raise HTTPException(status_code=422, detail="No variants provided")
+
+    variants = []
+    for vs in variant_strings:
+        try:
+            variants.append(Variant(vs))
+        except ParseException as e:
+            raise HTTPException(status_code=422, detail=f"Invalid variant '{vs}': {e}")
+
+    if resources is None:
+        resources = config_util.get_resources(data_type="cs")
+    if not request_util.check_resources(resources):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unrecognized resource in {resources}. Available credible set resources: "
+            + ", ".join(config_util.get_resources(data_type="cs")),
+        )
+
+    stream = await data_access.stream_range_variants(
+        variants,
+        resources,
+        "cs",
+        config_common.read_chunk_size,
+        config_common.response_chunk_size,
     )
     return await range_response(
         str(request.url),

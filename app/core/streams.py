@@ -94,18 +94,18 @@ def tsv_line_iterator(
     stream: AsyncIterator[bytes],
     header: list[bytes],
     columns: dict[str, bytes],
-    variant: Variant | None,
+    variant: Variant | set[Variant] | None,
 ) -> AsyncIterator[list[bytes]]:
     """
     Iterate over lines in a stream and split them into a list.
     Adds resource and version as the first two columns.
-    If variant is provided, limit data to the variant.
+    If variant is provided, limit data to the variant(s).
 
     Args:
         stream: Async iterator of byte chunks
         header: Header columns from the data file (used to look up column indices)
         columns: Dict mapping column keys to column names (e.g. {"chr": b"chr", ...})
-        variant: Variant to filter by, or None for no filtering
+        variant: Variant or set of Variants to filter by, or None for no filtering
     """
     # derive column indices from header
     chr_col = header.index(columns["chr"])
@@ -114,10 +114,17 @@ def tsv_line_iterator(
     alt_col = header.index(columns["alt"])
     dataset_col = header.index(columns["dataset"])
 
+    if isinstance(variant, set):
+        variant_keys = {
+            (v.chr_bytes, v.pos_bytes, v.ref_bytes, v.alt_bytes) for v in variant
+        }
+
     def filter_fn(s: list[bytes]) -> bool:
-        """Filter to specific variant if provided."""
+        """Filter to specific variant(s) if provided."""
         if variant is None:
             return True
+        if isinstance(variant, set):
+            return (s[chr_col], s[pos_col], s[ref_col], s[alt_col]) in variant_keys
         return (
             variant.chr_bytes == s[chr_col]
             and variant.pos_bytes == s[pos_col]

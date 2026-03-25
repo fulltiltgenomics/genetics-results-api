@@ -431,6 +431,65 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
 
         return chunk_iterator(merged_iterator, header_line, out_chunk_size)
 
+    async def stream_range_variants(
+        self,
+        variants: list[Variant],
+        resources: List[str],
+        data_type: Literal["cs", "assoc"],
+        in_chunk_size: int,
+        out_chunk_size: int,
+    ) -> AsyncGenerator[bytes, None]:
+        """Stream data for multiple variants from multiple resources using a single tabix -R call per data file."""
+        from app.services.config_util import get_data_file_ids_for_resource
+
+        data_file_ids = []
+        for resource in resources:
+            ids = get_data_file_ids_for_resource(resource)
+            if ids:
+                data_file_ids.extend(ids)
+            else:
+                data_file_ids.append(resource)
+
+        chrs = [v.chr for v in variants]
+        positions = [v.pos for v in variants]
+        variant_set = set(variants)
+
+        accesses_and_iterators = []
+        for data_file_id in data_file_ids:
+            try:
+                access = await self._get_resource_access(data_file_id, data_type)
+                chunk_iterator_stream = await access.stream_range(
+                    chrs, positions, positions, in_chunk_size
+                )
+                accesses_and_iterators.append((access, chunk_iterator_stream))
+            except ValueError:
+                continue
+            except Exception as e:
+                logger.warning(f"Skipping data file {data_file_id} due to error: {e}")
+                continue
+
+        if not accesses_and_iterators:
+            raise NotFoundException(
+                f"No data files available for resources: {resources}"
+            )
+
+        accesses, chunk_iterators = zip(*accesses_and_iterators)
+
+        columns = exome_variant_columns if data_type == "exome" else cs_variant_columns
+
+        line_iterators = [
+            tsv_line_iterator(iterator, access.get_header(), columns, variant_set)
+            for access, iterator in zip(accesses, chunk_iterators)
+        ]
+        header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
+        sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_CS)
+        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        header_line = (
+            b"resource\tversion\t" + b"\t".join(accesses[0].get_header()) + b"\n"
+        )
+
+        return chunk_iterator(merged_iterator, header_line, out_chunk_size)
+
     async def stream_range_by_coords(
         self,
         coords: dict[str, list[dict[Literal["chrom", "gene_start", "gene_end"], int]]],
