@@ -115,6 +115,80 @@ class TestNearestGenes:
         assert response.status_code in [200, 404]
 
 
+class TestNearestGenesPost:
+    """Test POST /api/v1/nearest_genes endpoint."""
+
+    @pytest.mark.parametrize("format", ["tsv", "json"])
+    def test_post_nearest_genes_formats(self, server_url, test_variant, format):
+        """Test POST with a single variant in both formats."""
+        response = requests.post(
+            f"{server_url}/api/v1/nearest_genes",
+            json={"variants": test_variant},
+            params={"format": format, "n": 3},
+            timeout=30,
+        )
+        assert response.status_code == 200
+
+        if format == "tsv":
+            assert "text/tab-separated-values" in response.headers.get(
+                "content-type", ""
+            )
+            validation = validate_tsv_response(response.text)
+            assert validation["valid"], f"TSV validation failed: {validation['errors']}"
+        else:
+            assert "application/json" in response.headers.get("content-type", "")
+            data = response.json()
+            assert isinstance(data, list)
+            if data:
+                assert "variant" in data[0], "Response should include variant column"
+
+    def test_post_nearest_genes_multiple(self, server_url, test_variant):
+        """Test POST with multiple variants."""
+        variants = f"{test_variant}\n1-55039974-G-T"
+        response = requests.post(
+            f"{server_url}/api/v1/nearest_genes",
+            json={"variants": variants},
+            params={"format": "json", "n": 3},
+            timeout=30,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        # should have results for both variants
+        variant_ids = {gene["variant"] for gene in data}
+        assert len(variant_ids) >= 1
+
+    def test_post_nearest_genes_with_params(self, server_url, test_variant):
+        """Test POST with n and gene_type parameters."""
+        response = requests.post(
+            f"{server_url}/api/v1/nearest_genes",
+            json={"variants": test_variant},
+            params={"format": "json", "n": 5, "gene_type": "all"},
+            timeout=30,
+        )
+        assert response.status_code == 200
+
+    def test_post_nearest_genes_invalid(self, server_url):
+        """Test POST with invalid variant returns 422."""
+        response = requests.post(
+            f"{server_url}/api/v1/nearest_genes",
+            json={"variants": "invalid-variant"},
+            params={"format": "json"},
+            timeout=10,
+        )
+        assert response.status_code == 422
+
+    def test_post_nearest_genes_empty(self, server_url):
+        """Test POST with empty variants string returns 422."""
+        response = requests.post(
+            f"{server_url}/api/v1/nearest_genes",
+            json={"variants": ""},
+            params={"format": "json"},
+            timeout=10,
+        )
+        assert response.status_code == 422
+
+
 # TODO add back
 # class TestGeneModel:
 #     """Test gene model endpoints."""

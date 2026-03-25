@@ -249,6 +249,107 @@ async def nearest_genes(
         return genes
 
 
+from pydantic import BaseModel
+
+
+class NearestGenesRequest(BaseModel):
+    variants: str
+
+
+@router.post(
+    "/nearest_genes",
+    summary="Get nearest genes to multiple variants",
+    responses={
+        200: {
+            "description": "Successful response",
+            "content": {
+                "text/tab-separated-values": {
+                    "schema": {"type": "string"},
+                },
+                "application/json": {
+                    "schema": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
+                },
+            },
+        },
+        401: {"description": "Not authenticated"},
+        422: {"description": "Invalid variant"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def nearest_genes_post(
+    body: NearestGenesRequest,
+    gene_type: Literal["protein_coding", "all"] = Query(
+        default="protein_coding", description="Type of genes to return"
+    ),
+    n: int = Query(
+        default=3,
+        description="Maximum number of genes to return per variant (default 3)",
+        ge=1,
+        le=20,
+    ),
+    max_distance: int = Query(
+        default=1000000,
+        description="Maximum distance from variant position to consider (default 1 million base pairs)",
+        ge=0,
+        le=10000000,
+    ),
+    gencode_version: str = Query(default=None, description="Gencode version to use"),
+    return_hgnc_symbol_if_only_ensg: bool = Query(
+        default=False,
+        description="If true, returns HGNC symbol if for a gene gencode has only ENSG id and HGNC symbol is available",
+    ),
+    format: Literal["tsv", "json"] = Query(
+        default="tsv", description="Response format"
+    ),
+    gene_name_and_position_mapping: GeneNameAndPositionMapping = Depends(get_gene_name_mapping),
+) -> Response:
+    """
+    Get nearest genes to multiple variants.
+    Accepts a newline-separated list of variants in the request body.
+    """
+    variant_strings = [v.strip() for v in body.variants.strip().split("\n") if v.strip()]
+    if not variant_strings:
+        raise HTTPException(status_code=422, detail="No variants provided")
+
+    variants = []
+    for vs in variant_strings:
+        try:
+            variants.append(Variant(vs))
+        except ParseException as e:
+            raise HTTPException(status_code=422, detail=f"Invalid variant '{vs}': {e}")
+
+    all_genes = []
+    for var in variants:
+        genes = gene_name_and_position_mapping.get_nearest_genes(
+            var.chr,
+            var.pos,
+            n=n,
+            gene_type=gene_type,
+            max_distance=max_distance,
+            gencode_version=gencode_version,
+            return_hgnc_symbol_if_only_ensg=return_hgnc_symbol_if_only_ensg,
+        )
+        for gene in genes:
+            gene["variant"] = var.varid
+        all_genes.extend(genes)
+
+    if format == "tsv":
+        if not all_genes:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No genes found within {max_distance} base pairs of any variant",
+            )
+        header = "\t".join(all_genes[0].keys())
+        rows = "\n".join("\t".join(str(v) for v in gene.values()) for gene in all_genes)
+        tsv = f"{header}\n{rows}\n"
+        return PlainTextResponse(tsv, media_type="text/tab-separated-values")
+    else:
+        return all_genes
+
+
 # TODO implement by gencode version
 # @router.get(
 #     "/gene_model/{chr}/{start}/{end}",
