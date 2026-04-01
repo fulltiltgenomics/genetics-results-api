@@ -58,6 +58,11 @@ case "$MODE" in
     python3 -m pytest ${TEST_PATH}test_exome_results.py -r w --server-url "$SERVER_URL" -v
     ;;
 
+  summary-stats|ss)
+    echo -e "${GREEN}Running summary stats tests...${NC}"
+    python3 -m pytest ${TEST_PATH}test_summary_stats.py -r w --server-url "$SERVER_URL" -v
+    ;;
+
   collect|c)
     echo -e "${GREEN}Collecting tests (dry run)...${NC}"
     python3 -m pytest ${TEST_PATH} -r w --collect-only
@@ -75,6 +80,7 @@ case "$MODE" in
     echo "  credible-sets (cs)   - Run only credible sets tests"
     echo "  colocalization (coloc) - Run only colocalization tests"
     echo "  exome-results (exome) - Run only exome results tests"
+    echo "  summary-stats (ss)   - Run only summary stats tests"
     echo "  collect (c)          - Just collect/list tests without running"
     echo "  help (h)             - Show this help message"
     echo ""

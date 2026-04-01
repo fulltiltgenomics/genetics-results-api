@@ -90,6 +90,74 @@ def tsv_line_iterator_simple(
     return tsv_line_iterator_base(stream, filter_fn, transform_fn)
 
 
+def tsv_line_iterator_sumstats(
+    stream: AsyncIterator[bytes],
+    file_header: list[bytes],
+    column_mapping: dict[str, str],
+    resource: bytes,
+    version: bytes,
+    phenotype: bytes,
+    variant: Variant | set[Variant] | None = None,
+) -> AsyncIterator[list[bytes]]:
+    """
+    TSV line iterator for summary stat files.
+    Applies column mapping (select + rename), prepends resource/version/phenotype,
+    and optionally filters by variant(s).
+
+    Args:
+        stream: Async iterator of byte chunks from tabix
+        file_header: Raw header columns from the file
+        column_mapping: Maps file column names to output column names (only mapped columns are included)
+        resource: Resource name as bytes
+        version: Version as bytes
+        phenotype: Phenotype code as bytes
+        variant: Optional variant(s) to filter by
+    """
+    file_header_str = [h.decode() for h in file_header]
+
+    # build list of (source_index, output_name) for columns present in the file
+    mapped_indices = []
+    for src_col, out_col in column_mapping.items():
+        if src_col in file_header_str:
+            mapped_indices.append((file_header_str.index(src_col), out_col))
+
+    # find chr/pos/ref/alt indices in the file header for variant filtering
+    chr_src = next((k for k, v in column_mapping.items() if v == "chr"), None)
+    pos_src = next((k for k, v in column_mapping.items() if v == "pos"), None)
+    ref_src = next((k for k, v in column_mapping.items() if v == "ref"), None)
+    alt_src = next((k for k, v in column_mapping.items() if v == "alt"), None)
+
+    chr_col = file_header_str.index(chr_src) if chr_src and chr_src in file_header_str else None
+    pos_col = file_header_str.index(pos_src) if pos_src and pos_src in file_header_str else None
+    ref_col = file_header_str.index(ref_src) if ref_src and ref_src in file_header_str else None
+    alt_col = file_header_str.index(alt_src) if alt_src and alt_src in file_header_str else None
+
+    can_filter = all(c is not None for c in [chr_col, pos_col, ref_col, alt_col])
+
+    if isinstance(variant, set) and can_filter:
+        variant_keys = {
+            (v.chr_bytes, v.pos_bytes, v.ref_bytes, v.alt_bytes) for v in variant
+        }
+
+    def filter_fn(s: list[bytes]) -> bool:
+        if variant is None or not can_filter:
+            return True
+        if isinstance(variant, set):
+            return (s[chr_col], s[pos_col], s[ref_col], s[alt_col]) in variant_keys
+        return (
+            variant.chr_bytes == s[chr_col]
+            and variant.pos_bytes == s[pos_col]
+            and variant.ref_bytes == s[ref_col]
+            and variant.alt_bytes == s[alt_col]
+        )
+
+    def transform_fn(s: list[bytes]) -> list[bytes]:
+        mapped = [s[idx] if idx < len(s) else b"NA" for idx, _ in mapped_indices]
+        return [resource, version, phenotype] + mapped
+
+    return tsv_line_iterator_base(stream, filter_fn, transform_fn)
+
+
 def tsv_line_iterator(
     stream: AsyncIterator[bytes],
     header: list[bytes],

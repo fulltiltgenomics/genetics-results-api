@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from app.services.phenotype_markdown_service import PhenotypeMarkdownService
     from app.services.credible_set_stats_service import CredibleSetStatsService
     from app.services.rsid_db import RsidDB
+    from app.services.sumstats_data_access import SumstatsDataAccess
 
 logger = logging.getLogger(__name__)
 
@@ -106,3 +107,8 @@ def get_credible_set_stats_service() -> "CredibleSetStatsService":
 def get_rsid_db() -> "RsidDB":
     """Get RsidDB service instance."""
     return container.get("rsid_db")
+
+
+def get_sumstats_data_access() -> "SumstatsDataAccess":
+    """Get SumstatsDataAccess service instance."""
+    return container.get("sumstats_data_access")

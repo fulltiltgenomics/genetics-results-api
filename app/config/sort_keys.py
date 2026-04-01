@@ -152,3 +152,10 @@ SORT_CONFIG_EXOME = [
     ("alt", bytes),
     ("trait", bytes),
 ]
+
+SORT_CONFIG_SUMSTATS = [
+    ("chr", int),
+    ("pos", int),
+    ("ref", bytes),
+    ("alt", bytes),
+]

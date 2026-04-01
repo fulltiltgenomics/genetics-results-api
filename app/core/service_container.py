@@ -124,6 +124,10 @@ def _register_services():
         from app.services.credible_set_stats_service import CredibleSetStatsService
         return CredibleSetStatsService()
 
+    def create_sumstats_data_access():
+        from app.services.sumstats_data_access import SumstatsDataAccess
+        return SumstatsDataAccess()
+
     # register all services
     container.register("request_util", create_request_util)
     container.register("search_index", create_search_index)
@@ -141,6 +145,7 @@ def _register_services():
     container.register("datafetch", create_datafetch)
     container.register("phenotype_markdown_service", create_phenotype_markdown_service)
     container.register("credible_set_stats_service", create_credible_set_stats_service)
+    container.register("sumstats_data_access", create_sumstats_data_access)
 
 
 # register services on module load
