@@ -6,6 +6,8 @@ This module contains all configuration related to expression data:
 - Expression data source configurations (GTEx, HPA, etc.)
 """
 
+from app.config.profile import load_profile_module
+
 expression_header_schema = {
     "resource": str,
     "version": str,
@@ -24,17 +26,5 @@ simple_columns = {
     "dataset": b"dataset",
 }
 
-expression_data = [
-    {
-        "data_source": "gcloud",
-        "resource": "gtex",
-        "gencode_version": 39,
-        "file": "gs://finngen-commons/results_api_data/expression/gtex_v10_median_tpm.long.tsv.gz",
-    },
-    {
-        "data_source": "gcloud",
-        "resource": "hpa",
-        "gencode_version": 43,
-        "file": "gs://finngen-commons/results_api_data/expression/hpa_normal_ihc_data_24.1.long.tsv.gz",
-    },
-]
+_profile = load_profile_module("expression")
+expression_data = _profile.expression_data
