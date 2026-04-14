@@ -3,10 +3,9 @@
 data_files = [
     {
         "id": "finngen_gwas_sumstats",
+        "dataset_id": "finngen_gwas",
         "resource": "finngen",
-        "version": "R13",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://finngen-production-library-green/finngen_R13/finngen_R13_analysis_data/summary_stats/release/",
         "suffix": ".gz",
         "column_mapping": {
@@ -27,10 +26,9 @@ data_files = [
     },
     {
         "id": "finngen_mvp_ukbb_gwas_sumstats",
+        "dataset_id": "finngen_mvp_ukbb",
         "resource": "finngen_mvp_ukbb",
-        "version": "R13",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://finngen-production-library-green/finngen_R13/finngen_R13_analysis_data/meta_analysis/mvp_ukbb/summary_stats/",
         "suffix": "_meta_out.tsv.gz",
         "column_mapping": {
@@ -89,10 +87,9 @@ data_files = [
     },
     {
         "id": "finngen_mvp_ukbb_labs_gwas_sumstats",
+        "dataset_id": "finngen_mvp_ukbb_labs",
         "resource": "finngen_mvp_ukbb",
-        "version": "R13",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://finngen-production-library-green/finngen_R13/finngen_R13_analysis_data/meta_analysis/mvp_ukbb_labs/summary_stats/",
         "suffix": "_meta_out.tsv.gz",
         "column_mapping": {
@@ -151,10 +148,9 @@ data_files = [
     },
     {
         "id": "finngen_ukbb_gwas_sumstats",
+        "dataset_id": "finngen_ukbb",
         "resource": "finngen_ukbb",
-        "version": "R13",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://finngen-production-library-green/finngen_R13/finngen_R13_analysis_data/meta_analysis/ukbb/summary_stats/",
         "suffix": "_meta_out.tsv.gz",
         "column_mapping": {
@@ -181,10 +177,9 @@ data_files = [
     },
     {
         "id": "finngen_ukbb_labs_gwas_sumstats",
+        "dataset_id": "finngen_ukbb_labs",
         "resource": "finngen_ukbb",
-        "version": "R13",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://finngen-production-library-green/finngen_R13/finngen_R13_analysis_data/meta_analysis/ukbb_labs/summary_stats/",
         "suffix": "_meta_out.tsv.gz",
         "column_mapping": {
@@ -211,10 +206,9 @@ data_files = [
     },
     {
         "id": "finngen_drugs_gwas_sumstats",
+        "dataset_id": "finngen_drugs",
         "resource": "finngen",
-        "version": "R12",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://finngen-production-library-green/finngen_R12/finngen_R12_analysis_data/summary_stats_drugs/release/",
         "suffix": ".gz",
         "column_mapping": {
@@ -233,10 +227,9 @@ data_files = [
     },
     {
         "id": "finngen_lab_values_gwas_sumstats",
+        "dataset_id": "finngen_kanta",
         "resource": "finngen",
-        "version": "2025_3_10",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://finngen-production-library-green/lab_values/gwas_release_2025_3_10/summary_stats/",
         "suffix": ".gz",
         "column_mapping": {
@@ -253,10 +246,9 @@ data_files = [
     },
     {
         "id": "finngen_pqtl_sumstats",
+        "dataset_id": "finngen_pqtl",
         "resource": "finngen",
-        "version": "batch1-4",
         "data_source": "gcloud",
-        "data_type": "pqtl",
         "prefix": "gs://finngen-production-library-green/omics/proteomics/meta_pqtl_batch1-4/sumstats/",
         "suffix": "_meta_out.tsv.gz",
         "column_mapping": {
@@ -283,10 +275,9 @@ data_files = [
     },
     {
         "id": "finngen_eqtl_sumstats",
+        "dataset_id": "finngen_eqtl",
         "resource": "finngen",
-        "version": "batch1_5",
         "data_source": "gcloud",
-        "data_type": "eqtl",
         "prefix": "gs://finngen-production-library-green/omics/singlecell/batch1_5_2025_12_15/gex_results/saige_qtl/cis_nominal/integrated_gex_batch1_5.fgid.qc.",
         "suffix": ".mean.inv.SAIGE.cis_qtl_pairs.txt.bgz",
         "column_mapping": {

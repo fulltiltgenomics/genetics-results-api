@@ -1,4 +1,5 @@
 """Daly profile: chromatin peaks data paths."""
+
 chromatin_peaks_data = [
     {
         "data_source": "gcloud",

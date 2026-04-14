@@ -22,6 +22,7 @@ def sumstats_resources_and_types():
 @pytest.fixture(scope="session")
 def sumstats_example_phenotypes():
     """Get example phenotypes for each summary stats data file."""
+    from app.config.datasets import datasets
     from app.config.summary_stats import data_files
 
     # return list of (resource, data_type, phenotype) tuples
@@ -29,7 +30,7 @@ def sumstats_example_phenotypes():
     examples = []
     for df in data_files:
         resource = df["resource"]
-        data_type = df["data_type"]
+        data_type = datasets[df["dataset_id"]]["data_type"]
         # use a known phenotype per resource/data_type
         if resource == "finngen" and data_type == "gwas":
             examples.append((resource, data_type, "AUTOIMMUNE"))

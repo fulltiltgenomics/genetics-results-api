@@ -3,10 +3,9 @@
 data_files = [
     {
         "id": "finngen_gwas_sumstats",
+        "dataset_id": "finngen_gwas",
         "resource": "finngen",
-        "version": "R13",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://daly-genetics-results/sumstats/finngen/R13/",
         "suffix": ".gz",
         "column_mapping": {
@@ -27,10 +26,9 @@ data_files = [
     },
     {
         "id": "finngen_mvp_ukbb_gwas_sumstats",
+        "dataset_id": "finngen_mvp_ukbb",
         "resource": "finngen_mvp_ukbb",
-        "version": "R13",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://daly-genetics-results/sumstats/finngen_mvp_ukbb/R13/",
         "suffix": "_meta_out.tsv.gz",
         "column_mapping": {
@@ -89,10 +87,9 @@ data_files = [
     },
     {
         "id": "finngen_mvp_ukbb_labs_gwas_sumstats",
+        "dataset_id": "finngen_mvp_ukbb_labs",
         "resource": "finngen_mvp_ukbb",
-        "version": "R13",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://daly-genetics-results/sumstats/finngen_mvp_ukbb/R13_labs/",
         "suffix": "_meta_out.tsv.gz",
         "column_mapping": {
@@ -151,10 +148,9 @@ data_files = [
     },
     {
         "id": "finngen_ukbb_gwas_sumstats",
+        "dataset_id": "finngen_ukbb",
         "resource": "finngen_ukbb",
-        "version": "R13",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://daly-genetics-results/sumstats/finngen_ukbb/R13/",
         "suffix": "_meta_out.tsv.gz",
         "column_mapping": {
@@ -181,10 +177,9 @@ data_files = [
     },
     {
         "id": "finngen_ukbb_labs_gwas_sumstats",
+        "dataset_id": "finngen_ukbb_labs",
         "resource": "finngen_ukbb",
-        "version": "R13",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://daly-genetics-results/sumstats/finngen_ukbb/R13_labs/",
         "suffix": "_meta_out.tsv.gz",
         "column_mapping": {
@@ -211,10 +206,9 @@ data_files = [
     },
     {
         "id": "finngen_drugs_gwas_sumstats",
+        "dataset_id": "finngen_drugs",
         "resource": "finngen",
-        "version": "R12",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://daly-genetics-results/sumstats/finngen/R12_drugs/",
         "suffix": ".gz",
         "column_mapping": {
@@ -233,10 +227,9 @@ data_files = [
     },
     {
         "id": "finngen_lab_values_gwas_sumstats",
+        "dataset_id": "finngen_kanta",
         "resource": "finngen",
-        "version": "2025_3_10",
         "data_source": "gcloud",
-        "data_type": "gwas",
         "prefix": "gs://daly-genetics-results/sumstats/finngen/R13_labs/",
         "suffix": ".gz",
         "column_mapping": {
@@ -253,10 +246,9 @@ data_files = [
     },
     {
         "id": "finngen_pqtl_sumstats",
+        "dataset_id": "finngen_pqtl",
         "resource": "finngen",
-        "version": "batch1-4",
         "data_source": "gcloud",
-        "data_type": "pqtl",
         "prefix": "gs://daly-genetics-results/sumstats/finngen/pqtl_batch1-4/",
         "suffix": "_meta_out.tsv.gz",
         "column_mapping": {
@@ -283,10 +275,9 @@ data_files = [
     },
     {
         "id": "finngen_eqtl_sumstats",
+        "dataset_id": "finngen_eqtl",
         "resource": "finngen",
-        "version": "batch1_5",
         "data_source": "gcloud",
-        "data_type": "eqtl",
         "prefix": "gs://daly-genetics-results/sumstats/finngen/eqtl_batch1-5/integrated_gex_batch1_5.fgid.qc.",
         "suffix": ".mean.inv.SAIGE.cis_qtl_pairs.txt.bgz",
         "column_mapping": {

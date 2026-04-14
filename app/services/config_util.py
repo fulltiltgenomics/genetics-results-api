@@ -13,6 +13,20 @@ from app.config.gene_based_results import (
     gene_based_data_file_by_id,
     resource_to_gene_based_data_file_ids,
 )
+from app.config.datasets import datasets as _dataset_registry
+from app.config.coloc import coloc as _coloc_configs
+from app.config.summary_stats import data_files as _sumstats_data_files
+
+# build coloc partner index from explicit pairs
+_coloc_partners: dict[str, set[str]] = {}
+for _c in _coloc_configs:
+    for _ds_a, _ds_b in _c.get("pairs", []):
+        if _ds_a not in _dataset_registry:
+            raise ValueError(f"coloc pair references unknown dataset_id {_ds_a!r} in {_c['name']!r}")
+        if _ds_b not in _dataset_registry:
+            raise ValueError(f"coloc pair references unknown dataset_id {_ds_b!r} in {_c['name']!r}")
+        _coloc_partners.setdefault(_ds_a, set()).add(_ds_b)
+        _coloc_partners.setdefault(_ds_b, set()).add(_ds_a)
 
 # merge configurations
 data_files = cs_data_files + exome_data_files + gene_based_data_files
@@ -66,3 +80,28 @@ def get_resources_with_metadata() -> list[str]:
             resource = df.get("resource", df["id"])
             resources_with_meta.add(resource)
     return sorted(list(resources_with_meta))
+
+
+def get_datasets() -> dict[str, dict]:
+    """Return the central dataset registry."""
+    return _dataset_registry
+
+
+def dataset_products(dataset_id: str) -> dict:
+    """Determine which products a dataset supports (credible sets, summary stats, colocalization)."""
+    products: dict = {}
+
+    if dataset_id in cs_data_file_by_id:
+        products["credible_sets"] = True
+
+    # summary stats: check if any sumstats entry references this dataset
+    for df in _sumstats_data_files:
+        if df.get("dataset_id") == dataset_id:
+            products["summary_stats"] = True
+            break
+
+    partners = _coloc_partners.get(dataset_id)
+    if partners:
+        products["colocalization"] = {"partners": sorted(partners)}
+
+    return products
