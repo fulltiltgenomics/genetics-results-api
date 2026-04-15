@@ -379,7 +379,7 @@ datasets = {
     # gene-disease
     "gencc": {
         "resource": "gencc",
-        "version": "2024",
+        "version": "2025-11-13",
         "description": "GenCC (Gene Curation Coalition) gene-disease validity classifications. Curated submissions from ClinGen, DECIPHER, Genomics England PanelApp, and other panels.",
         "author": "GenCC",
         "publication_date": "2025-11-13",
@@ -390,7 +390,7 @@ datasets = {
     },
     "monarch": {
         "resource": "monarch",
-        "version": "2024",
+        "version": "2025-12-07",
         "description": "Monarch Initiative causal gene-to-disease associations. Integrated Mendelian disease-gene relationships from OMIM, Orphanet, and other sources.",
         "author": "Monarch Initiative",
         "publication_date": "2025-12-07",
