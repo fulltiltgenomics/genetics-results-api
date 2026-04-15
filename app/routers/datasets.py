@@ -61,6 +61,11 @@ async def list_datasets(
         description="Optional: filter to datasets for a specific resource",
         example="finngen",
     ),
+    data_type: str | None = Query(
+        default=None,
+        description="Optional: filter to datasets of a specific data type (e.g. gwas, expression, gene_disease)",
+        example="gwas",
+    ),
     include_stats: bool = Query(
         default=True,
         description="Whether to include aggregate sample-size stats (may trigger metadata file loads)",
@@ -76,6 +81,8 @@ async def list_datasets(
     for dataset_id, entry in registry.items():
         if resource and entry.get("resource") != resource:
             continue
+        if data_type and entry.get("data_type") != data_type:
+            continue
 
         products = config_util.dataset_products(dataset_id)
 
@@ -87,6 +94,7 @@ async def list_datasets(
             "author": entry.get("author"),
             "publication_date": entry.get("publication_date"),
             "trait_type": entry.get("trait_type"),
+            "data_type": entry.get("data_type"),
             "products": products,
         }
         if entry.get("collection"):

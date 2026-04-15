@@ -10,11 +10,12 @@ Fields:
 - description: summary surfaced to API users and agents
 - author: study author / consortium
 - publication_date: YYYY-MM-DD
-- trait_type: "binary" | "quantitative" | "mixed"
-- data_type: "gwas" | "pqtl" | "eqtl" | "sqtl" | "caqtl" | "mixed" — lowercase,
-  case-sensitive. Matches the `data_type` path segment of the
-  `/summary_stats/{resource}/{data_type}` endpoint. Use "mixed" for
-  collections that span multiple molecular QTL types (e.g. eQTL Catalogue).
+- data_type: "gwas" | "pqtl" | "eqtl" | "sqtl" | "caqtl" | "metaboqtl" | "mixed" |
+  "exome" | "gene_based" | "expression" | "chromatin_peaks" | "gene_disease" —
+  lowercase, case-sensitive. Use "mixed" for collections that span multiple
+  molecular QTL types (e.g. eQTL Catalogue).
+- trait_type: "binary" | "quantitative" | "mixed" | None — None for non-association
+  data types (expression, chromatin_peaks, gene_disease)
 - metadata_file: optional GCS path to per-phenotype metadata (None if no metadata)
 - metadata_harmonizer: harmonizer type from app.services.metadata_harmonizer, or None
 - collection: true if this dataset is a collection of sub-studies (e.g. eQTL Catalogue)
@@ -307,6 +308,94 @@ datasets = {
         "publication_date": "2021-09-05",
         "trait_type": "mixed",
         "data_type": "gwas",
+        "metadata_file": None,
+        "metadata_harmonizer": None,
+    },
+    # exome / gene-based results
+    "genebass_exome": {
+        "resource": "genebass",
+        "version": "NA",
+        "description": (
+            "GeneBass exome sequencing variant-level results. Rare variant association testing "
+            "from exome sequencing of 394,841 UK Biobank participants. Results include "
+            "per-variant burden test statistics across phenotypes and functional annotations."
+        ),
+        "author": "Genebass",
+        "publication_date": "2022-09-14",
+        "trait_type": "mixed",
+        "data_type": "exome",
+        "metadata_file": "gs://daly-genetics-results/mapping_files/genebass_pheno_results.txt.bgz",
+        "metadata_harmonizer": "genebass",
+    },
+    "genebass_gene_based": {
+        "resource": "genebass",
+        "version": "NA",
+        "description": (
+            "GeneBass gene-level burden test results. Aggregated gene-level rare variant "
+            "association results from whole-exome sequencing of 394,841 UK Biobank participants."
+        ),
+        "author": "Genebass",
+        "publication_date": "2022-09-14",
+        "trait_type": "mixed",
+        "data_type": "gene_based",
+        "metadata_file": "gs://daly-genetics-results/mapping_files/genebass_pheno_results.txt.bgz",
+        "metadata_harmonizer": "genebass",
+    },
+    # expression
+    "gtex_expression": {
+        "resource": "gtex",
+        "version": "v10",
+        "description": "GTEx v10 median TPM gene expression across 54 human tissues from 948 post-mortem donors.",
+        "author": "GTEx Consortium",
+        "publication_date": "2024-11-04",
+        "trait_type": None,
+        "data_type": "expression",
+        "metadata_file": None,
+        "metadata_harmonizer": None,
+    },
+    "hpa_expression": {
+        "resource": "hpa",
+        "version": "v24.1",
+        "description": "Human Protein Atlas v24.1 immunohistochemistry-based protein expression across human tissues and cell types.",
+        "author": "Human Protein Atlas",
+        "publication_date": "2024-11-18",
+        "trait_type": None,
+        "data_type": "expression",
+        "metadata_file": None,
+        "metadata_harmonizer": None,
+    },
+    # chromatin peaks
+    "finngen_chromatin_peaks": {
+        "resource": "finngen",
+        "version": "batch1-5",
+        "description": "FinnGen single-cell ATAC-seq peak-to-gene associations. Links chromatin accessibility peaks to target genes across immune cell types.",
+        "author": "FinnGen Consortium",
+        "publication_date": "2025-12-15",
+        "trait_type": None,
+        "data_type": "chromatin_peaks",
+        "metadata_file": None,
+        "metadata_harmonizer": None,
+    },
+    # gene-disease
+    "gencc": {
+        "resource": "gencc",
+        "version": "2024",
+        "description": "GenCC (Gene Curation Coalition) gene-disease validity classifications. Curated submissions from ClinGen, DECIPHER, Genomics England PanelApp, and other panels.",
+        "author": "GenCC",
+        "publication_date": "2025-11-13",
+        "trait_type": None,
+        "data_type": "gene_disease",
+        "metadata_file": None,
+        "metadata_harmonizer": None,
+    },
+    "monarch": {
+        "resource": "monarch",
+        "version": "2024",
+        "description": "Monarch Initiative causal gene-to-disease associations. Integrated Mendelian disease-gene relationships from OMIM, Orphanet, and other sources.",
+        "author": "Monarch Initiative",
+        "publication_date": "2025-12-07",
+        "trait_type": None,
+        "data_type": "gene_disease",
         "metadata_file": None,
         "metadata_harmonizer": None,
     },

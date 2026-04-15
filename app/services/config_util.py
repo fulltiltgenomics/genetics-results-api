@@ -16,6 +16,9 @@ from app.config.gene_based_results import (
 from app.config.datasets import datasets as _dataset_registry
 from app.config.coloc import coloc as _coloc_configs
 from app.config.summary_stats import data_files as _sumstats_data_files
+from app.config.expression import expression_data as _expression_data
+from app.config.chromatin_peaks import chromatin_peaks_data as _chromatin_peaks_data
+from app.config.gene_disease import gene_disease as _gene_disease_config
 
 # build coloc partner index from explicit pairs
 _coloc_partners: dict[str, set[str]] = {}
@@ -27,6 +30,13 @@ for _c in _coloc_configs:
             raise ValueError(f"coloc pair references unknown dataset_id {_ds_b!r} in {_c['name']!r}")
         _coloc_partners.setdefault(_ds_a, set()).add(_ds_b)
         _coloc_partners.setdefault(_ds_b, set()).add(_ds_a)
+
+# build dataset_id lookups for exome / gene_based / expression / chromatin_peaks / gene_disease
+_exome_dataset_ids = {df["dataset_id"] for df in exome_data_files if "dataset_id" in df}
+_gene_based_dataset_ids = {df["dataset_id"] for df in gene_based_data_files if "dataset_id" in df}
+_expression_dataset_ids = {f"{d['resource']}_expression" for d in _expression_data}
+_chromatin_peaks_dataset_ids = {f"{d['resource']}_chromatin_peaks" for d in _chromatin_peaks_data}
+_gene_disease_dataset_ids = {k for k in _gene_disease_config if k != "output_columns"}
 
 # merge configurations
 data_files = cs_data_files + exome_data_files + gene_based_data_files
@@ -103,5 +113,20 @@ def dataset_products(dataset_id: str) -> dict:
     partners = _coloc_partners.get(dataset_id)
     if partners:
         products["colocalization"] = {"partners": sorted(partners)}
+
+    if dataset_id in _exome_dataset_ids:
+        products["exome_results"] = True
+
+    if dataset_id in _gene_based_dataset_ids:
+        products["gene_based_results"] = True
+
+    if dataset_id in _expression_dataset_ids:
+        products["expression"] = True
+
+    if dataset_id in _chromatin_peaks_dataset_ids:
+        products["chromatin_peaks"] = True
+
+    if dataset_id in _gene_disease_dataset_ids:
+        products["gene_disease"] = True
 
     return products

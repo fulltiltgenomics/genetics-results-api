@@ -3,6 +3,7 @@
 gene_based_data_files = [
     {
         "id": "genebass_gene_based",
+        "dataset_id": "genebass_gene_based",
         "resource": "genebass",
         "data_source": "gcloud",
         "gencode_version": 35,

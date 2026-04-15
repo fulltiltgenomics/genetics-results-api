@@ -6,12 +6,17 @@ and compute summary stats (phenotype count, sample-size median, case/control
 ranges). Results are cached in-memory for the lifetime of the process.
 """
 
+import csv
+import json
 import logging
 import statistics
 from typing import Any
 
-from app.config.datasets import datasets as _registry
+import fsspec
+
+from app.config.datasets import datasets as _registry, build_harmonizer_config
 from app.services.data_access import DataAccess
+from app.services.metadata_harmonizer import MetadataHarmonizer
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +60,40 @@ def _compute_for_rows(rows: list[dict], collection: bool) -> dict[str, Any]:
     return stats
 
 
+def _load_and_harmonize(dataset_id: str, entry: dict) -> list[dict] | None:
+    """Load a dataset's own metadata_file and harmonize it."""
+    config = build_harmonizer_config(dataset_id)
+    if not config:
+        return None
+
+    metadata_file = entry["metadata_file"]
+    compression = (
+        "gzip"
+        if metadata_file.endswith(".gz") or metadata_file.endswith(".bgz")
+        else None
+    )
+
+    try:
+        with fsspec.open(metadata_file, "rt", compression=compression) as f:
+            if metadata_file.endswith(".json") or metadata_file.endswith(".json.gz"):
+                meta = json.load(f)
+                raw = meta if isinstance(meta, list) else list(meta.values()) if isinstance(meta, dict) else []
+            else:
+                reader = csv.DictReader(f, delimiter="\t")
+                raw = list(reader)
+    except Exception as e:
+        logger.warning(f"Could not read metadata file for {dataset_id}: {e}")
+        return None
+
+    if not raw:
+        return None
+
+    harmonizer = MetadataHarmonizer()
+    resource = entry.get("resource", dataset_id)
+    harmonized = harmonizer.harmonize_metadata(resource, raw, config)
+    return [h.to_dict() for h in harmonized]
+
+
 def get_dataset_stats(
     dataset_id: str, data_access: DataAccess
 ) -> dict[str, Any] | None:
@@ -70,18 +109,7 @@ def get_dataset_stats(
         _misses.add(dataset_id)
         return None
 
-    resource = entry.get("resource", dataset_id)
-    try:
-        rows = data_access.get_harmonized_metadata(resource)
-    except Exception as e:
-        logger.warning(f"Could not load metadata for {dataset_id}: {e}")
-        _misses.add(dataset_id)
-        return None
-
-    # for a resource with multiple datasets sharing the same metadata file
-    # (e.g. finngen + kanta + drugs), get_harmonized_metadata already merges
-    # them. That's fine for our aggregate — the rows reflect the combined
-    # set of phenotypes exposed under this resource.
+    rows = _load_and_harmonize(dataset_id, entry)
     if not rows:
         _misses.add(dataset_id)
         return None
