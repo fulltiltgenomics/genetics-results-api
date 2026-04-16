@@ -97,6 +97,23 @@ async def list_datasets(
             "data_type": entry.get("data_type"),
             "products": products,
         }
+        # derive qtl_types from data_type when not explicitly set
+        qtl_type_map = {
+            "eqtl": ["eQTL"],
+            "pqtl": ["pQTL"],
+            "caqtl": ["caQTL"],
+            "sqtl": ["sQTL"],
+            "metaboqtl": ["metaboQTL"],
+        }
+        qtl_types = entry.get("qtl_types") or qtl_type_map.get(entry.get("data_type", ""))
+        if qtl_types:
+            item["qtl_types"] = qtl_types
+        if entry.get("n_samples") is not None:
+            item["n_samples"] = entry["n_samples"]
+        if entry.get("n_phenotypes") is not None:
+            item["n_phenotypes"] = entry["n_phenotypes"]
+        if entry.get("pseudo_credible_sets"):
+            item["pseudo_credible_sets"] = True
         if entry.get("collection"):
             item["collection"] = True
             item["subdataset_id_field"] = entry.get("subdataset_id_field")

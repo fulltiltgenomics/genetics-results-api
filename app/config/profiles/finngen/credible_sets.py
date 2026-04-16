@@ -153,7 +153,7 @@ data_files = [
     },
     {
         "id": "ukbb_pqtl",
-        "resource": "ukbb_pqtl",
+        "resource": "ukbb",
         "data_source": "gcloud",
         "example_pheno_or_study": "IL5RA",
         "gencode_version": 49,
