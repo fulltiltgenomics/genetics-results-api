@@ -332,7 +332,7 @@ datasets = {
         "trait_type": "mixed",
         "data_type": "exome",
         "n_samples": 394841,
-        "metadata_file": "gs://daly-genetics-results/mapping_files/genebass_pheno_results.txt.bgz",
+        "metadata_file": "gs://finngen-commons/results_api_data/mapping_files/genebass_pheno_results.txt.bgz",
         "metadata_harmonizer": "genebass",
     },
     "genebass_gene_based": {
@@ -347,7 +347,7 @@ datasets = {
         "trait_type": "mixed",
         "data_type": "gene_based",
         "n_samples": 394841,
-        "metadata_file": "gs://daly-genetics-results/mapping_files/genebass_pheno_results.txt.bgz",
+        "metadata_file": "gs://finngen-commons/results_api_data/mapping_files/genebass_pheno_results.txt.bgz",
         "metadata_harmonizer": "genebass",
     },
     # expression
