@@ -13,6 +13,51 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _run_tabix(data_file: dict, gene_coords: list[dict]) -> bytes:
+    """Run tabix for a single data file and return the raw output."""
+    file_path = data_file["gene_based"]["file"]
+    regions = "\n".join(
+        f"{c['chrom']}\t{c['gene_start']}\t{c['gene_end']}" for c in gene_coords
+    )
+    process = await asyncio.create_subprocess_exec(
+        "tabix",
+        "-h",
+        "-R",
+        "/dev/stdin",
+        file_path,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd="/tmp/tbi_cache",
+    )
+    stdout, stderr = await process.communicate(regions.encode())
+    if process.returncode != 0:
+        raise RuntimeError(
+            f"Tabix failed for {data_file['id']} with return code {process.returncode}: {stderr.decode()}"
+        )
+    return stdout
+
+
+async def _merge_results(
+    data_files: list[dict], results: list[bytes]
+) -> AsyncGenerator[bytes, None]:
+    """Merge tabix results from multiple data files, emitting header once."""
+    header_emitted = False
+    for data_file, result in zip(data_files, results):
+        if not result:
+            continue
+        lines = result.split(b"\n")
+        for line in lines:
+            if not line:
+                continue
+            if line.startswith(b"#"):
+                if not header_emitted:
+                    yield line[1:] + b"\n"
+                    header_emitted = True
+                continue
+            yield line + b"\n"
+
+
 @router.get(
     "/gene_based/{gene}",
     include_in_schema=False,
@@ -33,75 +78,57 @@ async def gene_based(
 ):
     """
     Get gene-based burden results for a specific gene or comma-separated list of genes.
+    Queries all configured gene-based data sources in parallel and merges results.
     """
-    data_file = gene_based_data_files[0]
-    gencode_version = data_file["gencode_version"]
-    file_path = data_file["gene_based"]["file"]
-
     genes = [g.strip() for g in gene.split(",") if g.strip()]
     if not genes:
         raise HTTPException(status_code=422, detail="No valid gene names provided")
 
-    all_gene_coords = []
+    # resolve gene coordinates across all gencode versions
+    coords_by_version: dict[int, list[dict]] = {}
     for g in genes:
         try:
             coords = gene_name_and_position_mapping.get_coordinates_by_gene_name(g)
-            if gencode_version not in coords or not coords[gencode_version]:
-                raise GeneNotFoundException(
-                    f"Gene {g} not found for gencode version {gencode_version}"
-                )
-            all_gene_coords.extend(coords[gencode_version])
-            logger.debug(
-                f"Gene based results for gene {g} (gencode v{gencode_version}): {coords[gencode_version]}"
-            )
+            for version, version_coords in coords.items():
+                if version_coords:
+                    if version not in coords_by_version:
+                        coords_by_version[version] = []
+                    coords_by_version[version].extend(version_coords)
+                    logger.debug(
+                        f"Gene based results for gene {g} (gencode v{version}): {version_coords}"
+                    )
         except GeneNotFoundException as e:
             raise HTTPException(status_code=404, detail=str(e))
 
-    process = await asyncio.create_subprocess_exec(
-        "tabix",
-        "-h",
-        "-R",
-        "/dev/stdin",
-        file_path,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd="/tmp/tbi_cache",
+    # build tabix tasks for each data file that has matching coordinates
+    tasks = []
+    task_data_files = []
+    for data_file in gene_based_data_files:
+        gencode_version = data_file["gencode_version"]
+        gene_coords = coords_by_version.get(gencode_version, [])
+        if not gene_coords:
+            continue
+        tasks.append(_run_tabix(data_file, gene_coords))
+        task_data_files.append(data_file)
+
+    if not tasks:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No gene coordinates found for the given gene(s) in any configured gencode version",
+        )
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # check for errors - fail the request if any tabix query failed
+    for data_file, result in zip(task_data_files, results):
+        if isinstance(result, BaseException):
+            logger.error(f"Tabix query failed for {data_file['id']}: {result}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error querying gene-based data from {data_file['id']}",
+            )
+
+    return StreamingResponse(
+        _merge_results(task_data_files, results),
+        media_type="application/octet-stream",
     )
-    # write regions for all matching gene coordinates
-    regions = "\n".join(
-        f"{c['chrom']}\t{c['gene_start']}\t{c['gene_end']}" for c in all_gene_coords
-    )
-    process.stdin.write(regions.encode())
-    process.stdin.close()
-
-    async def tabix_iterator() -> AsyncGenerator[bytes, None]:
-        first_line_processed = False
-        try:
-            while True:
-                chunk = await process.stdout.read(1024 * 8)
-                if not chunk:
-                    break
-
-                if not first_line_processed:
-                    # remove the # character from the beginning of the first line
-                    if chunk.startswith(b"#"):
-                        chunk = chunk[1:]
-                    first_line_processed = True
-
-                if chunk:
-                    yield chunk
-
-            await process.wait()
-            if process.returncode != 0:
-                stderr = await process.stderr.read()
-                raise RuntimeError(
-                    f"Tabix failed with return code {process.returncode}: {stderr.decode()}"
-                )
-
-        finally:
-            if process.returncode is None:
-                process.terminate()
-                await process.wait()
-
-    return StreamingResponse(tabix_iterator(), media_type="application/octet-stream")

@@ -18,4 +18,20 @@ gene_based_data_files = [
             "version_label": "N_394841",
         },
     },
+    {
+        "id": "schema_gene_based",
+        "dataset_id": "schema_gene_based",
+        "resource": "schema",
+        "data_source": "gcloud",
+        "gencode_version": 19,
+        "gene_based": {
+            "file": "gs://finngen-commons/results_api_data/exome_results/schema/SCHEMA_gene_results.munged.tsv.gz",
+        },
+        "metadata": {
+            "type": "schema",
+            "author": "SCHEMA Consortium",
+            "publication_date": "NA",
+            "version_label": "N_121570",
+        },
+    },
 ]
