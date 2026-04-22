@@ -31,7 +31,7 @@ gene_based_data_files = [
             "type": "schema",
             "author": "SCHEMA Consortium",
             "publication_date": "NA",
-            "version_label": "N_121570",
+            "version_label": "N_121570_EUR_ASN",
         },
     },
 ]
