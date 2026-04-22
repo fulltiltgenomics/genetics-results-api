@@ -373,13 +373,13 @@ datasets = {
         "version": "v1",
         "description": (
             "SCHEMA consortium gene-level burden test results. Rare variant association "
-            "testing for schizophrenia from exome sequencing of 24,248 cases and 97,322 controls."
+            "testing for schizophrenia from exome sequencing of 87,959 cases and 150,587 controls."
         ),
         "author": "SCHEMA Consortium",
         "publication_date": "NA",
         "trait_type": "binary",
         "data_type": "gene_based",
-        "n_samples": 121570,
+        "n_samples": 238546,
         "metadata_file": None,
         "metadata_harmonizer": None,
     },
