@@ -443,4 +443,30 @@ datasets = {
         "metadata_file": None,
         "metadata_harmonizer": None,
     },
+    # external summary statistics — individual study files
+    "pgc_scz": {
+        "resource": "pgc",
+        "version": "wave3",
+        "description": (
+            "PGC schizophrenia GWAS wave 3 meta-analysis. "
+            "Genome-wide association study of schizophrenia from the Psychiatric "
+            "Genomics Consortium including up to 161,405 European and Asian ancestry participants "
+            "(67,390 cases and 94,015 controls)."
+        ),
+        "author": "Psychiatric Genomics Consortium",
+        "publication_date": "NA",
+        "trait_type": "binary",
+        "data_type": "gwas",
+        "metadata_file": None,
+        "metadata_harmonizer": None,
+        "phenotypes": [
+            {
+                "phenotype_code": "SCZ",
+                "phenotype_string": "Schizophrenia",
+                "n_cases": 67390,
+                "n_controls": 94015,
+                "n_samples": 161405,
+            },
+        ],
+    },
 }

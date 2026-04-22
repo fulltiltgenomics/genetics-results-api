@@ -6,7 +6,8 @@ Each data file entry defines:
   of truth for `data_type`, `version`, and other dataset-level provenance.
 - resource: resource routing key (also present on the dataset entry — kept here
   because profile configs may colocate sumstats for a resource differently)
-- prefix/suffix: GCS path pattern where per-phenotype files live ({prefix}{phenotype}{suffix})
+- prefix/suffix: path pattern where per-phenotype files live ({prefix}{phenotype}{suffix})
+- OR file/phenotype: single file path + phenotype code for external sumstats
 - column_mapping: maps file column names to unified output column names.
   Only columns present in the mapping are included in output.
 

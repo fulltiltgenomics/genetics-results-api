@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import AsyncGenerator
 
 import aiohttp.client_exceptions
@@ -27,10 +28,12 @@ class SumstatsDataAccess(GCloudTabixBase):
             super().__init__()
             self._initialized = True
 
-    async def _check_file_exists(self, gs_path: str) -> bool:
-        """Check if a GCS file exists via HEAD request."""
+    async def _check_file_exists(self, path: str) -> bool:
+        """Check if a file exists (GCS or local)."""
+        if not path.startswith("gs://"):
+            return os.path.exists(path)
         headers = await self.storage._headers()
-        url = gs_path.replace("gs://", "https://storage.googleapis.com/")
+        url = path.replace("gs://", "https://storage.googleapis.com/")
         try:
             response = await self.session.get(url, headers=headers)
             return response.status != 404
@@ -40,6 +43,8 @@ class SumstatsDataAccess(GCloudTabixBase):
             raise
 
     def _get_file_path(self, data_file_config: dict, phenotype: str) -> str:
+        if "file" in data_file_config:
+            return data_file_config["file"]
         return f"{data_file_config['prefix']}{phenotype}{data_file_config['suffix']}"
 
     def get_file_header(self, data_file_config: dict, phenotype: str) -> list[bytes]:
@@ -102,7 +107,14 @@ class SumstatsDataAccess(GCloudTabixBase):
             version_bytes = df_config["version"].encode()
             column_mapping = df_config["column_mapping"]
 
-            for phenotype in phenotypes:
+            # single-file configs only serve their configured phenotype
+            if "file" in df_config:
+                configured_phenotype = df_config["phenotype"]
+                effective_phenotypes = [configured_phenotype] if configured_phenotype in phenotypes else []
+            else:
+                effective_phenotypes = phenotypes
+
+            for phenotype in effective_phenotypes:
                 gs_path = self._get_file_path(df_config, phenotype)
 
                 if not await self._check_file_exists(gs_path):
