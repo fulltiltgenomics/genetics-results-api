@@ -2,6 +2,7 @@ from abc import abstractmethod
 import json
 
 import fsspec
+from app.config.datasets import build_harmonizer_config
 from app.config.credible_sets import (
     data_file_by_id as cs_data_file_by_id,
     variant_columns as cs_variant_columns,
@@ -185,11 +186,12 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 continue
             df = data_file_by_id[data_file_id]
 
-            # check if metadata section exists and has metadata_file
-            metadata_config = df.get("metadata", {})
-            metadata_file = metadata_config.get("metadata_file")
-            if not metadata_file:
+            # look up metadata_file from the dataset registry
+            dataset_id = df["dataset_id"]
+            harm_config = build_harmonizer_config(dataset_id)
+            if not harm_config:
                 continue
+            metadata_file = harm_config["metadata"]["metadata_file"]
 
             compression = (
                 "gzip"
@@ -230,11 +232,12 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 continue
             df_config = data_file_by_id[data_file_id]
 
-            # check if metadata section exists and has metadata_file
-            metadata_config = df_config.get("metadata", {})
-            metadata_file = metadata_config.get("metadata_file")
-            if not metadata_file:
+            # look up metadata from the dataset registry
+            dataset_id = df_config["dataset_id"]
+            harm_config = build_harmonizer_config(dataset_id)
+            if not harm_config:
                 continue
+            metadata_file = harm_config["metadata"]["metadata_file"]
 
             # skip if already processed this metadata file
             if metadata_file in seen_metadata_files:
@@ -262,10 +265,10 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                         s = line.strip().split("\t")
                         raw_metadata.append(dict(zip(header, s)))
 
-            # harmonize with config
+            # harmonize with config from dataset registry
             if raw_metadata:
                 harmonized = harmonizer.harmonize_metadata(
-                    resource, raw_metadata, df_config
+                    resource, raw_metadata, harm_config
                 )
                 all_harmonized.extend(harmonized)
 

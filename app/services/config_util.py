@@ -13,7 +13,7 @@ from app.config.gene_based_results import (
     gene_based_data_file_by_id,
     resource_to_gene_based_data_file_ids,
 )
-from app.config.datasets import datasets as _dataset_registry
+from app.config.datasets import datasets as _dataset_registry, build_harmonizer_config
 from app.config.coloc import coloc as _coloc_configs
 from app.config.summary_stats import data_files as _sumstats_data_files
 from app.config.expression import expression_data as _expression_data
@@ -84,9 +84,8 @@ def get_resources_with_metadata() -> list[str]:
     """Get the resources with metadata from the config."""
     resources_with_meta = set()
     for df in data_files:
-        # check if metadata section exists and has metadata_file
-        metadata_config = df.get("metadata", {})
-        if metadata_config.get("metadata_file"):
+        dataset_id = df["dataset_id"]
+        if build_harmonizer_config(dataset_id):
             resource = df.get("resource", df["id"])
             resources_with_meta.add(resource)
     return sorted(list(resources_with_meta))
