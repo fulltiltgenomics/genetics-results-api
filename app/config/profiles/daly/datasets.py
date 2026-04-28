@@ -380,6 +380,8 @@ datasets = {
         "trait_type": "binary",
         "data_type": "gene_based",
         "n_samples": 238546,
+        "n_cases": 87959,
+        "n_controls": 150587,
         "metadata_file": None,
         "metadata_harmonizer": None,
     },
