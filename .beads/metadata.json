@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "genetics_results_api",
+  "project_id": "2fe49ea8-8f37-469e-8296-afbebfd9eebf"
+}
