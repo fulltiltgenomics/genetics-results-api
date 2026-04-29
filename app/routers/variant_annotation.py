@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from app.core.exceptions import GeneNotFoundException, NotFoundException, ParseException
 from app.core.responses import range_response
 from app.core.variant import Variant
-from app.dependencies import get_gene_name_mapping
+from app.dependencies import get_gene_name_mapping, get_variant_annotation_service
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 from app.services.variant_annotation_service import VariantAnnotationService
 import app.config.common as config_common
@@ -16,12 +16,6 @@ import app.config.common as config_common
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def _get_variant_annotation_service() -> VariantAnnotationService:
-    from app.core.service_container import container
-
-    return container.get("variant_annotation_service")
 
 
 def _build_header_schema(header: list[bytes]) -> dict[str, type]:
@@ -96,7 +90,7 @@ async def get_variant_annotation(
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),
-    service: VariantAnnotationService = Depends(_get_variant_annotation_service),
+    service: VariantAnnotationService = Depends(get_variant_annotation_service),
     gene_mapping: GeneNameAndPositionMapping = Depends(get_gene_name_mapping),
 ) -> Response:
     start_time = time.time()
@@ -159,7 +153,7 @@ async def post_variant_annotation(
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),
-    service: VariantAnnotationService = Depends(_get_variant_annotation_service),
+    service: VariantAnnotationService = Depends(get_variant_annotation_service),
 ) -> Response:
     start_time = time.time()
 

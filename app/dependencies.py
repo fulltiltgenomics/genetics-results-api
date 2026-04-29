@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from app.services.credible_set_stats_service import CredibleSetStatsService
     from app.services.rsid_db import RsidDB
     from app.services.sumstats_data_access import SumstatsDataAccess
+    from app.services.variant_annotation_service import VariantAnnotationService
 
 logger = logging.getLogger(__name__)
 
@@ -112,3 +113,8 @@ def get_rsid_db() -> "RsidDB":
 def get_sumstats_data_access() -> "SumstatsDataAccess":
     """Get SumstatsDataAccess service instance."""
     return container.get("sumstats_data_access")
+
+
+def get_variant_annotation_service() -> "VariantAnnotationService":
+    """Get VariantAnnotationService instance."""
+    return container.get("variant_annotation_service")
