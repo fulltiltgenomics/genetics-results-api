@@ -1,15 +1,13 @@
 import logging
-import subprocess
 from typing import Literal
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Response
-from fastapi.responses import StreamingResponse, PlainTextResponse
-from app.dependencies import get_gene_name_mapping, ensure_gcs_token
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
+from fastapi.responses import PlainTextResponse
+from app.dependencies import get_gene_name_mapping
 from app.core.variant import Variant
 from app.core.exceptions import (
     ParseException,
 )
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
-import app.config.common as config_common
 
 logger = logging.getLogger(__name__)
 
@@ -408,131 +406,3 @@ async def nearest_genes_post(
 #     )
 
 
-@router.post(
-    "/variant_annotation_range/{chr}/{start}/{end}",
-    include_in_schema=False,
-    responses={
-        200: {
-            "description": "Successful response",
-            "content": {"application/octet-stream": {"schema": {"type": "string"}}},
-        },
-        401: {"description": "Not authenticated"},
-        422: {"description": "Invalid start or end parameter"},
-        500: {"description": "Internal server error"},
-    },
-)
-async def variant_annotation_range(
-    chr: str,
-    start: str,
-    end: str,
-    variants: list[str] = Body(...),
-    _=Depends(ensure_gcs_token),
-) -> StreamingResponse:
-    try:
-        start = int(start)
-        end = int(end)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail="invalid start or end")
-    variant_dict = {v.encode("utf-8"): True for v in variants}
-
-    def iter_stdout():
-        process = subprocess.Popen(
-            [
-                "tabix",
-                "-h",
-                config_common.gnomad["file"],
-                f"{chr}:{start}-{end}",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd="/tmp/tbi_cache",
-        )
-        try:
-            n = 0
-            header = process.stdout.readline()
-            yield header
-            for line in process.stdout:
-                n += 1
-                fields = line.split(b"\t")
-                # only return specified variants - we don't to return all variants in the region because there can be quite many of them
-                if (
-                    b":".join([fields[0], fields[1], fields[2], fields[3]])
-                    in variant_dict
-                ):
-                    yield line
-            process.stdout.close()
-            process.wait()
-            if process.returncode != 0:
-                error_message = process.stderr.read().decode("utf-8")
-                logger.error(error_message)
-                yield f"!error: failed to read"
-        except Exception as e:
-            logger.exception(e)
-            yield f"!error: failed to read"
-
-    return StreamingResponse(iter_stdout(), media_type="application/octet-stream")
-
-
-@router.post(
-    "/variant_annotation",
-    include_in_schema=False,
-    responses={
-        200: {
-            "description": "Successful response",
-            "content": {"application/octet-stream": {"schema": {"type": "string"}}},
-        },
-        401: {"description": "Not authenticated"},
-        500: {"description": "Internal server error"},
-    },
-)
-async def variant_annotation(
-    variants: list[str] = Body(...),
-    _=Depends(ensure_gcs_token),
-) -> StreamingResponse:
-    variant_dict = {v.encode("utf-8"): True for v in variants}
-
-    def iter_stdout():
-        regions = "".join(
-            f"{v.split(':')[0]}\t{v.split(':')[1]}\t{v.split(':')[1]}\n"
-            for v in variants
-        )
-        process = subprocess.Popen(
-            [
-                "tabix",
-                "-h",
-                "-R",
-                "/dev/stdin",
-                config_common.gnomad["file"],
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd="/tmp/tbi_cache",
-        )
-        # send regions to tabix's stdin
-        process.stdin.write(regions.encode())
-        process.stdin.close()
-        try:
-            n = 0
-            header = process.stdout.readline()
-            yield header
-            for line in process.stdout:
-                n += 1
-                fields = line.split(b"\t")
-                # only return specified variants because multiallelics
-                if (
-                    b":".join([fields[0], fields[1], fields[2], fields[3]])
-                    in variant_dict
-                ):
-                    yield line
-            process.stdout.close()
-            process.wait()
-            if process.returncode != 0:
-                error_message = process.stderr.read().decode("utf-8")
-                logger.error(error_message)
-                yield f"!error: failed to read"
-        except Exception as e:
-            logger.exception(e)
-            yield f"!error: failed to read"
-
-    return StreamingResponse(iter_stdout(), media_type="application/octet-stream")
