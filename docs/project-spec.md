@@ -64,6 +64,7 @@ run_server.py       # server entry point
 | datasets | Dataset configuration |
 | rsid | rsID to variant mapping |
 | summary-stats | GWAS summary statistics |
+| variant-annotation | Variant annotation data (FinnGen, etc.) |
 
 ### Data Access Pattern
 
