@@ -59,6 +59,12 @@ variant_set_files = {
     },
 }
 
+variant_annotation_sources = {
+    "finngen": {
+        "file": "gs://finngen-commons/results_api_data/variant_annotations/R13_annotated_variants_v0.small.gz",
+    },
+}
+
 phenotype_markdown_template = "gs://finngen-commons/results_api_data/phenotype_reports/{resource}/{phenocode}_gene_summary.md"
 
 cors_origins = [

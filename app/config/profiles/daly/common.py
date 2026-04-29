@@ -59,6 +59,12 @@ variant_set_files = {
     },
 }
 
+variant_annotation_sources = {
+    "finngen": {
+        "file": "gs://daly-genetics-results/variant_annotations/R13_annotated_variants_v0.small.gz",
+    },
+}
+
 # phenotype_reports directory does not exist in this bucket yet
 phenotype_markdown_template = ""
 
