@@ -28,6 +28,8 @@ router = APIRouter()
                                 "name": {"type": "string"},
                                 "resource": {"type": "string", "description": "Phenotype results only"},
                                 "sample_size": {"type": "integer", "description": "Phenotype results only"},
+                                "n_cases": {"type": ["integer", "string"], "description": "Phenotype results only, int or 'NA'"},
+                                "n_controls": {"type": ["integer", "string"], "description": "Phenotype results only, int or 'NA'"},
                                 "symbol": {"type": "string", "description": "Gene results only"},
                                 "aliases": {"type": "array", "description": "Gene results only"},
                                 "ensembl_id": {"type": "string", "description": "Gene results only"},
@@ -58,6 +60,8 @@ router = APIRouter()
                             "name": "Hyperlipidaemia",
                             "resource": "finngen",
                             "sample_size": 156438,
+                            "n_cases": 56438,
+                            "n_controls": 100000,
                             "search_strings": ["i9_hyperlipid", "hyperlipidaemia"],
                             "match_type": "prefix",
                             "match_score": 95,
@@ -171,12 +175,13 @@ async def search_autocomplete(
                     )
                     rows.append(row)
             else:  # phenotypes
-                header = "type\tcode\tname\tresource\tsample_size\tmatch_type\tmatch_score\trank_score\tmatched_key"
+                header = "type\tcode\tname\tresource\tsample_size\tn_cases\tn_controls\tmatch_type\tmatch_score\trank_score\tmatched_key"
                 rows = []
                 for r in results:
                     row = (
                         f"{r['type']}\t{r.get('code', '')}\t{r.get('name', '')}\t"
                         f"{r.get('resource', '')}\t{r.get('sample_size', 0)}\t"
+                        f"{r.get('n_cases', 'NA')}\t{r.get('n_controls', 'NA')}\t"
                         f"{r['match_type']}\t{r['match_score']}\t{r['rank_score']}\t{r['matched_key']}"
                     )
                     rows.append(row)

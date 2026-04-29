@@ -57,12 +57,17 @@ class SearchIndex:
                         sample_size = n_samples
 
                     if code and name:
+                        n_cases = item_dict.get("n_cases", "NA")
+                        n_controls = item_dict.get("n_controls", "NA")
+
                         phenotype = {
                             "type": "phenotype",
                             "code": code,
                             "name": name,
                             "resource": resource,
                             "sample_size": sample_size,
+                            "n_cases": n_cases,
+                            "n_controls": n_controls,
                             # store normalized search strings
                             "search_strings": [
                                 code.lower(),
@@ -93,6 +98,8 @@ class SearchIndex:
                 code = item_dict.get("phenotype_code")
                 name = item_dict.get("phenotype_string")
                 n_samples = item_dict.get("n_samples", 0)
+                n_cases = item_dict.get("n_cases", "NA")
+                n_controls = item_dict.get("n_controls", "NA")
                 if code and name:
                     phenotype = {
                         "type": "phenotype",
@@ -100,6 +107,8 @@ class SearchIndex:
                         "name": name,
                         "resource": resource,
                         "sample_size": n_samples,
+                        "n_cases": n_cases,
+                        "n_controls": n_controls,
                         "search_strings": [code.lower(), name.lower()],
                     }
                     self.phenotypes.append(phenotype)

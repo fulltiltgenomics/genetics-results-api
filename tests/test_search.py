@@ -246,6 +246,8 @@ class TestSearchAutocomplete:
             assert "name" in pheno
             assert "resource" in pheno
             assert "sample_size" in pheno or pheno.get("sample_size") is not None
+            assert "n_cases" in pheno
+            assert "n_controls" in pheno
             assert "match_type" in pheno
             assert "match_score" in pheno
             assert "rank_score" in pheno
@@ -371,6 +373,8 @@ class TestSearchAutocomplete:
             assert "name" in header
             assert "resource" in header
             assert "sample_size" in header
+            assert "n_cases" in header
+            assert "n_controls" in header
 
     @pytest.mark.parametrize("invalid_limit", [0, -1, 101, 1000])
     def test_search_invalid_limit(self, server_url, invalid_limit):
