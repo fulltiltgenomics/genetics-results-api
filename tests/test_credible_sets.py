@@ -274,6 +274,85 @@ class TestCredibleSetsByVariant:
         assert response.status_code == 422
 
 
+class TestCredibleSetsByVariantPost:
+    """Test POST /api/v1/credible_sets_by_variant endpoint."""
+
+    @pytest.mark.parametrize("format", ["tsv", "json"])
+    def test_post_credible_sets_by_variant_formats(
+        self, server_url, test_variant, format
+    ):
+        """Test POST with a single variant returns same data as GET."""
+        post_response = requests.post(
+            f"{server_url}/api/v1/credible_sets_by_variant",
+            json={"variants": test_variant},
+            params={"format": format, "interval": 95},
+            timeout=30,
+        )
+        assert post_response.status_code == 200
+
+        if format == "tsv":
+            assert "text/tab-separated-values" in post_response.headers.get(
+                "content-type", ""
+            )
+            validation = validate_tsv_response(post_response.text)
+            assert validation["valid"], f"TSV validation failed: {validation['errors']}"
+        else:
+            assert "application/json" in post_response.headers.get("content-type", "")
+            data = post_response.json()
+            validation = validate_json_response(data)
+            assert validation["valid"], f"JSON validation failed: {validation['errors']}"
+
+    def test_post_credible_sets_by_variant_multiple(self, server_url, test_variant):
+        """Test POST with multiple variants."""
+        # use the same variant twice to ensure multi-variant path works
+        variants = f"{test_variant}\n{test_variant}"
+        response = requests.post(
+            f"{server_url}/api/v1/credible_sets_by_variant",
+            json={"variants": variants},
+            params={"format": "json", "interval": 95},
+            timeout=30,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+    def test_post_credible_sets_by_variant_with_resources(
+        self, server_url, test_variant, available_resources
+    ):
+        """Test POST with resources parameter."""
+        if not available_resources:
+            pytest.skip("No resources available")
+
+        resource = available_resources[0]
+        response = requests.post(
+            f"{server_url}/api/v1/credible_sets_by_variant",
+            json={"variants": test_variant},
+            params={"format": "json", "interval": 95, "resources": [resource]},
+            timeout=30,
+        )
+        assert response.status_code == 200
+
+    def test_post_credible_sets_by_variant_invalid(self, server_url):
+        """Test POST with invalid variant returns 422."""
+        response = requests.post(
+            f"{server_url}/api/v1/credible_sets_by_variant",
+            json={"variants": "invalid-variant"},
+            params={"format": "json", "interval": 95},
+            timeout=10,
+        )
+        assert response.status_code == 422
+
+    def test_post_credible_sets_by_variant_empty(self, server_url):
+        """Test POST with empty variants string returns 422."""
+        response = requests.post(
+            f"{server_url}/api/v1/credible_sets_by_variant",
+            json={"variants": ""},
+            params={"format": "json", "interval": 95},
+            timeout=10,
+        )
+        assert response.status_code == 422
+
+
 class TestCredibleSetsByGene:
     """Test /api/v1/credible_sets_by_gene/{gene} endpoint."""
 

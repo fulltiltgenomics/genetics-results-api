@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
@@ -6,11 +7,13 @@ from app.dependencies import auth_required, is_public
 from app.middleware import setup_middleware
 from app.services import config_util
 from app.core.logging_config import setup_logging
+from app.core.service_container import container
 from app.routers import (
     auth,
     metadata,
     credible_sets,
     colocalization,
+    datasets,
     expression,
     genes,
     gene_disease,
@@ -21,11 +24,23 @@ from app.routers import (
     phenotype,
     resources,
     rsid,
+    summary_stats,
 )
 
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    yield
+    # close aiohttp sessions in all GCloudTabixBase-derived services
+    for name, instance in list(container._instances.items()):
+        if hasattr(instance, "cleanup"):
+            logger.info(f"Cleaning up service: {name}")
+            await instance.cleanup()
+
 
 app = FastAPI(
     title="Genetics Results API",
@@ -37,6 +52,7 @@ app = FastAPI(
     openapi_url="/api/v1/openapi.json",
     swagger_ui_parameters={"defaultModelsExpandDepth": -1},  # hide schemas by default
     dependencies=[Depends(auth_required)],
+    lifespan=lifespan,
 )
 
 setup_middleware(app)
@@ -54,7 +70,9 @@ app.include_router(chromatin_peaks.router, prefix="/api/v1", tags=["chromatin-pe
 app.include_router(exome_results.router, prefix="/api/v1", tags=["exome-results"])
 app.include_router(phenotype.router, prefix="/api/v1", tags=["phenotype"])
 app.include_router(resources.router, prefix="/api/v1", tags=["resources"])
+app.include_router(datasets.router, prefix="/api/v1", tags=["datasets"])
 app.include_router(rsid.router, prefix="/api/v1", tags=["rsid"])
+app.include_router(summary_stats.router, prefix="/api/v1", tags=["summary-stats"])
 
 
 def get_all_endpoints():
@@ -96,7 +114,12 @@ def get_all_endpoints():
             endpoints[tag_key] = {}
 
         path = route.path
-        endpoints[tag_key][path] = http_methods
+        if path in endpoints[tag_key]:
+            existing = set(endpoints[tag_key][path])
+            existing.update(http_methods)
+            endpoints[tag_key][path] = sorted(existing)
+        else:
+            endpoints[tag_key][path] = http_methods
 
     return endpoints
 

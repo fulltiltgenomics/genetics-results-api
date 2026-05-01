@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import threading
 import time
@@ -18,6 +19,11 @@ logger = logging.getLogger(__name__)
 # module-level GCS token management shared by all GCloudTabixBase instances
 _gcs_credentials = None
 _gcs_token_lock = threading.Lock()
+
+# module-level tbi cache cleanup tracking
+_tbi_cleanup_lock = threading.Lock()
+_tbi_last_cleanup = 0.0
+_TBI_CLEANUP_INTERVAL = 600  # only check every 10 minutes
 
 
 def ensure_gcs_token() -> None:
@@ -78,6 +84,73 @@ class GCloudTabixBase:
         if self.storage:
             await self.storage.close()
 
+    TBI_CACHE_ROOT = "/tmp/tbi_cache"
+    TBI_CACHE_MAX_BYTES = 10 * 1024 * 1024 * 1024  # 10GB
+
+    def _get_tbi_cache_dir(self, gs_path: str) -> str:
+        """Get a unique cache directory for a GCS file's .tbi index.
+
+        Uses a hash of the GCS directory path so files with the same basename
+        but different GCS paths don't collide.
+        """
+        dir_path = gs_path.rsplit("/", 1)[0]
+        dir_hash = hashlib.md5(dir_path.encode()).hexdigest()[:12]
+        cache_dir = os.path.join(self.TBI_CACHE_ROOT, dir_hash)
+        os.makedirs(cache_dir, exist_ok=True)
+        return cache_dir
+
+    @staticmethod
+    def _do_tbi_cleanup():
+        """Remove oldest .tbi files if cache exceeds size limit. Runs in a background thread."""
+        global _tbi_last_cleanup
+
+        now = time.time()
+        if not _tbi_cleanup_lock.acquire(blocking=False):
+            return
+        try:
+            if now - _tbi_last_cleanup < _TBI_CLEANUP_INTERVAL:
+                return
+
+            cache_root = GCloudTabixBase.TBI_CACHE_ROOT
+            max_bytes = GCloudTabixBase.TBI_CACHE_MAX_BYTES
+            tbi_files = []
+            for dirpath, _, filenames in os.walk(cache_root):
+                for f in filenames:
+                    if f.endswith(".tbi"):
+                        path = os.path.join(dirpath, f)
+                        try:
+                            stat = os.stat(path)
+                            tbi_files.append((path, stat.st_atime, stat.st_size))
+                        except OSError:
+                            continue
+
+            total_size = sum(size for _, _, size in tbi_files)
+            _tbi_last_cleanup = now
+
+            if total_size <= max_bytes:
+                return
+
+            tbi_files.sort(key=lambda x: x[1])
+            removed = 0
+            for path, _, size in tbi_files:
+                if total_size <= max_bytes:
+                    break
+                try:
+                    os.remove(path)
+                    total_size -= size
+                    removed += 1
+                except OSError:
+                    pass
+            if removed:
+                logger.info(f"TBI cache cleanup: removed {removed} files, {total_size // (1024*1024)}MB remaining")
+        finally:
+            _tbi_cleanup_lock.release()
+
+    def _maybe_cleanup_tbi_cache(self):
+        """Schedule a cache cleanup check in a background thread if due."""
+        if time.time() - _tbi_last_cleanup >= _TBI_CLEANUP_INTERVAL:
+            threading.Thread(target=self._do_tbi_cleanup, daemon=True).start()
+
     def _init_storage(self):
         """Initialize the storage client and session."""
         # short keepalive prevents stale connections after inactivity,
@@ -109,7 +182,7 @@ class GCloudTabixBase:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 check=True,
-                cwd="/tmp/tbi_cache",
+                cwd=self._get_tbi_cache_dir(gs_path),
             )
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode()
@@ -226,6 +299,7 @@ class GCloudTabixBase:
         start = [max(1, s) for s in start]
 
         ensure_gcs_token()
+        cache_dir = self._get_tbi_cache_dir(file_path)
         process = await asyncio.create_subprocess_exec(
             "tabix",
             "-R",
@@ -234,12 +308,14 @@ class GCloudTabixBase:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd="/tmp/tbi_cache",
+            cwd=cache_dir,
         )
         process.stdin.write(
             "\n".join(f"{c}\t{s}\t{e}" for c, s, e in zip(chr, start, end)).encode()
         )
         process.stdin.close()
+
+        maybe_cleanup = self._maybe_cleanup_tbi_cache
 
         async def tabix_iterator() -> AsyncGenerator[bytes, None]:
             try:
@@ -255,6 +331,8 @@ class GCloudTabixBase:
                     raise RuntimeError(
                         f"Tabix failed with return code {process.returncode}: {stderr.decode()}"
                     )
+
+                maybe_cleanup()
 
             finally:
                 if process.returncode is None:

@@ -1,5 +1,7 @@
 """Configuration for exome results data."""
 
+from app.config.profile import load_profile_module
+
 # header schema for exome results
 exome_header_schema = {
     "resource": str,  # added by API
@@ -32,29 +34,9 @@ variant_columns = {
     "dataset": b"dataset",
 }
 
-# exome data files configuration
-exome_data_files = [
-    {
-        "id": "genebass",
-        "resource": "genebass",
-        "data_source": "gcloud",
-        "example_pheno_or_study": "categorical_41210_both_sexes_S068_",
-        "gencode_version": 35,
-        "metadata": {
-            "metadata_file": "gs://finngen-commons/results_api_data/mapping_files/genebass_pheno_results.txt.bgz",
-            "type": "genebass",
-            "author": "GeneBass",
-            "publication_date": "2022-01-01",
-            "version_label": "500k",
-        },
-        "exome": {
-            "version": "v1",
-            "prefix": "gs://finngen-commons/results_api_data/exome_results/genebass/individual/",
-            "suffix": ".mlog10p4.tsv",
-            "all_exome_file": "gs://finngen-commons/results_api_data/exome_results/genebass/genebass_variant_results_mlog10p4.tsv.gz",
-        },
-    },
-]
+# exome data files loaded from profile
+_profile = load_profile_module("exome_results")
+exome_data_files = _profile.exome_data_files
 
 # build lookup dictionaries
 exome_data_file_by_id = {df["id"]: df for df in exome_data_files}

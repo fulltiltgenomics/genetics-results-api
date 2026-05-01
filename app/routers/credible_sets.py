@@ -2,6 +2,7 @@ import time
 import logging
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
+from pydantic import BaseModel
 from app.dependencies import (
     get_request_util,
     get_data_access,
@@ -37,7 +38,7 @@ router = APIRouter()
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "dataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\tmost_severe\tgene_most_severe\nFinnGen_R13\tGWAS\tT2D_WIDE\tT2D_WIDE\tNA\t1\t20402396\tT\tA\t8.19\t-3.946e-02\t6.797e-03\t0.06\tchr1:18906883-21906883_1\t12\t0.9919\tintron_variant\tLINC01141\n...",
+                    "example": "dataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\nFinnGen_R13\tGWAS\tT2D_WIDE\tT2D_WIDE\tNA\t1\t20402396\tT\tA\t8.19\t-3.946e-02\t6.797e-03\t0.06\tchr1:18906883-21906883_1\t12\t0.9919\t0.5241\tintron_variant\tLINC01141\n...",
                 },
                 "application/json": {
                     "schema": {
@@ -61,6 +62,7 @@ router = APIRouter()
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
                                 "cs_min_r2": {"type": "number"},
+                                "aaf": {"type": "number"},
                                 "most_severe": {"type": "string"},
                                 "gene_most_severe": {"type": "string"},
                             },
@@ -72,7 +74,7 @@ router = APIRouter()
                             "data_type": "GWAS",
                             "trait": "T2D_WIDE",
                             "trait_original": "T2D_WIDE",
-                            "cell_type": "null (actual null, not string 'null')",
+                            "cell_type": None,
                             "chr": 1,
                             "pos": 20402396,
                             "ref": "T",
@@ -84,6 +86,7 @@ router = APIRouter()
                             "cs_id": "chr1:18906883-21906883_1",
                             "cs_size": 12,
                             "cs_min_r2": 0.9919,
+                            "aaf": 0.5241,
                             "most_severe": "intron_variant",
                             "gene_most_severe": "LINC01141",
                         },
@@ -169,13 +172,34 @@ async def credible_sets_by_phenotype(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "dataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\tmost_severe\tgene_most_severe\nFinnGen_R13\tGWAS\tK11_IBD_STRICT\tK11_IBD_STRICT\tNA\t1\t7535440\tT\tA\t8.19\t-3.946e-02\t6.797e-03\t0.06\tchr1:6535440-9535440_1\t12\t0.9919\tintron_variant\tCAMTA1\n...",
+                    "example": "dataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\nFinnGen_R13\tGWAS\tK11_IBD_STRICT\tK11_IBD_STRICT\tNA\t1\t7972861\tA\tG\t11.13\t-1.052e-01\t1.536e-02\t0.0234\tchr1:6535440-9535440_1\t65\t0.7531\t0.2748\tintron_variant\tPARK7\n...",
                 },
                 "application/json": {
                     "schema": {
                         "type": "array",
                         "items": {
                             "type": "object",
+                            "properties": {
+                                "dataset": {"type": "string"},
+                                "data_type": {"type": "string"},
+                                "trait": {"type": "string"},
+                                "trait_original": {"type": "string"},
+                                "cell_type": {"type": ["string", "null"]},
+                                "chr": {"type": "integer"},
+                                "pos": {"type": "integer"},
+                                "ref": {"type": "string"},
+                                "alt": {"type": "string"},
+                                "mlog10p": {"type": "number"},
+                                "beta": {"type": "number"},
+                                "se": {"type": "number"},
+                                "pip": {"type": "number"},
+                                "cs_id": {"type": "string"},
+                                "cs_size": {"type": "integer"},
+                                "cs_min_r2": {"type": "number"},
+                                "aaf": {"type": "number"},
+                                "most_severe": {"type": "string"},
+                                "gene_most_severe": {"type": "string"},
+                            },
                         },
                     },
                     "example": [
@@ -183,7 +207,22 @@ async def credible_sets_by_phenotype(
                             "dataset": "FinnGen_R13",
                             "data_type": "GWAS",
                             "trait": "K11_IBD_STRICT",
+                            "trait_original": "K11_IBD_STRICT",
+                            "cell_type": None,
+                            "chr": 1,
+                            "pos": 7972861,
+                            "ref": "A",
+                            "alt": "G",
+                            "mlog10p": 11.1309,
+                            "beta": -0.1052,
+                            "se": 0.01536,
+                            "pip": 0.0234,
                             "cs_id": "chr1:6535440-9535440_1",
+                            "cs_size": 65,
+                            "cs_min_r2": 0.7531,
+                            "aaf": 0.2748,
+                            "most_severe": "intron_variant",
+                            "gene_most_severe": "PARK7",
                         },
                     ],
                 },
@@ -271,7 +310,7 @@ async def credible_sets_by_id(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\tmost_severe\tgene_most_severe\nQTD000608\teQTL\tISG15\tENSG00000187608|ge\tB_cell|naive\t1\t1000018\tG\tA\t7.3668\t-7.921e-01\t1.434e-01\t0.0914\tENSG00000187608_L1\t25\t0.7468\t5_prime_UTR_variant\tHES4\n...",
+                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\neqtl_catalogue\tR7\tQTD000608\teQTL\tISG15\tENSG00000187608|ge\tB_cell|naive\t1\t1000018\tG\tA\t7.3668\t-7.921e-01\t1.434e-01\t0.0914\tENSG00000187608_L1\t25\t0.7468\t0.3012\t5_prime_UTR_variant\tHES4\n...",
                 },
                 "application/json": {
                     "schema": {
@@ -297,6 +336,7 @@ async def credible_sets_by_id(
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
                                 "cs_min_r2": {"type": "number"},
+                                "aaf": {"type": "number"},
                                 "most_severe": {"type": "string"},
                                 "gene_most_severe": {"type": "string"},
                             },
@@ -322,6 +362,7 @@ async def credible_sets_by_id(
                             "cs_id": "ENSG00000187608_L1",
                             "cs_size": 25,
                             "cs_min_r2": 0.7468,
+                            "aaf": 0.3012,
                             "most_severe": "5_prime_UTR_variant",
                             "gene_most_severe": "HES4",
                         },
@@ -404,7 +445,7 @@ async def credible_sets_by_region(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\tmost_severe\tgene_most_severe\nQTD000608\teQTL\tISG15\tENSG00000187608|ge\tB_cell|naive\t1\t1000018\tG\tA\t7.3668\t-7.921e-01\t1.434e-01\t0.0914\tENSG00000187608_L1\t25\t0.7468\t5_prime_UTR_variant\tHES4\n...",
+                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\neqtl_catalogue\tR7\tQTD000608\teQTL\tISG15\tENSG00000187608|ge\tB_cell|naive\t1\t1000018\tG\tA\t7.3668\t-7.921e-01\t1.434e-01\t0.0914\tENSG00000187608_L1\t25\t0.7468\t0.3012\t5_prime_UTR_variant\tHES4\n...",
                 },
                 "application/json": {
                     "schema": {
@@ -430,6 +471,7 @@ async def credible_sets_by_region(
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
                                 "cs_min_r2": {"type": "number"},
+                                "aaf": {"type": "number"},
                                 "most_severe": {"type": "string"},
                                 "gene_most_severe": {"type": "string"},
                             },
@@ -455,6 +497,7 @@ async def credible_sets_by_region(
                             "cs_id": "ENSG00000187608_L1",
                             "cs_size": 25,
                             "cs_min_r2": 0.7468,
+                            "aaf": 0.3012,
                             "most_severe": "5_prime_UTR_variant",
                             "gene_most_severe": "HES4",
                         },
@@ -529,6 +572,95 @@ async def credible_sets_by_variant(
     )
 
 
+class VariantsRequest(BaseModel):
+    variants: str
+
+
+@router.post(
+    "/credible_sets_by_variant",
+    summary="Get credible sets across resources for multiple variants",
+    responses={
+        200: {
+            "description": "Successful response",
+            "content": {
+                "text/tab-separated-values": {
+                    "schema": {"type": "string"},
+                },
+                "application/json": {
+                    "schema": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
+                },
+            },
+        },
+        401: {"description": "Not authenticated"},
+        422: {"description": "Invalid variant, interval or format"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def credible_sets_by_variant_post(
+    request: Request,
+    body: VariantsRequest,
+    resources: list[str] | None = Query(
+        default=None,
+        description="Comma-separated list of resources to get data from (if not given, all available resources are used)",
+    ),
+    interval: int = Query(
+        default=95, description="Credible set threshold (95 or 99)", ge=95, le=99
+    ),
+    format: Literal["tsv", "json"] = Query(
+        default="tsv", description="Response format"
+    ),
+    request_util: RequestUtil = Depends(get_request_util),
+    data_access: DataAccess = Depends(get_data_access),
+) -> Response:
+    """
+    Get credible sets across resources for multiple variants.
+    Accepts a newline-separated list of variants in the request body.
+    """
+    start_time = time.time()
+    if interval not in (95, 99):
+        raise HTTPException(status_code=422, detail="Interval must be 95 or 99")
+    if interval == 99:
+        raise HTTPException(status_code=422, detail="Interval 99 is not supported yet")
+
+    variant_strings = [v.strip() for v in body.variants.strip().split("\n") if v.strip()]
+    if not variant_strings:
+        raise HTTPException(status_code=422, detail="No variants provided")
+
+    variants = []
+    for vs in variant_strings:
+        try:
+            variants.append(Variant(vs))
+        except ParseException as e:
+            raise HTTPException(status_code=422, detail=f"Invalid variant '{vs}': {e}")
+
+    if resources is None:
+        resources = config_util.get_resources(data_type="cs")
+    if not request_util.check_resources(resources):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unrecognized resource in {resources}. Available credible set resources: "
+            + ", ".join(config_util.get_resources(data_type="cs")),
+        )
+
+    stream = await data_access.stream_range_variants(
+        variants,
+        resources,
+        "cs",
+        config_common.read_chunk_size,
+        config_common.response_chunk_size,
+    )
+    return await range_response(
+        str(request.url),
+        stream,
+        config_credible_sets.cs_header_schema,
+        format,
+        start_time,
+    )
+
+
 @router.get(
     "/credible_sets_by_gene/{gene}",
     summary="Get credible sets across resources in a region around a gene",
@@ -538,7 +670,7 @@ async def credible_sets_by_variant(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\tmost_severe\tgene_most_severe\nQTD000572\teQTL\tCPSF1\tENSG00000071894.grp_2.contained.ENST00000533492|txrev\tneuron|naive\t8\t144503051\tG\tA\t2.6248\t-1.001e+00\t3.150e-01\t0.0217\tENSG00000071894.grp_2.contained.ENST00000533492_L2\t75\t0.6995\t5_prime_UTR_variant\tGPT\n...",
+                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\neqtl_catalogue\tR7\tQTD000572\teQTL\tCPSF1\tENSG00000071894.grp_2.contained.ENST00000533492|txrev\tneuron|naive\t8\t144503051\tG\tA\t2.6248\t-1.001e+00\t3.150e-01\t0.0217\tENSG00000071894.grp_2.contained.ENST00000533492_L2\t75\t0.6995\t0.01023\t5_prime_UTR_variant\tGPT\n...",
                 },
                 "application/json": {
                     "schema": {
@@ -564,6 +696,7 @@ async def credible_sets_by_variant(
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
                                 "cs_min_r2": {"type": "number"},
+                                "aaf": {"type": "number"},
                                 "most_severe": {"type": "string"},
                                 "gene_most_severe": {"type": "string"},
                             },
@@ -589,6 +722,7 @@ async def credible_sets_by_variant(
                             "cs_id": "ENSG00000071894.grp_2.contained.ENST00000533492_L2",
                             "cs_size": 75,
                             "cs_min_r2": 0.6995,
+                            "aaf": 0.01023,
                             "most_severe": "5_prime_UTR_variant",
                             "gene_most_severe": "GPT",
                         },
@@ -695,7 +829,7 @@ async def credible_sets_by_gene(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\tmost_severe\tgene_most_severe\ttrait_chr\ttrait_start\ttrait_end\neqtl_catalogue\tR7\tQTD000425\teQTL\tADAM17\tENSG00000151694.14_2_9494637_9494767|exon\tmonocyte|R848_6h\t2\t8538794\tT\tC\t5.6502\t0.347\t0.07094\t0.998\tENSG00000151694.14_2_9494637_9494767_L2\t1\t1.0\tintron_variant\tLINC01814\t2\t9488486\t9556732",
+                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\ttrait_chr\ttrait_start\ttrait_end\neqtl_catalogue\tR7\tQTD000425\teQTL\tADAM17\tENSG00000151694.14_2_9494637_9494767|exon\tmonocyte|R848_6h\t2\t8538794\tT\tC\t5.6502\t0.347\t0.07094\t0.998\tENSG00000151694.14_2_9494637_9494767_L2\t1\t1.0\t0.1234\tintron_variant\tLINC01814\t2\t9488486\t9556732",
                 },
                 "application/json": {
                     "schema": {
@@ -721,6 +855,7 @@ async def credible_sets_by_gene(
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
                                 "cs_min_r2": {"type": "number"},
+                                "aaf": {"type": "number"},
                                 "most_severe": {"type": "string"},
                                 "gene_most_severe": {"type": "string"},
                                 "trait_chr": {"type": "integer"},
@@ -749,6 +884,7 @@ async def credible_sets_by_gene(
                             "cs_id": "ENSG00000187608_L1",
                             "cs_size": 25,
                             "cs_min_r2": 0.7468,
+                            "aaf": 0.3012,
                             "most_severe": "5_prime_UTR_variant",
                             "gene_most_severe": "HES4",
                             "trait_chr": 1,
@@ -843,15 +979,48 @@ async def credible_sets_by_qtl_gene(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "phenotype\tn_credible_sets\tn_variants\nT2D_WIDE\t15\t127\n...",
+                    "example": "trait\ttrait_original\tdataset\tdata_type\tn_risk_cs\tn_risk_cs_with_coding\tn_risk_cs_with_coding_pip_gt_0_05\tn_risk_cs_with_lof\tn_risk_cs_with_lof_pip_gt_0_05\tn_protective_cs\tn_protective_cs_with_coding\tn_protective_cs_with_coding_pip_gt_0_05\tn_protective_cs_with_lof\tn_protective_cs_with_lof_pip_gt_0_05\nT2D_WIDE\tT2D_WIDE\tFinnGen_R13\tGWAS\t50\t20\t15\t5\t3\t30\t10\t8\t2\t1\n...",
                 },
                 "application/json": {
                     "schema": {
                         "type": "array",
-                        "items": {"type": "object"},
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "trait": {"type": "string"},
+                                "trait_original": {"type": "string"},
+                                "dataset": {"type": "string"},
+                                "data_type": {"type": "string"},
+                                "n_risk_cs": {"type": "integer"},
+                                "n_risk_cs_with_coding": {"type": "integer"},
+                                "n_risk_cs_with_coding_pip_gt_0_05": {"type": "integer"},
+                                "n_risk_cs_with_lof": {"type": "integer"},
+                                "n_risk_cs_with_lof_pip_gt_0_05": {"type": "integer"},
+                                "n_protective_cs": {"type": "integer"},
+                                "n_protective_cs_with_coding": {"type": "integer"},
+                                "n_protective_cs_with_coding_pip_gt_0_05": {"type": "integer"},
+                                "n_protective_cs_with_lof": {"type": "integer"},
+                                "n_protective_cs_with_lof_pip_gt_0_05": {"type": "integer"},
+                            },
+                        },
                     },
                     "example": [
-                        {"phenotype": "T2D_WIDE", "n_credible_sets": "15", "n_variants": "127"},
+                        {
+                            "trait": "T2D_WIDE",
+                            "trait_original": "T2D_WIDE",
+                            "dataset": "FinnGen_R13",
+                            "data_type": "GWAS",
+                            "n_risk_cs": 50,
+                            "n_risk_cs_with_coding": 20,
+                            "n_risk_cs_with_coding_pip_gt_0_05": 15,
+                            "n_risk_cs_with_lof": 5,
+                            "n_risk_cs_with_lof_pip_gt_0_05": 3,
+                            "n_protective_cs": 30,
+                            "n_protective_cs_with_coding": 10,
+                            "n_protective_cs_with_coding_pip_gt_0_05": 8,
+                            "n_protective_cs_with_lof": 2,
+                            "n_protective_cs_with_lof_pip_gt_0_05": 1,
+                        },
                     ],
                 },
             },

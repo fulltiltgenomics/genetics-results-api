@@ -2,7 +2,7 @@ import logging
 from typing import Literal, TYPE_CHECKING
 import polars as pl
 from rapidfuzz import fuzz, process
-from app.services.config_util import get_resources_with_metadata
+from app.services.config_util import get_datasets, get_resources_with_metadata
 
 if TYPE_CHECKING:
     from app.services.data_access import DataAccess
@@ -82,6 +82,34 @@ class SearchIndex:
             except Exception as e:
                 logger.error(f"Error loading phenotypes from {resource}: {e}")
                 raise e
+
+        # load inline phenotypes from datasets (e.g. external sumstats)
+        for dataset_id, entry in get_datasets().items():
+            inline_phenos = entry.get("phenotypes")
+            if not inline_phenos:
+                continue
+            resource = entry.get("resource", dataset_id)
+            for item_dict in inline_phenos:
+                code = item_dict.get("phenotype_code")
+                name = item_dict.get("phenotype_string")
+                n_samples = item_dict.get("n_samples", 0)
+                if code and name:
+                    phenotype = {
+                        "type": "phenotype",
+                        "code": code,
+                        "name": name,
+                        "resource": resource,
+                        "sample_size": n_samples,
+                        "search_strings": [code.lower(), name.lower()],
+                    }
+                    self.phenotypes.append(phenotype)
+                    self.search_items.append(
+                        {
+                            "item": phenotype,
+                            "search_key": f"{code} {name}",
+                            "primary": code,
+                        }
+                    )
 
     def _load_genes(self):
         """Load genes from HGNC complete set"""

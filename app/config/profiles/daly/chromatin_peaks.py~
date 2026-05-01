@@ -1,0 +1,6 @@
+"""Daly profile: chromatin peaks data paths.
+
+No chromatin peaks data is available in this bucket yet.
+"""
+
+chromatin_peaks_data = []

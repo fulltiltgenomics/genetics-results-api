@@ -6,6 +6,8 @@ This module contains all configuration related to chromatin peaks data:
 - Chromatin peaks data source configurations
 """
 
+from app.config.profile import load_profile_module
+
 chromatin_peaks_header_schema = {
     "resource": str,
     "version": str,
@@ -31,11 +33,5 @@ chromatin_peaks_header_schema = {
     "hurdle_bic": float,
 }
 
-chromatin_peaks_data = [
-    {
-        "data_source": "gcloud",
-        "resource": "finngen",
-        "version": "R12",
-        "file": "gs://cascade-browser/cascade_results/open4gene.all.results.sig.tsv.gz",
-    },
-]
+_profile = load_profile_module("chromatin_peaks")
+chromatin_peaks_data = _profile.chromatin_peaks_data
