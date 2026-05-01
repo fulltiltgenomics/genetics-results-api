@@ -71,6 +71,11 @@ class UsageLoggingMiddleware:
         finally:
             duration_ms = (time.perf_counter() - start_time) * 1000
 
+            # fall back to user resolved by auth dependency (for bearer token requests)
+            if not user_email:
+                state = scope.get("state", {})
+                user_email = state.get("authenticated_user")
+
             # get route template for privacy (e.g., "/api/v1/search/{query}" instead of actual query)
             route = scope.get("route")
             endpoint_template = route.path if route else path
@@ -83,7 +88,7 @@ class UsageLoggingMiddleware:
                 {
                     "message": "endpoint access",
                     "log_type": "endpoint_access",
-                    "log_source": f"genetics-results-api-{config.deploy_env}",
+                    "log_source": config.log_source,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "user_email": user_email,
                     "endpoint_path": endpoint_template,
