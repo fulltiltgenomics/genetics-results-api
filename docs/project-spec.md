@@ -11,7 +11,7 @@ A FastAPI-based REST API that serves human genetics association results and anno
 - **htslib/tabix** for indexed genomic data access (compiled in Docker image)
 - **Google Cloud Storage** for data files (accessed via gcloud-aio-storage, gcsfs)
 - **Polars** for data manipulation
-- **JWT** authentication (PyJWT, itsdangerous)
+- **JWT** authentication (PyJWT)
 - **uv** for dependency management
 - Deployed as a Docker container (base: nikolaik/python-nodejs)
 

@@ -34,7 +34,7 @@ Once running, open http://localhost:8081/api/v1/docs to see available endpoints
 ## Run tests against running server
 
 ```bash
-uv pip install --system -r requirements.txt
+uv pip install --system -r pyproject.toml
 SERVER_URL=http://localhost:8081 tests/run_tests.sh
 ```
 
