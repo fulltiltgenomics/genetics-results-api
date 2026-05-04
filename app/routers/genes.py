@@ -2,6 +2,7 @@ import logging
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
 from app.dependencies import get_gene_name_mapping
 from app.core.variant import Variant
 from app.core.exceptions import (
@@ -101,7 +102,7 @@ async def genes_in_region(
             .replace("mt", "25")
             .strip()
         )
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(status_code=422, detail="invalid chromosome")
     genes = gene_name_and_position_mapping.get_genes_in_region(
         chr, start, end, gene_type=gene_type, gencode_version=gencode_version
@@ -133,7 +134,7 @@ async def genes_in_region(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "gene_name\tgene_start\tgene_end\tgene_strand\tgene_type\tdistance\thgnc_symbol\thgnc_name\thgnc_alias_symbol\thgnc_prev_symbol\nPCSK9\t55039445\t55064852\t+\tprotein_coding\t0\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tHCHOLA3\nUSP24\t55066359\t55215753\t-\tprotein_coding\t16359\tUSP24\tubiquitin specific peptidase 24\tKIAA1057\tNone\n...",
+                    "example": "gene_name\tchrom\tgene_start\tgene_end\tgene_strand\tgene_type\tdistance\thgnc_symbol\thgnc_name\thgnc_alias_symbol\thgnc_prev_symbol\nPCSK9\t1\t55039445\t55064852\t+\tprotein_coding\t0\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tHCHOLA3\nUSP24\t1\t55066359\t55215753\t-\tprotein_coding\t16359\tUSP24\tubiquitin specific peptidase 24\tKIAA1057\tNone\n...",
                 },
                 "application/json": {
                     "schema": {
@@ -142,6 +143,7 @@ async def genes_in_region(
                             "type": "object",
                             "properties": {
                                 "gene_name": {"type": "string"},
+                                "chrom": {"type": "integer"},
                                 "gene_start": {"type": "integer"},
                                 "gene_end": {"type": "integer"},
                                 "gene_strand": {"type": "string"},
@@ -157,6 +159,7 @@ async def genes_in_region(
                     "example": [
                         {
                             "gene_name": "PCSK9",
+                            "chrom": 1,
                             "gene_start": 55039445,
                             "gene_end": 55064852,
                             "gene_strand": "+",
@@ -169,6 +172,7 @@ async def genes_in_region(
                         },
                         {
                             "gene_name": "USP24",
+                            "chrom": 1,
                             "gene_start": 55066359,
                             "gene_end": 55215753,
                             "gene_strand": "-",
@@ -247,9 +251,6 @@ async def nearest_genes(
         return genes
 
 
-from pydantic import BaseModel
-
-
 class NearestGenesRequest(BaseModel):
     variants: str
 
@@ -263,12 +264,45 @@ class NearestGenesRequest(BaseModel):
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
+                    "example": "gene_name\tchrom\tgene_start\tgene_end\tgene_strand\tgene_type\tdistance\thgnc_symbol\thgnc_name\thgnc_alias_symbol\thgnc_prev_symbol\tvariant\nPCSK9\t1\t55039445\t55064852\t+\tprotein_coding\t0\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tHCHOLA3\t1-55050000-C-T\n...",
                 },
                 "application/json": {
                     "schema": {
                         "type": "array",
-                        "items": {"type": "object"},
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "gene_name": {"type": "string"},
+                                "chrom": {"type": "integer"},
+                                "gene_start": {"type": "integer"},
+                                "gene_end": {"type": "integer"},
+                                "gene_strand": {"type": "string"},
+                                "gene_type": {"type": "string"},
+                                "distance": {"type": "integer"},
+                                "hgnc_symbol": {"type": "string"},
+                                "hgnc_name": {"type": "string"},
+                                "hgnc_alias_symbol": {"type": "string"},
+                                "hgnc_prev_symbol": {"type": ["string", "null"]},
+                                "variant": {"type": "string"},
+                            },
+                        },
                     },
+                    "example": [
+                        {
+                            "gene_name": "PCSK9",
+                            "chrom": 1,
+                            "gene_start": 55039445,
+                            "gene_end": 55064852,
+                            "gene_strand": "+",
+                            "gene_type": "protein_coding",
+                            "distance": 0,
+                            "hgnc_symbol": "PCSK9",
+                            "hgnc_name": "proprotein convertase subtilisin/kexin type 9",
+                            "hgnc_alias_symbol": "NARC-1|FH3",
+                            "hgnc_prev_symbol": "HCHOLA3",
+                            "variant": "1-55050000-C-T",
+                        },
+                    ],
                 },
             },
         },
