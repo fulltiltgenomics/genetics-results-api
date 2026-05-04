@@ -1,6 +1,5 @@
 import logging
 from typing import AsyncGenerator, AsyncIterator, Any, Callable
-import asyncio
 
 from app.core.logging_config import setup_logging
 from app.core.variant import Variant
@@ -453,16 +452,19 @@ def tsv_line_iterator_chromatin_peaks(
     peak_id: str,
     resource: str,
     version: str,
+    coordinates_lookup: dict[str, tuple[int, int, int]] | None = None,
 ) -> AsyncIterator[list[bytes]]:
     """
     Iterate over lines in a stream and split them into a list.
     Filter to specific peak_id and prepend resource and version columns.
+    Optionally append gene coordinates (gene_chrom, gene_start, gene_end).
 
     Args:
         stream: Async iterator of byte chunks
         peak_id: Peak ID to filter by (e.g., "chr1-817095-817594")
         resource: Resource name to prepend
         version: Version to prepend
+        coordinates_lookup: Optional mapping from ENSG ID to (chrom, gene_start, gene_end)
 
     Yields:
         Lines matching the peak_id with resource and version prepended
@@ -473,6 +475,7 @@ def tsv_line_iterator_chromatin_peaks(
 
     peak_id_col_index = 3
     chr_col_index = 0
+    gene_id_col_index = 4
     cell_type_col_index = 6
 
     def filter_fn(s: list[bytes]) -> bool:
@@ -480,7 +483,7 @@ def tsv_line_iterator_chromatin_peaks(
         return len(s) > peak_id_col_index and s[peak_id_col_index] == peak_id_bytes
 
     def transform_fn(s: list[bytes]) -> list[bytes]:
-        """Prepend resource and version columns."""
+        """Prepend resource and version columns, append gene coordinates."""
         s[chr_col_index] = (
             s[chr_col_index]
             .replace(b"chr", b"")
@@ -492,7 +495,21 @@ def tsv_line_iterator_chromatin_peaks(
         s[cell_type_col_index] = s[cell_type_col_index].replace(
             b"predicted.celltype.", b""
         )
-        return [resource_bytes, version_bytes] + s
+        row = [resource_bytes, version_bytes] + s
+
+        if coordinates_lookup is not None:
+            gene_id = s[gene_id_col_index].decode("utf-8")
+            coords = coordinates_lookup.get(gene_id)
+            if coords:
+                row.extend([
+                    f"chr{coords[0]}".encode("utf-8"),
+                    str(coords[1]).encode("utf-8"),
+                    str(coords[2]).encode("utf-8"),
+                ])
+            else:
+                row.extend([b"NA", b"NA", b"NA"])
+
+        return row
 
     return tsv_line_iterator_base(stream, filter_fn, transform_fn)
 
@@ -536,11 +553,11 @@ async def tsv_stream_to_list(
                 type_ = header_schema[header[i]]
                 if field == "NA":
                     row[header[i]] = None
-                elif type_ == bool:
+                elif type_ is bool:
                     row[header[i]] = (
                         field.lower() == "true" or field == "1" or field == "1.0"
                     )
-                elif type_ == float:
+                elif type_ is float:
                     # normalize infinite to 1e308 for JSON compliance
                     if field.lower().startswith("inf"):
                         row[header[i]] = 1e308
@@ -551,7 +568,7 @@ async def tsv_stream_to_list(
             rows.append(row)
     except Exception as e:
         logger.error(f"Error parsing data: {e}")
-        raise ValueError(f"Error parsing data")
+        raise ValueError("Error parsing data")
     return rows
 
 
