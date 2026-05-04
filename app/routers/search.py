@@ -33,6 +33,9 @@ router = APIRouter()
                                 "symbol": {"type": "string", "description": "Gene results only"},
                                 "aliases": {"type": "array", "description": "Gene results only"},
                                 "ensembl_id": {"type": "string", "description": "Gene results only"},
+                                "chrom": {"type": "integer", "description": "Gene results only"},
+                                "gene_start": {"type": "integer", "description": "Gene results only"},
+                                "gene_end": {"type": "integer", "description": "Gene results only"},
                                 "search_strings": {"type": "array", "items": {"type": "string"}},
                                 "match_type": {"type": "string"},
                                 "match_score": {"type": "number"},
@@ -48,6 +51,9 @@ router = APIRouter()
                             "name": "proprotein convertase subtilisin/kexin type 9",
                             "aliases": ["NARC-1", "FH3", "HCHOLA3"],
                             "ensembl_id": "ENSG00000169174",
+                            "chrom": 1,
+                            "gene_start": 55039447,
+                            "gene_end": 55064852,
                             "search_strings": ["pcsk9", "proprotein convertase subtilisin/kexin type 9", "narc-1", "fh3", "hchola3", "ensg00000169174"],
                             "match_type": "exact",
                             "match_score": 100,
@@ -72,7 +78,7 @@ router = APIRouter()
                 },
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "type\tsymbol\tname\taliases\tensembl_id\tmatch_type\tmatch_score\trank_score\tmatched_key\ngene\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tENSG00000169174\texact\t100\t1200\tPCSK9\nphenotype\tI9_HYPERLIPID\tHyperlipidaemia\t\t\tprefix\t95\t965\tI9_HYPERLIPID\n...",
+                    "example": "type\tsymbol\tname\taliases\tensembl_id\tchrom\tgene_start\tgene_end\tmatch_type\tmatch_score\trank_score\tmatched_key\ngene\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tENSG00000169174\t1\t55039447\t55064852\texact\t100\t1200\tPCSK9\nphenotype\tI9_HYPERLIPID\tHyperlipidaemia\t\t\t\t\t\tprefix\t95\t965\tI9_HYPERLIPID\n...",
                 },
             },
         },
@@ -96,6 +102,10 @@ async def search_autocomplete(
     ),
     format: Literal["json", "tsv"] = Query(
         default="json", description="Response format"
+    ),
+    gencode_version: int | None = Query(
+        default=None,
+        description="GENCODE version to use for gene coordinates (default: latest available)",
     ),
     search_index: SearchIndex = Depends(get_search_index),
 ):
@@ -135,7 +145,7 @@ async def search_autocomplete(
         seen_ids = set()
         results = []
         for term in query_terms:
-            term_results = search_index.search(query=term, limit=limit, types=type_list)
+            term_results = search_index.search(query=term, limit=limit, types=type_list, gencode_version=gencode_version)
             for result in term_results:
                 # use code (phenotype) or symbol (gene) as unique identifier
                 result_id = (
@@ -164,13 +174,14 @@ async def search_autocomplete(
 
             # determine format based on type filter
             if type_list[0] == "genes":
-                header = "type\tsymbol\tname\taliases\tensembl_id\tmatch_type\tmatch_score\trank_score\tmatched_key"
+                header = "type\tsymbol\tname\taliases\tensembl_id\tchrom\tgene_start\tgene_end\tmatch_type\tmatch_score\trank_score\tmatched_key"
                 rows = []
                 for r in results:
                     aliases_str = "|".join(r.get("aliases", []))
                     row = (
                         f"{r['type']}\t{r['symbol']}\t{r.get('name', '')}\t"
                         f"{aliases_str}\t{r.get('ensembl_id', '')}\t"
+                        f"{r.get('chrom') or ''}\t{r.get('gene_start') or ''}\t{r.get('gene_end') or ''}\t"
                         f"{r['match_type']}\t{r['match_score']}\t{r['rank_score']}\t{r['matched_key']}"
                     )
                     rows.append(row)
