@@ -91,7 +91,7 @@ router = APIRouter()
 )
 async def expression_by_gene(
     request: Request,
-    gene: str = Path(..., description="Gene name, ENSG ID, or comma-separated list of gene names", example="PCSK9"),
+    gene: str = Path(..., description="Gene name, ENSG ID, or comma-separated list of gene names", examples=["PCSK9"]),
     resources: list[str] | None = Query(
         default=None,
         description="Comma-separated list of resources to get data from (if not given, all available resources are used)",

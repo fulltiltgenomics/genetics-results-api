@@ -79,7 +79,7 @@ def _validate_source(source: str, service: VariantAnnotationService) -> None:
 )
 async def get_variant_annotation(
     request: Request,
-    source: str = Path(..., description="Annotation source name", example="finngen"),
+    source: str = Path(..., description="Annotation source name", examples=["finngen"]),
     variant: str | None = Query(
         default=None, description="Single variant (e.g. 1:13668:G:A)"
     ),
@@ -148,7 +148,7 @@ class VariantAnnotationRequest(BaseModel):
 )
 async def post_variant_annotation(
     request: Request,
-    source: str = Path(..., description="Annotation source name", example="finngen"),
+    source: str = Path(..., description="Annotation source name", examples=["finngen"]),
     body: VariantAnnotationRequest = ...,
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"

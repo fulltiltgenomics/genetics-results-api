@@ -192,7 +192,7 @@ async def genes_in_region(
 )
 async def nearest_genes(
     variant: str = Path(
-        ..., description="Variant (chr-pos-ref-alt)", example="7-5397122-C-T"
+        ..., description="Variant (chr-pos-ref-alt)", examples=["7-5397122-C-T"]
     ),
     gene_type: Literal["protein_coding", "all"] = Query(
         default="protein_coding", description="Type of genes to return"

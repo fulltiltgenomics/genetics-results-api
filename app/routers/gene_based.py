@@ -72,7 +72,7 @@ async def _merge_results(
     },
 )
 async def gene_based(
-    gene: str = Path(..., description="Gene symbol or comma-separated list of gene symbols", example="BRCA1"),
+    gene: str = Path(..., description="Gene symbol or comma-separated list of gene symbols", examples=["BRCA1"]),
     gene_name_and_position_mapping: GeneNameAndPositionMapping = Depends(get_gene_name_mapping),
     _=Depends(ensure_gcs_token),
 ):

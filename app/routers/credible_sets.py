@@ -103,9 +103,9 @@ router = APIRouter()
 )
 async def credible_sets_by_phenotype(
     request: Request,
-    resource: str = Path(..., description="Data resource", example="finngen"),
+    resource: str = Path(..., description="Data resource", examples=["finngen"]),
     phenotype_or_study: str = Path(
-        ..., description="Phenotype or study code", example="T2D_WIDE"
+        ..., description="Phenotype or study code", examples=["T2D_WIDE"]
     ),
     interval: int = Query(
         default=95, description="Credible set threshold (95 or 99)", ge=95, le=99
@@ -236,12 +236,12 @@ async def credible_sets_by_phenotype(
 )
 async def credible_sets_by_id(
     request: Request,
-    resource: str = Path(..., description="Data resource", example="finngen"),
+    resource: str = Path(..., description="Data resource", examples=["finngen"]),
     phenotype_or_study: str = Path(
-        ..., description="Phenotype or study code", example="K11_IBD_STRICT"
+        ..., description="Phenotype or study code", examples=["K11_IBD_STRICT"]
     ),
     cs_id: str = Path(
-        ..., description="Credible set ID", example="chr1:6535440-9535440_1"
+        ..., description="Credible set ID", examples=["chr1:6535440-9535440_1"]
     ),
     interval: int = Query(
         default=95, description="Credible set threshold (95 or 99)", ge=95, le=99
@@ -380,7 +380,7 @@ async def credible_sets_by_id(
 async def credible_sets_by_region(
     request: Request,
     region: str = Path(
-        ..., description="Chromosome region", example="1:1000000-1000100"
+        ..., description="Chromosome region", examples=["1:1000000-1000100"]
     ),
     resources: list[str] | None = Query(
         default=None,
@@ -515,7 +515,7 @@ async def credible_sets_by_region(
 async def credible_sets_by_variant(
     request: Request,
     variant: str = Path(
-        ..., description="Variant (chr-pos-ref-alt)", example="19-44908684-T-C"
+        ..., description="Variant (chr-pos-ref-alt)", examples=["19-44908684-T-C"]
     ),
     resources: list[str] | None = Query(
         default=None,
@@ -739,7 +739,7 @@ async def credible_sets_by_variant_post(
 )
 async def credible_sets_by_gene(
     request: Request,
-    gene: str = Path(..., description="Gene name or comma-separated list of gene names", example="GPT"),
+    gene: str = Path(..., description="Gene name or comma-separated list of gene names", examples=["GPT"]),
     window: int = Query(
         default=0,
         description="One-sided window in base pairs around the gene (default 0, which means the gene itself)",
@@ -903,7 +903,7 @@ async def credible_sets_by_gene(
 )
 async def credible_sets_by_qtl_gene(
     request: Request,
-    gene: str = Path(..., description="Gene name, ENSG ID, or comma-separated list of gene names", example="PCSK9"),
+    gene: str = Path(..., description="Gene name, ENSG ID, or comma-separated list of gene names", examples=["PCSK9"]),
     resources: list[str] | None = Query(
         default=None,
         description="Comma-separated list of resources to get data from (if not given, all available resources are used)",
@@ -1034,7 +1034,7 @@ async def get_credible_set_stats(
     id_or_resource: str = Path(
         ...,
         description="Data file ID (e.g., finngen_gwas) or resource name (e.g., finngen)",
-        example="finngen_gwas",
+        examples=["finngen_gwas"],
     ),
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"

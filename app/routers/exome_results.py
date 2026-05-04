@@ -73,11 +73,11 @@ router = APIRouter()
 )
 async def exome_results_by_phenotype(
     request: Request,
-    resource: str = Path(..., description="Data resource", example="genebass"),
+    resource: str = Path(..., description="Data resource", examples=["genebass"]),
     phenotype_or_study: str = Path(
         ...,
         description="Phenotype or study code",
-        example="categorical_41210_both_sexes_S068_",
+        examples=["categorical_41210_both_sexes_S068_"],
     ),
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
@@ -221,7 +221,7 @@ async def exome_results_by_phenotype(
 async def exome_results_by_region(
     request: Request,
     region: str = Path(
-        ..., description="Chromosome region", example="1:1000000-1000100"
+        ..., description="Chromosome region", examples=["1:1000000-1000100"]
     ),
     resources: list[str] | None = Query(
         default=None,
@@ -344,7 +344,7 @@ async def exome_results_by_region(
 async def exome_results_by_variant(
     request: Request,
     variant: str = Path(
-        ..., description="Variant (chr-pos-ref-alt)", example="1-925947-C-T"
+        ..., description="Variant (chr-pos-ref-alt)", examples=["1-925947-C-T"]
     ),
     resources: list[str] | None = Query(
         default=None,
@@ -467,7 +467,7 @@ async def exome_results_by_variant(
 )
 async def exome_results_by_gene(
     request: Request,
-    gene: str = Path(..., description="Gene name or comma-separated list of gene names", example="SAMD11"),
+    gene: str = Path(..., description="Gene name or comma-separated list of gene names", examples=["SAMD11"]),
     window: int = Query(
         default=0,
         description="One-sided window in base pairs around the gene (default 0, which means the gene itself)",

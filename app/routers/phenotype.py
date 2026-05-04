@@ -38,12 +38,12 @@ async def get_phenotype_markdown(
     resource: str = Path(
         ...,
         description="Data resource (e.g., finngen)",
-        example="finngen",
+        examples=["finngen"],
     ),
     phenocode: str = Path(
         ...,
         description="Phenotype code",
-        example="T2D_WIDE",
+        examples=["T2D_WIDE"],
     ),
     markdown_service: PhenotypeMarkdownService = Depends(get_phenotype_markdown_service),
 ) -> Response:

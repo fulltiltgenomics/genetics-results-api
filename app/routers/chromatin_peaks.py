@@ -96,7 +96,7 @@ async def peak_to_genes(
     peak_id: str = Path(
         ...,
         description="Peak ID in format chr-start-end",
-        example="chr1-817095-817594",
+        examples=["chr1-817095-817594"],
     ),
     resources: list[str] | None = Query(
         default=None,
