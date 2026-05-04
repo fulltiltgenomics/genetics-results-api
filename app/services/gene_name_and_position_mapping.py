@@ -283,6 +283,7 @@ class GeneNameAndPositionMapping:
             .select(
                 [
                     "gene_name",
+                    "chrom",
                     "gene_start",
                     "gene_end",
                     "gene_strand",
@@ -308,3 +309,22 @@ class GeneNameAndPositionMapping:
         )
 
         return genes_with_distance
+
+    def get_coordinates_lookup(
+        self, gencode_version: int | None = None
+    ) -> dict[str, tuple[int, int, int]]:
+        """
+        Build a mapping from ENSG ID to (chrom, gene_start, gene_end).
+        Used by SearchIndex and peak_to_genes for coordinate enrichment.
+        """
+        if gencode_version is None:
+            gencode_version = genes["gencode_versions"][0]
+
+        if gencode_version not in self.gene_positions:
+            raise DataException(f"Gencode version {gencode_version} not available")
+
+        df = self.gene_positions[gencode_version]
+        return {
+            row["ensg"]: (row["chrom"], row["gene_start"], row["gene_end"])
+            for row in df.select(["ensg", "chrom", "gene_start", "gene_end"]).to_dicts()
+        }
