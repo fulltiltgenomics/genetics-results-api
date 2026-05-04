@@ -59,10 +59,14 @@ def _register_services():
         from app.services.request_util import RequestUtil
         return RequestUtil()
 
-    # search index - depends on hgnc file and data access
+    # search index - depends on hgnc file, data access, and gene name mapping
     def create_search_index():
         from app.services.search_service import SearchIndex
-        return SearchIndex(config.hgnc_file, container.get("data_access"))
+        return SearchIndex(
+            config.hgnc_file,
+            container.get("data_access"),
+            container.get("gene_name_mapping"),
+        )
 
     # data access services
     def create_data_access():

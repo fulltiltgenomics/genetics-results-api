@@ -6,6 +6,7 @@ from app.services.config_util import get_datasets, get_resources_with_metadata
 
 if TYPE_CHECKING:
     from app.services.data_access import DataAccess
+    from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +17,18 @@ class SearchIndex:
     Indexes phenotypes and genes at startup for fuzzy search.
     """
 
-    def __init__(self, hgnc_file: str, data_access: "DataAccess | None" = None):
+    def __init__(
+        self,
+        hgnc_file: str,
+        data_access: "DataAccess | None" = None,
+        gene_name_mapping: "GeneNameAndPositionMapping | None" = None,
+    ):
         self.phenotypes = []
         self.genes = []
         self.search_items = []
         self._hgnc_file = hgnc_file
         self._data_access = data_access
+        self._gene_name_mapping = gene_name_mapping
         self._initialize()
 
     def _initialize(self):
@@ -121,7 +128,7 @@ class SearchIndex:
                     )
 
     def _load_genes(self):
-        """Load genes from HGNC complete set"""
+        """Load genes from HGNC complete set, enriched with coordinates if available"""
         try:
             logger.debug(f"Loading genes from {self._hgnc_file}")
 
@@ -129,6 +136,14 @@ class SearchIndex:
             # to avoid parsing errors with pipe-delimited values
             df = pl.read_csv(self._hgnc_file, separator="\t", infer_schema_length=0)
             logger.debug(f"Loaded {len(df)} genes from HGNC")
+
+            # build coordinates lookup using default gencode version
+            coords_lookup: dict[str, tuple[int, int, int]] = {}
+            if self._gene_name_mapping is not None:
+                try:
+                    coords_lookup = self._gene_name_mapping.get_coordinates_lookup()
+                except Exception as e:
+                    logger.warning(f"Could not load gene coordinates: {e}")
 
             for row in df.iter_rows(named=True):
                 symbol = row.get("symbol")
@@ -147,12 +162,16 @@ class SearchIndex:
                 if prev_symbol and prev_symbol != "":
                     aliases.extend(prev_symbol.split("|"))
 
+                coords = coords_lookup.get(ensembl_id) if ensembl_id else None
                 gene = {
                     "type": "gene",
                     "symbol": symbol,
                     "name": name or "",
                     "aliases": aliases,
                     "ensembl_id": ensembl_id or "",
+                    "chrom": coords[0] if coords else None,
+                    "gene_start": coords[1] if coords else None,
+                    "gene_end": coords[2] if coords else None,
                     "search_strings": [symbol.lower()]
                     + [name.lower() if name else ""]
                     + [a.lower() for a in aliases if a]
@@ -213,6 +232,7 @@ class SearchIndex:
         query: str,
         limit: int = 10,
         types: list[Literal["phenotypes", "genes"]] | None = None,
+        gencode_version: int | None = None,
     ) -> list[dict]:
         """
         Search for phenotypes and genes with fuzzy matching.
@@ -221,6 +241,8 @@ class SearchIndex:
             query: Search query string
             limit: Maximum number of results to return
             types: Filter by types (None = both)
+            gencode_version: Optional gencode version for gene coordinates.
+                When provided and different from default, re-looks up coordinates.
 
         Returns:
             List of matching items with scores and match types
@@ -272,7 +294,6 @@ class SearchIndex:
             # determine match type
             query_lower = query.lower()
             search_key_lower = search_item["search_key"].lower()
-            primary_lower = search_item["primary"].lower()
 
             if query_lower == search_key_lower:
                 match_type = "exact"
@@ -316,4 +337,19 @@ class SearchIndex:
         )
 
         # return top N results
-        return ranked_results[:limit]
+        results = ranked_results[:limit]
+
+        # override gene coordinates if a non-default gencode version is requested
+        if gencode_version is not None and self._gene_name_mapping is not None:
+            try:
+                alt_coords = self._gene_name_mapping.get_coordinates_lookup(gencode_version)
+                for result in results:
+                    if result["type"] == "gene" and result.get("ensembl_id"):
+                        coords = alt_coords.get(result["ensembl_id"])
+                        result["chrom"] = coords[0] if coords else None
+                        result["gene_start"] = coords[1] if coords else None
+                        result["gene_end"] = coords[2] if coords else None
+            except Exception as e:
+                logger.warning(f"Could not load coordinates for gencode {gencode_version}: {e}")
+
+        return results
