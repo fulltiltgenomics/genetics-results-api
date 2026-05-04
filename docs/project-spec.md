@@ -50,14 +50,14 @@ run_server.py       # server entry point
 |-----|--------|
 | authentication | Login/token management |
 | metadata | Dataset and resource metadata |
-| search | Search across phenotypes, genes, variants |
+| search | Search across phenotypes, genes, variants (includes gene coordinates via GENCODE) |
 | credible-sets | Fine-mapping credible set results |
 | colocalization | Colocalization analysis results |
 | expression | Gene expression data (eQTL, etc.) |
-| genes | Gene information and lookups |
+| genes | Gene information, lookups, and nearest genes with coordinates |
 | gene-disease | Gene-disease associations |
 | gene-based | Gene-based association results |
-| chromatin-peaks | Chromatin accessibility peaks |
+| chromatin-peaks | Chromatin accessibility peaks (peak_to_genes includes gene coordinates) |
 | exome-results | Exome sequencing association results |
 | phenotype | Phenotype descriptions |
 | resources | Available resource listing |
@@ -70,7 +70,7 @@ run_server.py       # server entry point
 
 1. **Configuration-driven**: Each data resource is defined in `app/config/` with paths to GCS-hosted tabix files and column mappings. Dataset metadata (author, version, description, metadata_file, harmonizer type) lives exclusively in the **dataset registry** (`app/config/profiles/{profile}/datasets.py`). Product configs (credible_sets, exome_results, gene_based_results, summary_stats) reference the registry via `dataset_id` and contain only file paths and product-specific settings.
 2. **Tabix-based queries**: Genomic region queries use htslib tabix (subprocess) to fetch data from indexed `.tsv.gz` files on GCS
-3. **Service layer**: `app/services/` contains data access classes (inheriting from `GCloudTabixBase`) that handle tabix queries, parsing, and result formatting. Metadata harmonization uses `build_harmonizer_config(dataset_id)` from the registry to get harmonizer settings.
+3. **Service layer**: `app/services/` contains data access classes (inheriting from `GCloudTabixBase`) that handle tabix queries, parsing, and result formatting. Metadata harmonization uses `build_harmonizer_config(dataset_id)` from the registry to get harmonizer settings. `GeneNameAndPositionMapping` provides gene coordinate lookups (per GENCODE version) used by `SearchIndex` and chromatin peaks streaming to enrich results with genomic positions.
 4. **Routing layer**: `app/routers/` defines endpoints that validate input, call services, and return formatted responses
 
 ### Authentication
