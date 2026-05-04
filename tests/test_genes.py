@@ -98,8 +98,11 @@ class TestNearestGenes:
             if len(data) > 0:
                 first_gene = data[0]
                 assert isinstance(first_gene, dict)
-                # Should have gene name and position info
-                # The exact fields depend on your implementation
+                assert "chrom" in first_gene, "nearest_genes response should include chrom"
+                assert "gene_start" in first_gene
+                assert "gene_end" in first_gene
+                assert "gene_name" in first_gene
+                assert "distance" in first_gene
 
     def test_nearest_genes_no_genes_found(self, server_url):
         """Test nearest genes when no genes are within max_distance."""
