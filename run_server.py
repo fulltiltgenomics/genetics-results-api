@@ -130,6 +130,15 @@ async def _cleanup_services():
                         await obj.cleanup()
 
 
+async def _run_async_validations():
+    """Run all async validations and clean up sessions on the same event loop."""
+    await _validata_example_phenos()
+    await _validate_range()
+    await _validate_qtl_gene()
+    await _validate_coloc()
+    await _cleanup_services()
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python run_server.py <port>")
@@ -141,13 +150,8 @@ if __name__ == "__main__":
         for file in glob.glob("/tmp/tbi_cache/*.tbi") + glob.glob("/tmp/tbi_cache/*.csi"):
             os.remove(file)
         _validate_metadata_files()
-        asyncio.run(_validata_example_phenos())
-        asyncio.run(_validate_range())
-        asyncio.run(_validate_qtl_gene())
-        asyncio.run(_validate_coloc())
+        asyncio.run(_run_async_validations())
         _validate_gene_disease()
-        # clean up aiohttp sessions before resetting container
-        asyncio.run(_cleanup_services())
         # use asyncio event loop instead of uvloop - uvloop uses sockets instead of pipes
         # for subprocess stdin, which can break tabix's -R /dev/stdin option (uvloop issue #532)
         uvicorn.run("app.server:app", host="0.0.0.0", port=port, reload=True, loop="asyncio")
