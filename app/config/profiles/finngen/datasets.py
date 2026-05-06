@@ -352,7 +352,7 @@ datasets = {
     },
     "schema_gene_based": {
         "resource": "schema",
-        "version": "v1",
+        "version": "v2",
         "description": (
             "SCHEMA consortium gene-level burden test results. Rare variant association "
             "testing for schizophrenia from exome sequencing of 87,959 cases and 150,587 controls."
@@ -366,6 +366,122 @@ datasets = {
         "n_controls": 150587,
         "metadata_file": None,
         "metadata_harmonizer": None,
+        "phenotypes": [
+            {
+                "phenotype_code": "SCZ",
+                "phenotype_string": "Schizophrenia",
+                "n_cases": 87959,
+                "n_controls": 150587,
+                "n_samples": 238546,
+            },
+        ],
+    },
+    "bipex_gene_based": {
+        "resource": "bipex",
+        "version": "v2",
+        "description": (
+            "BibEx2 (Bipolar Exomes 2) gene-level burden test results. Rare variant association "
+            "testing for bipolar disorder from exome sequencing of 64,435 cases and 168,101 controls."
+        ),
+        "author": "Bipolar Exomes",
+        "publication_date": "NA",
+        "trait_type": "binary",
+        "data_type": "gene_based",
+        "n_samples": 232536,
+        "n_cases": 64435,
+        "n_controls": 168101,
+        "metadata_file": None,
+        "metadata_harmonizer": None,
+        "phenotypes": [
+            {
+                "phenotype_code": "BIP",
+                "phenotype_string": "Bipolar disorder",
+                "n_cases": 64435,
+                "n_controls": 168101,
+                "n_samples": 232536,
+            },
+        ],
+    },
+    "ibd_ibd_gene_based": {
+        "resource": "ibd",
+        "version": "2026",
+        "description": (
+            "2026 IBD exome analysis results. Gene-level burden test results. Rare variant "
+            "association testing for inflammatory bowel disease (IBD), ulcerative colitis (UC) "
+            "and Crohn's disease (CD)."
+        ),
+        "author": "IBD Exome Consortium",
+        "publication_date": "NA",
+        "trait_type": "binary",
+        "data_type": "gene_based",
+        "n_samples": 564576,
+        "n_cases": 86213,
+        "n_controls": 478363,
+        "metadata_file": None,
+        "metadata_harmonizer": None,
+        "phenotypes": [
+            {
+                "phenotype_code": "IBD",
+                "phenotype_string": "Inflammatory bowel disease",
+                "n_cases": 86213,
+                "n_controls": 478363,
+                "n_samples": 564576,
+            },
+        ],
+    },
+    "ibd_uc_gene_based": {
+        "resource": "ibd",
+        "version": "2026",
+        "description": (
+            "2026 IBD exome analysis results. Gene-level burden test results. Rare variant "
+            "association testing for inflammatory bowel disease (IBD), ulcerative colitis (UC) "
+            "and Crohn's disease (CD)."
+        ),
+        "author": "IBD Exome Consortium",
+        "publication_date": "NA",
+        "trait_type": "binary",
+        "data_type": "gene_based",
+        "n_samples": 511111,
+        "n_cases": 32748,
+        "n_controls": 478363,
+        "metadata_file": None,
+        "metadata_harmonizer": None,
+        "phenotypes": [
+            {
+                "phenotype_code": "UC",
+                "phenotype_string": "Ulcerative colitis",
+                "n_cases": 32748,
+                "n_controls": 478363,
+                "n_samples": 511111,
+            },
+        ],
+    },
+    "ibd_cd_gene_based": {
+        "resource": "ibd",
+        "version": "2026",
+        "description": (
+            "2026 IBD exome analysis results. Gene-level burden test results. Rare variant "
+            "association testing for inflammatory bowel disease (IBD), ulcerative colitis (UC) "
+            "and Crohn's disease (CD)."
+        ),
+        "author": "IBD Exome Consortium",
+        "publication_date": "NA",
+        "trait_type": "binary",
+        "data_type": "gene_based",
+        "n_samples": 522494,
+        "n_cases": 44131,
+        "n_controls": 478363,
+        "metadata_file": None,
+        "metadata_harmonizer": None,
+        "phenotypes": [
+            {
+                "phenotype_code": "CD",
+                "phenotype_string": "Crohn's disease",
+                "n_cases": 44131,
+                "n_controls": 478363,
+                "n_samples": 522494,
+            },
+        ],
     },
     # expression
     "gtex_expression": {
