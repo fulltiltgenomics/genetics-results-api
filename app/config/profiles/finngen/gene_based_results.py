@@ -28,7 +28,7 @@ gene_based_data_files = [
         "data_source": "gcloud",
         "gencode_version": 39,
         "gene_based": {
-            "file": "gs://finngen-commons/results_api_data/exome_results/bibex/BipEx2_gene_results.munged.mlog10p_gt4.noflag.tsv.gz",
+            "file": "gs://finngen-commons/results_api_data/exome_results/bipex/BipEx2_gene_results.munged.mlog10p_gt4.noflag.tsv.gz",
         },
     },
     {
