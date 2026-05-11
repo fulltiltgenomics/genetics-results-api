@@ -13,6 +13,9 @@ gnomad = {
     "version": "4.0",
 }
 
+# TODO migrate dataset_to_resource to datasets.yaml — the YAML has pattern-based
+# dataset_to_resource_rules but not the exact BQ dataset name -> (resource, version)
+# mapping that dataset_mapping.py needs. Keep hardcoded until YAML schema supports it.
 dataset_to_resource = {
     "FinnGen_ATACseq": ("finngen", "R12"),
     "FinnGen_snRNAseq": ("finngen", "R12"),
