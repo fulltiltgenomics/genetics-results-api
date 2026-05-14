@@ -39,6 +39,7 @@ dataset_to_resource = {
     "GTEx_v10": ("gtex", "v10"),
     "HPA_24.1": ("hpa", "24.1"),
     "genebass": ("genebass", "v1"),
+    "IBD_exome_2026": ("ibd_exome_2026", "2026"),
 }
 
 dataset_mapping_files = [

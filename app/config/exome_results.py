@@ -21,6 +21,8 @@ exome_header_schema = {
     "af_controls": float,
     "ac": int,
     "an": int,
+    "n_cases": int,
+    "n_controls": int,
     "heritability": float,
     "trait": str,
 }

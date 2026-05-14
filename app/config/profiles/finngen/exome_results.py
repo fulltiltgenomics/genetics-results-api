@@ -15,4 +15,17 @@ exome_data_files = [
             "all_exome_file": "gs://finngen-commons/results_api_data/exome_results/genebass/genebass_variant_results_mlog10p4.tsv.gz",
         },
     },
+    {
+        "id": "ibd_exome_2026",
+        "dataset_id": "ibd_exome",
+        "resource": "ibd_exome_2026",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "IBD",
+        "gencode_version": 43,
+        "exome": {
+            "version": "2026",
+            "prefix": "gs://finngen-commons/results_api_data/exome_results/ibd/IBD_exome_2026_",
+            "suffix": "_variant_results.munged.tsv.gz",
+        },
+    },
 ]
