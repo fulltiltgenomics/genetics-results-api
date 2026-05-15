@@ -33,7 +33,7 @@ gene_based_data_files = [
     },
     {
         "id": "ibd_ibd_gene_based",
-        "dataset_id": "ibd_ibd_gene_based",
+        "dataset_id": "ibd_gene_based",
         "resource": "ibd",
         "data_source": "gcloud",
         "gencode_version": 43,
@@ -43,7 +43,7 @@ gene_based_data_files = [
     },
     {
         "id": "ibd_uc_gene_based",
-        "dataset_id": "ibd_uc_gene_based",
+        "dataset_id": "ibd_gene_based",
         "resource": "ibd",
         "data_source": "gcloud",
         "gencode_version": 43,
@@ -53,7 +53,7 @@ gene_based_data_files = [
     },
     {
         "id": "ibd_cd_gene_based",
-        "dataset_id": "ibd_cd_gene_based",
+        "dataset_id": "ibd_gene_based",
         "resource": "ibd",
         "data_source": "gcloud",
         "gencode_version": 43,
