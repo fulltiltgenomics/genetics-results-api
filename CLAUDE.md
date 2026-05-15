@@ -68,7 +68,7 @@ QUALITY CODING RULES
 # Running
 
 1. Python 3.13 with `uv` for dependency management
-2. `uv pip install -r requirements.txt` for dependencies, `uv pip install -e ".[dev]"` for dev
+2. `uv pip install -r pyproject.toml` for dependencies, `uv pip install -e ".[dev]"` for dev
 3. Server: `python run_server.py [port]` (default port 4000)
 4. Tests: `pytest` or `pytest --server-url http://host:port`
 5. Lint: `ruff check`
@@ -77,66 +77,3 @@ QUALITY CODING RULES
 ====
 
 **Don't forget any of the 'QUALITY CODING RULES' above!!!**
-
-
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
-## Beads Issue Tracker
-
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
-
-### Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
-```
-
-### Rules
-
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-
-## Session Completion
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd dolt push
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-
-# Feature Planning Workflow
-
-When the user requests a new feature:
-
-1. **Create epic**: `bd create "Feature: <name>" -d "<description>" -t epic -p 2`
-2. **Explore alternatives**: invoke the architecture-explorer agent with the feature description — it proposes 3 architecture alternatives with max reasoning effort
-3. **User selects alternative**: present the 3 alternatives and wait for the user's choice
-4. **Create subtasks**: break the selected alternative into ultrafocused subtasks under the epic
-   - each subtask has a single responsibility and small scope
-   - each is independently implementable with minimal context needed
-   - include specific files to modify in the description
-   - `bd create "subtask title" -d "details" -t subtask --parent <epic-id>`
-5. **Set dependencies**: `bd link <blocker-id> <blocked-id> --type blocks` for ordered work
-6. **Execute**: work through subtasks via `bd ready`, updating status as you go
-<!-- END BEADS INTEGRATION -->
