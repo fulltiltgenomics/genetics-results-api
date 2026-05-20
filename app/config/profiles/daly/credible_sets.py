@@ -168,6 +168,19 @@ data_files = [
         },
     },
     {
+        "id": "covid_hgi",
+        "dataset_id": "covid_hgi",
+        "resource": "covid_hgi",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "COVID_A2",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://daly-genetics-results/credible_sets/covid_hgi_pseudo/",
+            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
+            "all_cs_file": "gs://daly-genetics-results/credible_sets/covid_hgi_pseudo/COVID19_HGI_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+        },
+    },
+    {
         "id": "open_targets",
         "dataset_id": "open_targets",
         "resource": "open_targets",

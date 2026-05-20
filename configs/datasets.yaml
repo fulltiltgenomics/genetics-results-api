@@ -46,6 +46,11 @@ resources:
     description: "Gene burden results and EWAS exome variant results from UK Biobank"
     aliases: ["gene bass", "uk biobank exome", "UKB exome"]
 
+  ibd_gwas:
+    label: "IBD GWAS"
+    description: "IBD (inflammatory bowel disease) GWAS meta-analysis (European, East Asian, South Asian)"
+    aliases: ["IBD GWAS", "IIBDGC"]
+
   ibd_exome_2026:
     label: "IBD Exome 2026"
     description: "IBD (inflammatory bowel disease) exome sequencing project gene burden and variant analysis"
@@ -108,6 +113,11 @@ resources:
     label: "Monarch Initiative"
     description: "Monarch Initiative causal gene-to-disease associations"
     aliases: ["Monarch"]
+
+  covid_hgi:
+    label: "COVID-19 HGI"
+    description: "COVID-19 Host Genetics Initiative GWAS"
+    aliases: ["COVID-19 HGI", "COVID HGI", "covid"]
 
   pgc:
     label: "PGC"
@@ -416,6 +426,11 @@ dataset_to_resource_rules:
     resource: "ibd_exome_2026"
     applies_to: ["exome_variant_results_v", "gene_burden_results_v"]
     comment: "IBD exome variant and gene burden results"
+
+  - pattern: "COVID19_HGI%"
+    resource: "covid_hgi"
+    applies_to: ["credible_sets_v", "colocalization_v", "coloc_credsets_v"]
+    comment: "COVID-19 Host Genetics Initiative"
 
   # fallback: lowercase the dataset name
   - pattern: "*"
@@ -1055,7 +1070,56 @@ profiles:
             n_controls: 1746386
             n_samples: 1809941
 
+      ibd_gwas:
+        resource: ibd_gwas
+        version: "2026"
+        description: >-
+          IBD GWAS meta-analysis across European, East Asian, and South Asian
+          ancestry cohorts from the International IBD Genetics Consortium (IIBDGC).
+          Includes IBD, Crohn's disease (CD), and ulcerative colitis (UC).
+        author: "IIBDGC"
+        publication_date: "NA"
+        data_type: gwas
+        trait_type: binary
+        n_phenotypes: 3
+        metadata_file: "gs://finngen-commons/results_api_data/mapping_files/ibd_gwas_pheno.json"
+        metadata_harmonizer: finngen_r13
+        phenotypes:
+          - phenotype_code: "IBD"
+            phenotype_string: "Inflammatory bowel disease"
+            n_cases: 125992
+            n_controls: 1262229
+            n_samples: 1388221
+          - phenotype_code: "UC"
+            phenotype_string: "Ulcerative colitis"
+            n_cases: 57673
+            n_controls: 1286025
+            n_samples: 1343698
+          - phenotype_code: "CD"
+            phenotype_string: "Crohn's disease"
+            n_cases: 59734
+            n_controls: 1260866
+            n_samples: 1320600
+
+      covid_hgi:
+        resource: covid_hgi
+        version: "R7"
+        description: >-
+          COVID-19 Host Genetics Initiative R7 GWAS meta-analysis (excluding 23andMe).
+          Includes very severe respiratory COVID (A2), hospitalized vs. not hospitalized (B1),
+          hospitalized vs. population (B2), and COVID vs. population (C2).
+          For these data there are pseudo credible sets, no formal fine-mapping results.
+        author: "COVID-19 Host Genetics Initiative"
+        publication_date: "2022-04-03"
+        data_type: gwas
+        trait_type: binary
+        n_phenotypes: 4
+        metadata_file: "gs://finngen-commons/results_api_data/mapping_files/covid_hgi_pheno.json"
+        metadata_harmonizer: finngen_r13
+        pseudo_credible_sets: true
+
   daly:
+    datasets:
     datasets:
       # --- GWAS ---
       finngen_gwas:
@@ -1682,3 +1746,51 @@ profiles:
             n_cases: 63555
             n_controls: 1746386
             n_samples: 1809941
+
+      ibd_gwas:
+        resource: ibd_gwas
+        version: "2026"
+        description: >-
+          IBD GWAS meta-analysis across European, East Asian, and South Asian
+          ancestry cohorts from the International IBD Genetics Consortium (IIBDGC).
+          Includes IBD, Crohn's disease (CD), and ulcerative colitis (UC).
+        author: "IIBDGC"
+        publication_date: "NA"
+        data_type: gwas
+        trait_type: binary
+        n_phenotypes: 3
+        metadata_file: "gs://daly-genetics-results/mapping_files/ibd_gwas_pheno.json"
+        metadata_harmonizer: finngen_r13
+        phenotypes:
+          - phenotype_code: "IBD"
+            phenotype_string: "Inflammatory bowel disease"
+            n_cases: 125992
+            n_controls: 1262229
+            n_samples: 1388221
+          - phenotype_code: "UC"
+            phenotype_string: "Ulcerative colitis"
+            n_cases: 57673
+            n_controls: 1286025
+            n_samples: 1343698
+          - phenotype_code: "CD"
+            phenotype_string: "Crohn's disease"
+            n_cases: 59734
+            n_controls: 1260866
+            n_samples: 1320600
+
+      covid_hgi:
+        resource: covid_hgi
+        version: "R7"
+        description: >-
+          COVID-19 Host Genetics Initiative R7 GWAS meta-analysis (excluding 23andMe).
+          Includes very severe respiratory COVID (A2), hospitalized vs. not hospitalized (B1),
+          hospitalized vs. population (B2), and COVID vs. population (C2).
+          For these data there are pseudo credible sets, no formal fine-mapping results.
+        author: "COVID-19 Host Genetics Initiative"
+        publication_date: "2022-04-03"
+        data_type: gwas
+        trait_type: binary
+        n_phenotypes: 4
+        metadata_file: "gs://daly-genetics-results/mapping_files/covid_hgi_pheno.json"
+        metadata_harmonizer: finngen_r13
+        pseudo_credible_sets: true
