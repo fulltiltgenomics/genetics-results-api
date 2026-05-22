@@ -20,11 +20,10 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
 
     def __init__(self, data_file_id: str, data_type: Literal["cs", "assoc"]):
         DataAccessObject.__init__(self, data_file_id, data_type)
-        GCloudTabixBase.__init__(self)
 
         df = data_file_by_id[data_file_id]
 
-        # check if this data file supports the requested data type
+        # check config validity BEFORE creating aiohttp session in GCloudTabixBase
         valid_data_types = {"cs", "assoc", "exome", "gene_based"}
         if data_type not in df:
             available = [k for k in df.keys() if k in valid_data_types]
@@ -32,6 +31,8 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
                 f"Data file '{data_file_id}' does not support '{data_type}'. "
                 f"Supported: {available or 'none'}"
             )
+
+        GCloudTabixBase.__init__(self)
 
         self.resource_config = df[data_type]
         self.gencode_version = df.get("gencode_version")
