@@ -104,6 +104,7 @@ async def list_datasets(
             "caqtl": ["caQTL"],
             "sqtl": ["sQTL"],
             "metaboqtl": ["metaboQTL"],
+            "asmqtl": ["asmQTL"],
         }
         qtl_types = entry.get("qtl_types") or qtl_type_map.get(entry.get("data_type", ""))
         if qtl_types:
