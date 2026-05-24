@@ -7,6 +7,7 @@ import app.config.credible_sets as config_credible_sets
 from app.core.variant import Variant
 from app.core.service_container import container
 import uvicorn
+from app.core.logging_config import setup_logging
 
 
 def _get_data_access():
@@ -152,9 +153,11 @@ if __name__ == "__main__":
         _validate_metadata_files()
         asyncio.run(_run_async_validations())
         _validate_gene_disease()
+        # configure JSON logging before uvicorn starts so its loggers propagate to root
+        setup_logging()
         # use asyncio event loop instead of uvloop - uvloop uses sockets instead of pipes
         # for subprocess stdin, which can break tabix's -R /dev/stdin option (uvloop issue #532)
-        uvicorn.run("app.server:app", host="0.0.0.0", port=port, reload=True, loop="asyncio")
+        uvicorn.run("app.server:app", host="0.0.0.0", port=port, reload=True, loop="asyncio", log_config=None)
     except Exception as e:
         # log error without exposing full traceback to stdout in production
         import logging
