@@ -23,8 +23,8 @@ exome_header_schema = {
     "an": int,
     "n_cases": int,
     "n_controls": int,
-    "heritability": float,
     "trait": str,
+    "trait_original": str,
 }
 
 # column names for merging data across files

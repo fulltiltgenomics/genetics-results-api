@@ -8,7 +8,7 @@ gene_based_data_files = [
         "data_source": "gcloud",
         "gencode_version": 35,
         "gene_based": {
-            "file": "gs://daly-genetics-results/exome_results/genebass/gene_burden_results.tsv.gz",
+            "file": "gs://daly-genetics-results/exome_results4/genebass/genebass_gene_results.munged.tsv.gz",
         },
     },
     {
@@ -18,7 +18,7 @@ gene_based_data_files = [
         "data_source": "gcloud",
         "gencode_version": 39,
         "gene_based": {
-            "file": "gs://finngen-commons/results_api_data/exome_results/schema/SCHEMA2_gene_results.munged.noflag.tsv.gz",
+            "file": "gs://finngen-commons/results_api_data/exome_results4/schema/SCHEMA2_gene_results.munged.tsv.gz",
         },
     },
     {
@@ -28,7 +28,7 @@ gene_based_data_files = [
         "data_source": "gcloud",
         "gencode_version": 39,
         "gene_based": {
-            "file": "gs://daly-genetics-results/exome_results/bipex/BipEx2_gene_results.munged.mlog10p_gt4.noflag.tsv.gz",
+            "file": "gs://daly-genetics-results/exome_results4/bipex/BipEx2_gene_results.munged.tsv.gz",
         },
     },
     {
@@ -38,7 +38,7 @@ gene_based_data_files = [
         "data_source": "gcloud",
         "gencode_version": 43,
         "gene_based": {
-            "file": "gs://daly-genetics-results/exome_results/ibd/IBD_exome_2026_IBD_gene_results.munged.noflag.tsv.gz",
+            "file": "gs://daly-genetics-results/exome_results4/ibd/IBD_exome_IBD_gene_results.munged.tsv.gz",
         },
     },
     {
@@ -48,7 +48,7 @@ gene_based_data_files = [
         "data_source": "gcloud",
         "gencode_version": 43,
         "gene_based": {
-            "file": "gs://daly-genetics-results/exome_results/ibd/IBD_exome_2026_UC_gene_results.munged.noflag.tsv.gz",
+            "file": "gs://daly-genetics-results/exome_results4/ibd/IBD_exome_UC_gene_results.munged.tsv.gz",
         },
     },
     {
@@ -58,7 +58,7 @@ gene_based_data_files = [
         "data_source": "gcloud",
         "gencode_version": 43,
         "gene_based": {
-            "file": "gs://daly-genetics-results/exome_results/ibd/IBD_exome_2026_CD_gene_results.munged.noflag.tsv.gz",
+            "file": "gs://daly-genetics-results/exome_results4/ibd/IBD_exome_CD_gene_results.munged.tsv.gz",
         },
     },
 ]
