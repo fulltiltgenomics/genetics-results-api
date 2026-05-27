@@ -388,9 +388,9 @@ data_files = [
         },
     },
     {
-        "id": "bip_gwas_sumstats",
-        "dataset_id": "bip_gwas",
-        "resource": "bip",
+        "id": "pgc_bip_sumstats",
+        "dataset_id": "pgc_bip",
+        "resource": "pgc",
         "data_source": "gcloud",
         "file": "gs://finngen-commons/results_api_data/sumstats/BIP/bip2024_multianc_no23andMe.munged.tsv.gz",
         "phenotype": "BIP",
