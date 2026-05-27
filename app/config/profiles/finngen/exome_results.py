@@ -10,9 +10,9 @@ exome_data_files = [
         "gencode_version": 35,
         "exome": {
             "version": "v1",
-            "prefix": "gs://finngen-commons/results_api_data/exome_results4/genebass/individual/",
-            "suffix": ".mlog10p_gt4.tsv",
-            "all_exome_file": "gs://finngen-commons/results_api_data/exome_results4/genebass/genebass_variant_results.munged.mlog10p_gt4.tsv.gz",
+            "prefix": "gs://finngen-commons/results_api_data/exome_results/genebass/individual/",
+            "suffix": ".mlog10p4.tsv",
+            "all_exome_file": "gs://finngen-commons/results_api_data/exome_results4/genebass/genebass_variant_results_mlog10p4.tsv.gz",
         },
     },
     {

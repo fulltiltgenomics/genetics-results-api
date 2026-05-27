@@ -8,7 +8,7 @@ gene_based_data_files = [
         "data_source": "gcloud",
         "gencode_version": 35,
         "gene_based": {
-            "file": "gs://finngen-commons/results_api_data/exome_results4/genebass/genebass_gene_results.munged.tsv.gz",
+            "file": "gs://finngen-commons/results_api_data/exome_results4/genebass/gene_burden_results.tsv.gz",
         },
     },
     {
