@@ -924,6 +924,7 @@ profiles:
         data_type: exome
         trait_type: binary
         n_phenotypes: 3
+        n_samples: 564576
         metadata_file: null
         metadata_harmonizer: null
         phenotypes:
@@ -1663,6 +1664,7 @@ profiles:
         data_type: exome
         trait_type: binary
         n_phenotypes: 3
+        n_samples: 564576
         metadata_file: null
         metadata_harmonizer: null
         phenotypes:

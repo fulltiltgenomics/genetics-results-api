@@ -541,7 +541,7 @@ data_files = [
         "file": "gs://daly-genetics-results/asm_qtl/deCODE_asmQTL_CpG.munged.tsv.gz",
         "phenotype": "CpG",
         "column_mapping": {
-            "#chr": "chr",
+            "chr": "chr",
             "pos": "pos",
             "ref": "ref",
             "alt": "alt",
@@ -570,7 +570,7 @@ data_files = [
         "file": "gs://daly-genetics-results/asm_qtl/deCODE_asmQTL_MDS.munged.tsv.gz",
         "phenotype": "MDS",
         "column_mapping": {
-            "#chr": "chr",
+            "chr": "chr",
             "pos": "pos",
             "ref": "ref",
             "alt": "alt",
