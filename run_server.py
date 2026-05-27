@@ -148,7 +148,7 @@ if __name__ == "__main__":
     try:
         # create tbi cache dir and clean stale index files
         os.makedirs("/tmp/tbi_cache", exist_ok=True)
-        for file in glob.glob("/tmp/tbi_cache/*.tbi") + glob.glob("/tmp/tbi_cache/*.csi"):
+        for file in glob.glob("/tmp/tbi_cache/**/*.tbi", recursive=True) + glob.glob("/tmp/tbi_cache/**/*.csi", recursive=True):
             os.remove(file)
         _validate_metadata_files()
         asyncio.run(_run_async_validations())
