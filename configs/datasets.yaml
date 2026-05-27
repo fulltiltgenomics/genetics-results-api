@@ -134,6 +134,11 @@ resources:
     description: "GP2 (Global Parkinson's Genetics Program) European ancestry GWAS"
     aliases: ["GP2", "Parkinsons", "Parkinson's disease"]
 
+  decode:
+    label: "deCODE"
+    description: "deCODE Genetics — allele-specific methylation QTL (ASM-QTL) results"
+    aliases: ["deCODE", "decode genetics"]
+
 # ---------------------------------------------------------------------------
 # Tables: profile-independent BigQuery view metadata
 # Used by db-api for _TABLE_DESCRIPTIONS, _COLUMN_DESCRIPTIONS,
@@ -292,17 +297,17 @@ tables:
     description: >-
       Single-variant exome association results from multiple resources with different
       significance thresholds. Genebass contains variants filtered to p < 1e-4.
-      IBD exome (ibd_exome_2026) contains only exome-wide significant variants
-      (p < 3e-7 after conditional analysis) and LD-curated remaining variants (p < 5e-6).
+      IBD exome (ibd_exome_2026) contains variants filtered to mlog10p > 4.
+      SCHEMA2 contains exome variant results for schizophrenia filtered to mlog10p > 4.
 
     columns:
-      dataset: "Study name (e.g. genebass, IBD_exome_2026)"
+      dataset: "Study name (e.g. genebass, IBD_exome, SCHEMA2)"
       chr: "Chromosome number, chromosome X is 23"
       pos: "Genomic position (GRCh38)"
       ref: "Reference allele"
       alt: "Alternative (effect) allele"
       gene: "Gene symbol (e.g. PCSK9)"
-      annotation: "Variant annotation filter (e.g. pLoF, missense, synonymous, LC)"
+      annotation: "Variant annotation filter (e.g. pLoF, missense, synonymous, splice_region_variant)"
       mlog10p: "-log10(p-value) for the single-variant association. Higher = more significant"
       beta: "Effect size estimate (log-OR for binary traits)"
       se: "Standard error of beta"
@@ -311,10 +316,10 @@ tables:
       af_controls: "Alternative allele frequency in controls"
       ac: "Alternative allele count"
       an: "Alternative allele number (total alleles genotyped)"
-      heritability: "SNP heritability estimate for the trait"
-      n_cases: "Number of cases in the analysis (available for IBD exome, null for genebass)"
-      n_controls: "Number of controls in the analysis (available for IBD exome, null for genebass)"
+      n_cases: "Number of cases in the analysis (may be NA)"
+      n_controls: "Number of controls in the analysis (may be NA)"
       trait: "Trait/phenotype name"
+      trait_original: "Original trait name in the respective dataset"
       variant: "Variant identifier as chr:pos:ref:alt"
       resource: "Data source identifier (lowercase)"
 
@@ -344,14 +349,14 @@ tables:
       (e.g. BipEx2, SCHEMA2, Genebass, IBD exome).
 
     columns:
-      dataset: "Study name (e.g. BipEx2, SCHEMA2, genebass, IBD_exome_2026)"
+      dataset: "Study name (e.g. BipEx2, SCHEMA2, genebass, IBD_exome)"
       trait: "Trait/phenotype name"
       gene: "Gene symbol (e.g. PCSK9)"
       gene_id: "Ensembl gene ID (e.g. ENSG00000169174)"
       chr: "Chromosome number, chromosome X is 23"
       gene_start_pos: "Gene start position (GRCh38)"
       gene_end_pos: "Gene end position (GRCh38)"
-      annotation: "Variant annotation filter used in burden test (e.g. pLoF, missense, PTV)"
+      annotation: "Variant annotation filter used in burden test (e.g. pLoF, nonsynonymous)"
       mlog10p_burden: "-log10(p-value) from the gene-level burden test. Higher = more significant"
       beta: "Effect size estimate from burden test"
       se: "Standard error of beta"
@@ -359,22 +364,21 @@ tables:
       total_variants_pheno: "Qualifying variants with phenotype data"
       n_cases: "Number of cases in the analysis"
       n_controls: "Number of controls in the analysis"
-      description: "Human-readable trait/phenotype description"
-      coding_description: "Coded trait description"
-      category: "Trait category grouping"
+      trait_original: "Original trait name in the respective dataset"
+      flags: "Quality or analysis flags (NA if none)"
       resource: "Data source identifier (lowercase). Use this for filtering, not dataset"
 
     examples:
       - description: "Significant gene burden results from BipEx2 bipolar exome study"
         sql: >-
-          SELECT gene, annotation, mlog10p_burden, beta, n_cases, n_controls, description
+          SELECT gene, annotation, mlog10p_burden, beta, n_cases, n_controls
           FROM gene_burden_results_v
           WHERE resource = 'bipex2' AND mlog10p_burden > 3
           ORDER BY mlog10p_burden DESC LIMIT 20
 
       - description: "Compare burden results for a gene across all exome studies"
         sql: >-
-          SELECT resource, dataset, annotation, mlog10p_burden, beta, description
+          SELECT resource, dataset, annotation, mlog10p_burden, beta
           FROM gene_burden_results_v
           WHERE gene = 'PCSK9'
           ORDER BY mlog10p_burden DESC
@@ -383,6 +387,61 @@ tables:
       resource: null
       dataset: "resource"
       annotation: "resource"
+
+  asm_qtl_v:
+    description: >-
+      Allele-specific methylation QTL (ASM-QTL) results from deCODE Genetics.
+      Contains associations between sequence variants and CpG methylation rates
+      (CpG units) or methylation depleted sequence (MDS) methylation rates.
+
+    columns:
+      dataset: "Source dataset (deCODE_asmQTL_CpG, deCODE_asmQTL_MDS)"
+      chr: "Chromosome number"
+      pos: "Genomic position (GRCh38)"
+      ref: "Reference allele"
+      alt: "Alternative allele"
+      rsid: "dbSNP rsID"
+      beta: "Effect size (SD units) of the variant on methylation rates"
+      se: "Standard error of beta"
+      mlog10p: "-log10(p-value). Higher = more significant"
+      af: "Allele frequency"
+      most_severe: "Most severe VEP-predicted variant consequence"
+      gene_most_severe: "Gene symbol associated with the most severe consequence"
+      target_start: "Start position of the methylation target (CpG unit or MDS)"
+      target_end: "End position of the methylation target (CpG unit or MDS)"
+      ref_methylrate: "Average methylation rate on reference haplotype"
+      alt_methylrate: "Average methylation rate on alternative haplotype"
+      n_haplotypes: "Number of informative haplotypes used in analysis"
+      variant_rank: "primary = most significant variant, secondary = most significant on major allele of primary"
+      ld_count: "Number of variants in high LD (r2>0.8) with this variant"
+      vartype: "Variant type (SNV, SV, etc.)"
+      variant: "Variant identifier as chr:pos:ref:alt"
+      maf: "Minor allele frequency = LEAST(af, 1-af)"
+      resource: "Data source identifier (lowercase)"
+
+    examples:
+      - description: "ASM-QTL associations for variants near a gene"
+        sql: >-
+          SELECT variant, rsid, mlog10p, beta, target_start, target_end,
+                 ref_methylrate, alt_methylrate, variant_rank
+          FROM asm_qtl_v
+          WHERE gene_most_severe = 'PCSK9'
+          ORDER BY mlog10p DESC LIMIT 20
+
+      - description: "Primary ASM-QTL associations with large methylation differences"
+        sql: >-
+          SELECT variant, rsid, gene_most_severe, mlog10p,
+                 ref_methylrate, alt_methylrate, dataset
+          FROM asm_qtl_v
+          WHERE variant_rank = 'primary'
+            AND ABS(ref_methylrate - alt_methylrate) > 0.2
+          ORDER BY mlog10p DESC LIMIT 50
+
+    categorical_columns:
+      resource: null
+      dataset: "resource"
+      variant_rank: null
+      vartype: null
 
 # ---------------------------------------------------------------------------
 # Dataset-to-resource mapping rules
@@ -416,13 +475,19 @@ dataset_to_resource_rules:
     applies_to: ["credible_sets_v", "colocalization_v", "coloc_credsets_v"]
     comment: "Open Targets datasets (versioned names)"
 
+  # asm_qtl_v patterns
+  - pattern: "deCODE%"
+    resource: "decode"
+    applies_to: ["asm_qtl_v"]
+    comment: "deCODE ASM-QTL datasets"
+
   # exome/burden-only exact matches
   - pattern: "genebass"
     resource: "genebass"
     applies_to: ["exome_variant_results_v", "gene_burden_results_v"]
     comment: "exact match for exome/burden views"
 
-  - pattern: "IBD_exome_2026"
+  - pattern: "IBD_exome"
     resource: "ibd_exome_2026"
     applies_to: ["exome_variant_results_v", "gene_burden_results_v"]
     comment: "IBD exome variant and gene burden results"
@@ -431,6 +496,16 @@ dataset_to_resource_rules:
     resource: "covid_hgi"
     applies_to: ["credible_sets_v", "colocalization_v", "coloc_credsets_v"]
     comment: "COVID-19 Host Genetics Initiative"
+
+  - pattern: "PGC"
+    resource: "pgc"
+    applies_to: ["credible_sets_v", "colocalization_v", "coloc_credsets_v"]
+    comment: "PGC SCZ/BIP meta-analyses"
+
+  - pattern: "GP2"
+    resource: "gp2"
+    applies_to: ["credible_sets_v", "colocalization_v", "coloc_credsets_v"]
+    comment: "GP2 Parkinson's GWAS"
 
   # fallback: lowercase the dataset name
   - pattern: "*"
@@ -661,6 +736,35 @@ profiles:
         metadata_file: null
         metadata_harmonizer: null
 
+      # --- ASM-QTL ---
+      decode_asmqtl_cpg:
+        resource: decode
+        version: "v1"
+        description: >-
+          deCODE CpG methylation ASM-QTL. Allele-specific methylation QTLs identifying
+          sequence variants associated with 5-mCpG rates of individual CpG units.
+          Based on whole-genome bisulfite sequencing of Icelandic samples.
+        author: "deCODE Genetics"
+        publication_date: "2024-07-24"
+        data_type: asmqtl
+        trait_type: quantitative
+        metadata_file: null
+        metadata_harmonizer: null
+
+      decode_asmqtl_mds:
+        resource: decode
+        version: "v1"
+        description: >-
+          deCODE MDS methylation ASM-QTL. Allele-specific methylation QTLs identifying
+          sequence variants associated with 5-mCpG rates of methylation depleted sequences (MDSs).
+          Based on whole-genome bisulfite sequencing of Icelandic samples.
+        author: "deCODE Genetics"
+        publication_date: "2024-07-24"
+        data_type: asmqtl
+        trait_type: quantitative
+        metadata_file: null
+        metadata_harmonizer: null
+
       # --- collection ---
       eqtl_catalogue:
         resource: eqtl_catalogue
@@ -843,6 +947,29 @@ profiles:
             n_cases: 44131
             n_controls: 478363
             n_samples: 522494
+
+      schema_exome:
+        resource: schema2
+        version: "v2"
+        description: >-
+          SCHEMA consortium exome variant-level results. Single-variant rare variant
+          association results for schizophrenia from exome sequencing of 87,959 cases
+          and 150,587 controls. Results filtered to mlog10p > 4.
+        author: "SCHEMA Consortium"
+        publication_date: "NA"
+        data_type: exome
+        trait_type: binary
+        n_samples: 238546
+        n_cases: 87959
+        n_controls: 150587
+        metadata_file: null
+        metadata_harmonizer: null
+        phenotypes:
+          - phenotype_code: "SCZ"
+            phenotype_string: "Schizophrenia"
+            n_cases: 87959
+            n_controls: 150587
+            n_samples: 238546
 
       genebass_gene_based:
         resource: genebass
@@ -1106,15 +1233,48 @@ profiles:
         version: "R7"
         description: >-
           COVID-19 Host Genetics Initiative R7 GWAS meta-analysis (excluding 23andMe).
-          Includes very severe respiratory COVID (A2), hospitalized vs. not hospitalized (B1),
-          hospitalized vs. population (B2), and COVID vs. population (C2).
-          For these data there are pseudo credible sets, no formal fine-mapping results.
+          Phenotypes: very severe respiratory (A2), hospitalized vs. not hospitalized (B1),
+          hospitalized vs. population (B2), COVID vs. population (C2).
+          Pseudo credible sets (mlog10p>=2, r2>=0.6); not formally fine-mapped.
+          Bundled with other external GWAS in the shared ext/ collected file.
         author: "COVID-19 Host Genetics Initiative"
-        publication_date: "2022-04-03"
+        publication_date: "2026-05-26"
         data_type: gwas
         trait_type: binary
         n_phenotypes: 4
         metadata_file: "gs://finngen-commons/results_api_data/mapping_files/covid_hgi_pheno.json"
+        metadata_harmonizer: finngen_r13
+        pseudo_credible_sets: true
+
+      pgc_meta:
+        resource: pgc
+        version: "2024"
+        description: >-
+          PGC GWAS meta-analyses — Schizophrenia wave 3 (SCZ) and Bipolar disorder 2024 (BIP).
+          Pseudo credible sets (mlog10p>=2, r2>=0.6); not formally fine-mapped.
+          Bundled with other external GWAS in the shared ext/ collected file.
+        author: "Psychiatric Genomics Consortium"
+        publication_date: "2026-05-26"
+        data_type: gwas
+        trait_type: binary
+        n_phenotypes: 2
+        metadata_file: "gs://finngen-commons/results_api_data/mapping_files/pgc_meta_pheno.json"
+        metadata_harmonizer: finngen_r13
+        pseudo_credible_sets: true
+
+      gp2_meta:
+        resource: gp2
+        version: "EUR"
+        description: >-
+          GP2 (Global Parkinson's Genetics Program) European-ancestry Parkinson's disease GWAS.
+          Pseudo credible sets (mlog10p>=2, r2>=0.6); not formally fine-mapped.
+          Bundled with other external GWAS in the shared ext/ collected file.
+        author: "Global Parkinson's Genetics Program"
+        publication_date: "2026-05-26"
+        data_type: gwas
+        trait_type: binary
+        n_phenotypes: 1
+        metadata_file: "gs://finngen-commons/results_api_data/mapping_files/gp2_meta_pheno.json"
         metadata_harmonizer: finngen_r13
         pseudo_credible_sets: true
 
@@ -1338,6 +1498,35 @@ profiles:
         metadata_file: null
         metadata_harmonizer: null
 
+      # --- ASM-QTL ---
+      decode_asmqtl_cpg:
+        resource: decode
+        version: "v1"
+        description: >-
+          deCODE CpG methylation ASM-QTL. Allele-specific methylation QTLs identifying
+          sequence variants associated with 5-mCpG rates of individual CpG units.
+          Based on whole-genome bisulfite sequencing of Icelandic samples.
+        author: "deCODE Genetics"
+        publication_date: "2024-07-24"
+        data_type: asmqtl
+        trait_type: quantitative
+        metadata_file: null
+        metadata_harmonizer: null
+
+      decode_asmqtl_mds:
+        resource: decode
+        version: "v1"
+        description: >-
+          deCODE MDS methylation ASM-QTL. Allele-specific methylation QTLs identifying
+          sequence variants associated with 5-mCpG rates of methylation depleted sequences (MDSs).
+          Based on whole-genome bisulfite sequencing of Icelandic samples.
+        author: "deCODE Genetics"
+        publication_date: "2024-07-24"
+        data_type: asmqtl
+        trait_type: quantitative
+        metadata_file: null
+        metadata_harmonizer: null
+
       # --- collection ---
       eqtl_catalogue:
         resource: eqtl_catalogue
@@ -1520,6 +1709,29 @@ profiles:
             n_cases: 44131
             n_controls: 478363
             n_samples: 522494
+
+      schema_exome:
+        resource: schema2
+        version: "v2"
+        description: >-
+          SCHEMA consortium exome variant-level results. Single-variant rare variant
+          association results for schizophrenia from exome sequencing of 87,959 cases
+          and 150,587 controls. Results filtered to mlog10p > 4.
+        author: "SCHEMA Consortium"
+        publication_date: "NA"
+        data_type: exome
+        trait_type: binary
+        n_samples: 238546
+        n_cases: 87959
+        n_controls: 150587
+        metadata_file: null
+        metadata_harmonizer: null
+        phenotypes:
+          - phenotype_code: "SCZ"
+            phenotype_string: "Schizophrenia"
+            n_cases: 87959
+            n_controls: 150587
+            n_samples: 238546
 
       genebass_gene_based:
         resource: genebass
@@ -1783,14 +1995,47 @@ profiles:
         version: "R7"
         description: >-
           COVID-19 Host Genetics Initiative R7 GWAS meta-analysis (excluding 23andMe).
-          Includes very severe respiratory COVID (A2), hospitalized vs. not hospitalized (B1),
-          hospitalized vs. population (B2), and COVID vs. population (C2).
-          For these data there are pseudo credible sets, no formal fine-mapping results.
+          Phenotypes: very severe respiratory (A2), hospitalized vs. not hospitalized (B1),
+          hospitalized vs. population (B2), COVID vs. population (C2).
+          Pseudo credible sets (mlog10p>=2, r2>=0.6); not formally fine-mapped.
+          Bundled with other external GWAS in the shared ext/ collected file.
         author: "COVID-19 Host Genetics Initiative"
-        publication_date: "2022-04-03"
+        publication_date: "2026-05-26"
         data_type: gwas
         trait_type: binary
         n_phenotypes: 4
         metadata_file: "gs://daly-genetics-results/mapping_files/covid_hgi_pheno.json"
+        metadata_harmonizer: finngen_r13
+        pseudo_credible_sets: true
+
+      pgc_meta:
+        resource: pgc
+        version: "2024"
+        description: >-
+          PGC GWAS meta-analyses — Schizophrenia wave 3 (SCZ) and Bipolar disorder 2024 (BIP).
+          Pseudo credible sets (mlog10p>=2, r2>=0.6); not formally fine-mapped.
+          Bundled with other external GWAS in the shared ext/ collected file.
+        author: "Psychiatric Genomics Consortium"
+        publication_date: "2026-05-26"
+        data_type: gwas
+        trait_type: binary
+        n_phenotypes: 2
+        metadata_file: "gs://daly-genetics-results/mapping_files/pgc_meta_pheno.json"
+        metadata_harmonizer: finngen_r13
+        pseudo_credible_sets: true
+
+      gp2_meta:
+        resource: gp2
+        version: "EUR"
+        description: >-
+          GP2 (Global Parkinson's Genetics Program) European-ancestry Parkinson's disease GWAS.
+          Pseudo credible sets (mlog10p>=2, r2>=0.6); not formally fine-mapped.
+          Bundled with other external GWAS in the shared ext/ collected file.
+        author: "Global Parkinson's Genetics Program"
+        publication_date: "2026-05-26"
+        data_type: gwas
+        trait_type: binary
+        n_phenotypes: 1
+        metadata_file: "gs://daly-genetics-results/mapping_files/gp2_meta_pheno.json"
         metadata_harmonizer: finngen_r13
         pseudo_credible_sets: true

@@ -37,6 +37,30 @@ data_file_by_id = {**cs_data_file_by_id, **exome_data_file_by_id, **gene_based_d
 logger = logging.getLogger(__name__)
 
 
+def _dedup_by_combined_file(
+    data_file_ids: list[str], data_type: str
+) -> list[str]:
+    """Drop duplicate data file IDs that point at the same combined (all_cs/all_exome) file.
+
+    When several datasets share one collected TSV (e.g. EXT pseudo CS), tabixing it
+    once per data file ID would re-fetch the same bytes; keep only the first ID per
+    unique combined file. Per-row resource attribution is preserved by tsv_line_iterator.
+    """
+    seen: set[str] = set()
+    result: list[str] = []
+    for did in data_file_ids:
+        df = data_file_by_id.get(did)
+        combined: str | None = None
+        if df and data_type in df:
+            cfg = df[data_type]
+            combined = cfg.get("all_cs_file") or cfg.get("all_exome_file")
+        if combined is None or combined not in seen:
+            if combined is not None:
+                seen.add(combined)
+            result.append(did)
+    return result
+
+
 class DataAccessObject(BaseDataAccessObject):
     """Abstract base class for data access operations for a specific resource and data type."""
 
@@ -395,6 +419,11 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 # fallback: treat as data file ID directly
                 data_file_ids.append(resource)
 
+        # dedup data file IDs that share the same combined file (tabix it once)
+        data_file_ids = _dedup_by_combined_file(data_file_ids, data_type)
+        # row-level filter for shared-file rows belonging to other resources
+        resource_filter = {r.encode() for r in resources}
+
         # get access objects and chunk iterators, skipping any that fail
         accesses_and_iterators = []
         for data_file_id in data_file_ids:
@@ -422,7 +451,9 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         columns = exome_variant_columns if data_type == "exome" else cs_variant_columns
 
         line_iterators = [
-            tsv_line_iterator(iterator, access.get_header(), columns, variant)
+            tsv_line_iterator(
+                iterator, access.get_header(), columns, variant, resource_filter
+            )
             for access, iterator in zip(accesses, chunk_iterators)
         ]
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
@@ -453,6 +484,9 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
             else:
                 data_file_ids.append(resource)
 
+        data_file_ids = _dedup_by_combined_file(data_file_ids, data_type)
+        resource_filter = {r.encode() for r in resources}
+
         chrs = [v.chr for v in variants]
         positions = [v.pos for v in variants]
         variant_set = set(variants)
@@ -481,7 +515,9 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         columns = exome_variant_columns if data_type == "exome" else cs_variant_columns
 
         line_iterators = [
-            tsv_line_iterator(iterator, access.get_header(), columns, variant_set)
+            tsv_line_iterator(
+                iterator, access.get_header(), columns, variant_set, resource_filter
+            )
             for access, iterator in zip(accesses, chunk_iterators)
         ]
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
@@ -514,6 +550,9 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
             else:
                 # fallback: treat as data file ID directly
                 data_file_ids.append(resource)
+
+        data_file_ids = _dedup_by_combined_file(data_file_ids, data_type)
+        resource_filter = {r.encode() for r in resources}
 
         # create access objects, skipping data files that don't support this data type
         accesses = []
@@ -552,7 +591,9 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         columns = exome_variant_columns if data_type == "exome" else cs_variant_columns
 
         line_iterators = [
-            tsv_line_iterator(iterator, access.get_header(), columns, variant)
+            tsv_line_iterator(
+                iterator, access.get_header(), columns, variant, resource_filter
+            )
             for access, iterator in zip(accesses, chunk_iterators)
         ]
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()

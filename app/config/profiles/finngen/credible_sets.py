@@ -174,9 +174,35 @@ data_files = [
         "example_pheno_or_study": "COVID_A2",
         "gencode_version": 49,
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/covid_hgi_pseudo/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ext/",
             "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/covid_hgi_pseudo/COVID19_HGI_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ext/EXT_20260526_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+        },
+    },
+    {
+        "id": "pgc_meta",
+        "dataset_id": "pgc_meta",
+        "resource": "pgc",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "SCZ",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ext/",
+            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ext/EXT_20260526_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+        },
+    },
+    {
+        "id": "gp2_meta",
+        "dataset_id": "gp2_meta",
+        "resource": "gp2",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "PD",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ext/",
+            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ext/EXT_20260526_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
         },
     },
     {

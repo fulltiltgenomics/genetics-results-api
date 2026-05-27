@@ -162,17 +162,21 @@ def tsv_line_iterator(
     header: list[bytes],
     columns: dict[str, bytes],
     variant: Variant | set[Variant] | None,
+    resource_filter: set[bytes] | None = None,
 ) -> AsyncIterator[list[bytes]]:
     """
     Iterate over lines in a stream and split them into a list.
     Adds resource and version as the first two columns.
     If variant is provided, limit data to the variant(s).
+    If resource_filter is provided, drop rows whose computed resource isn't in the set
+    (used when a combined file is shared across resources — see data_access.stream_range).
 
     Args:
         stream: Async iterator of byte chunks
         header: Header columns from the data file (used to look up column indices)
         columns: Dict mapping column keys to column names (e.g. {"chr": b"chr", ...})
         variant: Variant or set of Variants to filter by, or None for no filtering
+        resource_filter: Optional set of resource names (bytes) to keep
     """
     # derive column indices from header
     chr_col = header.index(columns["chr"])
@@ -187,7 +191,13 @@ def tsv_line_iterator(
         }
 
     def filter_fn(s: list[bytes]) -> bool:
-        """Filter to specific variant(s) if provided."""
+        """Filter to specific variant(s) and/or requested resources, if provided."""
+        if resource_filter is not None:
+            resource_bytes, _ = (
+                dataset_mapping.get_resource_and_version_bytes_by_dataset(s[dataset_col])
+            )
+            if resource_bytes not in resource_filter:
+                return False
         if variant is None:
             return True
         if isinstance(variant, set):
