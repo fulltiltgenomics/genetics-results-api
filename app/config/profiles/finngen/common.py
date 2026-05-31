@@ -67,6 +67,11 @@ variant_annotation_sources = {
     "finngen": {
         "file": "gs://finngen-commons/results_api_data/variant_annotations/R13_annotated_variants_v0.small.gz",
     },
+    "gnomad": {
+        "file": "gs://finngen-commons/gnomad/gnomad.genomes.exomes.v4.0.sites.v2.tsv.bgz",
+        # gnomad cpra layout differs from finngen: chr=0,pos=1,ref=2,alt=3
+        "cpra_cols": [0, 1, 2, 3],
+    },
 }
 
 phenotype_markdown_template = "gs://finngen-commons/results_api_data/phenotype_reports/{resource}/{phenocode}_gene_summary.md"

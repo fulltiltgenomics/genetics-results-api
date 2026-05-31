@@ -9,11 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 class VariantAnnotationService(GCloudTabixBase):
-    # column indices in the annotation file
-    _CHR_COL = 1
-    _POS_COL = 2
-    _REF_COL = 3
-    _ALT_COL = 4
+    # default cpra (chr/pos/ref/alt) column indices when a source omits "cpra_cols"
+    _DEFAULT_CPRA_COLS = (1, 2, 3, 4)
 
     def _init_storage(self):
         pass
@@ -22,6 +19,9 @@ class VariantAnnotationService(GCloudTabixBase):
         super().__init__()
         self._sources = config.variant_annotation_sources
         self._headers: dict[str, list[bytes]] = {}
+
+    def _cpra_cols(self, source: str) -> tuple[int, int, int, int]:
+        return tuple(self._sources[source].get("cpra_cols", self._DEFAULT_CPRA_COLS))
 
     def get_available_sources(self) -> list[str]:
         return list(self._sources.keys())
@@ -57,11 +57,15 @@ class VariantAnnotationService(GCloudTabixBase):
             ends,
             config.read_chunk_size,
         )
-        return self._filter_by_variants(raw_stream, variants)
+        return self._filter_by_variants(raw_stream, variants, self._cpra_cols(source))
 
     async def _filter_by_variants(
-        self, stream: AsyncGenerator[bytes, None], variants: list[Variant]
+        self,
+        stream: AsyncGenerator[bytes, None],
+        variants: list[Variant],
+        cpra_cols: tuple[int, int, int, int],
     ) -> AsyncGenerator[bytes, None]:
+        chr_col, pos_col, ref_col, alt_col = cpra_cols
         variant_keys = {
             (v.chr_bytes, v.pos_bytes, v.ref_bytes, v.alt_bytes) for v in variants
         }
@@ -76,10 +80,10 @@ class VariantAnnotationService(GCloudTabixBase):
                     continue
                 fields = line.split(b"\t")
                 key = (
-                    fields[self._CHR_COL],
-                    fields[self._POS_COL],
-                    fields[self._REF_COL],
-                    fields[self._ALT_COL],
+                    fields[chr_col],
+                    fields[pos_col],
+                    fields[ref_col],
+                    fields[alt_col],
                 )
                 if key in variant_keys:
                     yield line + b"\n"
@@ -89,10 +93,10 @@ class VariantAnnotationService(GCloudTabixBase):
         if buffer.strip() != b"":
             fields = buffer.split(b"\t")
             key = (
-                fields[self._CHR_COL],
-                fields[self._POS_COL],
-                fields[self._REF_COL],
-                fields[self._ALT_COL],
+                fields[chr_col],
+                fields[pos_col],
+                fields[ref_col],
+                fields[alt_col],
             )
             if key in variant_keys:
                 yield buffer + b"\n"
