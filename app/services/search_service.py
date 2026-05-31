@@ -2,6 +2,7 @@ import logging
 from typing import Literal, TYPE_CHECKING
 import polars as pl
 from rapidfuzz import fuzz, process
+from app.config.summary_stats import get_available_resources_and_types
 from app.services.config_util import get_datasets, get_resources_with_metadata
 
 if TYPE_CHECKING:
@@ -9,6 +10,10 @@ if TYPE_CHECKING:
     from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 
 logger = logging.getLogger(__name__)
+
+# (resource, data_type) pairs that have summary statistics available, used to
+# annotate phenotype search results with has_summary_stats
+_SUMSTATS_PAIRS = set(get_available_resources_and_types())
 
 
 class SearchIndex:
@@ -48,8 +53,11 @@ class SearchIndex:
 
         for resource in get_resources_with_metadata():
             try:
-                # get harmonized metadata which handles configs internally
-                harmonized_dicts = self._data_access.get_harmonized_metadata(resource)
+                # get harmonized metadata which handles configs internally;
+                # data_type is needed so /search can expose summary_stats availability
+                harmonized_dicts = self._data_access.get_harmonized_metadata(
+                    resource, include_data_type=True
+                )
                 logger.debug(f"Loading {len(harmonized_dicts)} phenotypes from {resource}")
 
                 for item_dict in harmonized_dicts:
@@ -66,15 +74,18 @@ class SearchIndex:
                     if code and name:
                         n_cases = item_dict.get("n_cases", "NA")
                         n_controls = item_dict.get("n_controls", "NA")
+                        data_type = item_dict.get("data_type")
 
                         phenotype = {
                             "type": "phenotype",
                             "code": code,
                             "name": name,
                             "resource": resource,
+                            "data_type": data_type,
                             "sample_size": sample_size,
                             "n_cases": n_cases,
                             "n_controls": n_controls,
+                            "has_summary_stats": (resource, data_type) in _SUMSTATS_PAIRS,
                             # store normalized search strings
                             "search_strings": [
                                 code.lower(),
@@ -101,6 +112,7 @@ class SearchIndex:
             if not inline_phenos:
                 continue
             resource = entry.get("resource", dataset_id)
+            data_type = entry.get("data_type")
             for item_dict in inline_phenos:
                 code = item_dict.get("phenotype_code")
                 name = item_dict.get("phenotype_string")
@@ -113,9 +125,11 @@ class SearchIndex:
                         "code": code,
                         "name": name,
                         "resource": resource,
+                        "data_type": data_type,
                         "sample_size": n_samples,
                         "n_cases": n_cases,
                         "n_controls": n_controls,
+                        "has_summary_stats": (resource, data_type) in _SUMSTATS_PAIRS,
                         "search_strings": [code.lower(), name.lower()],
                     }
                     self.phenotypes.append(phenotype)

@@ -2,7 +2,7 @@ from abc import abstractmethod
 import json
 
 import fsspec
-from app.config.datasets import build_harmonizer_config
+from app.config.datasets import build_harmonizer_config, get_dataset
 from app.config.credible_sets import (
     data_file_by_id as cs_data_file_by_id,
     variant_columns as cs_variant_columns,
@@ -238,8 +238,15 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
 
         return all_meta
 
-    def get_harmonized_metadata(self, resource: str) -> list[dict[str, Any]]:
-        """Get harmonized metadata for a resource in unified format."""
+    def get_harmonized_metadata(
+        self, resource: str, include_data_type: bool = False
+    ) -> list[dict[str, Any]]:
+        """Get harmonized metadata for a resource in unified format.
+
+        When ``include_data_type`` is set, each returned dict carries the
+        owning dataset's ``data_type`` so callers (e.g. the search index) can
+        match phenotypes against summary_stats (resource, data_type) pairs.
+        """
         from app.services.config_util import get_data_file_ids_for_resource
 
         # get all data file IDs for the resource
@@ -294,10 +301,17 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 harmonized = harmonizer.harmonize_metadata(
                     resource, raw_metadata, harm_config
                 )
-                all_harmonized.extend(harmonized)
+                if include_data_type:
+                    dataset = get_dataset(dataset_id) or {}
+                    data_type = dataset.get("data_type")
+                    for item in harmonized:
+                        item_dict = item.to_dict()
+                        item_dict["data_type"] = data_type
+                        all_harmonized.append(item_dict)
+                else:
+                    all_harmonized.extend(item.to_dict() for item in harmonized)
 
-        # convert to dicts for JSON serialization
-        return [item.to_dict() for item in all_harmonized]
+        return all_harmonized
 
     async def stream_phenotype(
         self,
