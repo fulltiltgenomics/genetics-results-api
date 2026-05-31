@@ -256,8 +256,13 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
 
         all_harmonized = []
         harmonizer = MetadataHarmonizer()
-        seen_metadata_files = set()
 
+        # group data file configs by metadata_file so a file shared by multiple
+        # datasets (e.g. genebass exome + gene_based) is read only once. the
+        # per-phenotype data_type lives on the dataset registry entry, not in the
+        # metadata rows, so we collect the data_types of every dataset sharing a
+        # file and expand each harmonized phenotype across them when requested.
+        metadata_groups: dict[str, dict[str, Any]] = {}
         for data_file_id in data_file_ids:
             if data_file_id not in data_file_by_id:
                 continue
@@ -270,12 +275,23 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 continue
             metadata_file = harm_config["metadata"]["metadata_file"]
 
-            # skip if already processed this metadata file
-            if metadata_file in seen_metadata_files:
-                continue
-            seen_metadata_files.add(metadata_file)
+            group = metadata_groups.get(metadata_file)
+            if group is None:
+                # keep the first dataset's harm_config; harmonization output does
+                # not depend on data_type, so any dataset sharing the file is fine
+                group = {"harm_config": harm_config, "data_types": []}
+                metadata_groups[metadata_file] = group
 
-            # read raw metadata for this data file
+            data_type = (get_dataset(dataset_id) or {}).get("data_type")
+            # ordered-unique: a file shared by datasets with the SAME data_type
+            # must not duplicate rows
+            if data_type not in group["data_types"]:
+                group["data_types"].append(data_type)
+
+        for metadata_file, group in metadata_groups.items():
+            harm_config = group["harm_config"]
+
+            # read raw metadata for this file
             compression = (
                 "gzip"
                 if metadata_file.endswith(".gz")
@@ -296,20 +312,24 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                         s = line.strip().split("\t")
                         raw_metadata.append(dict(zip(header, s)))
 
+            if not raw_metadata:
+                continue
+
             # harmonize with config from dataset registry
-            if raw_metadata:
-                harmonized = harmonizer.harmonize_metadata(
-                    resource, raw_metadata, harm_config
-                )
-                if include_data_type:
-                    dataset = get_dataset(dataset_id) or {}
-                    data_type = dataset.get("data_type")
-                    for item in harmonized:
-                        item_dict = item.to_dict()
+            harmonized = harmonizer.harmonize_metadata(
+                resource, raw_metadata, harm_config
+            )
+            if include_data_type:
+                # emit one dict per (phenotype, data_type) so a phenotype with
+                # multiple result types appears once per type in the search index
+                for item in harmonized:
+                    base = item.to_dict()
+                    for data_type in group["data_types"]:
+                        item_dict = dict(base)
                         item_dict["data_type"] = data_type
                         all_harmonized.append(item_dict)
-                else:
-                    all_harmonized.extend(item.to_dict() for item in harmonized)
+            else:
+                all_harmonized.extend(item.to_dict() for item in harmonized)
 
         return all_harmonized
 
