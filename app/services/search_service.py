@@ -31,6 +31,12 @@ class SearchIndex:
         self.phenotypes = []
         self.genes = []
         self.search_items = []
+        # hgnc_id -> gene record, the single bridge from HGNC ids (used by
+        # GeneGroupService) back to symbol/ensembl/coords already loaded here
+        self.genes_by_hgnc_id: dict[str, dict] = {}
+        # lazily-built exact symbol/alias/prev -> approved symbol index
+        # (see _ensure_symbol_index / normalize_symbol)
+        self._symbol_index: dict[str, tuple[str, bool]] | None = None
         self._hgnc_file = hgnc_file
         self._data_access = data_access
         self._gene_name_mapping = gene_name_mapping
@@ -163,6 +169,7 @@ class SearchIndex:
                 symbol = row.get("symbol")
                 name = row.get("name")
                 ensembl_id = row.get("ensembl_gene_id")
+                hgnc_id = row.get("hgnc_id")
 
                 if not symbol:
                     continue
@@ -179,6 +186,7 @@ class SearchIndex:
                 coords = coords_lookup.get(ensembl_id) if ensembl_id else None
                 gene = {
                     "type": "gene",
+                    "hgnc_id": hgnc_id or "",
                     "symbol": symbol,
                     "name": name or "",
                     "aliases": aliases,
@@ -192,6 +200,8 @@ class SearchIndex:
                     + [ensembl_id.lower() if ensembl_id else ""],
                 }
                 self.genes.append(gene)
+                if hgnc_id:
+                    self.genes_by_hgnc_id[hgnc_id] = gene
 
                 # add symbol as primary search key
                 self.search_items.append(
@@ -240,6 +250,60 @@ class SearchIndex:
         except Exception as e:
             logger.error(f"Error loading genes: {e}")
             raise e
+
+    def get_gene_by_hgnc_id(self, hgnc_id: str) -> dict | None:
+        """Look up a loaded gene record (symbol/ensembl/coords) by HGNC id."""
+        return self.genes_by_hgnc_id.get(hgnc_id)
+
+    def _ensure_symbol_index(self) -> dict[str, tuple[str, bool]]:
+        """
+        Build (once) a case-insensitive EXACT-match index from any gene
+        symbol/alias/previous-symbol string to its approved HGNC symbol.
+
+        Built from self.genes (loaded in _load_genes), whose `symbol` is the
+        approved HGNC symbol and whose `aliases` is the merged
+        alias_symbol + prev_symbol list. The free-text gene `name` and the
+        ensembl id are deliberately NOT indexed here -- normalization accepts
+        only symbols/aliases/previous symbols. The map value is
+        (approved_symbol, is_symbol); an approved symbol wins over an alias
+        when both collide on the same key.
+        """
+        if self._symbol_index is not None:
+            return self._symbol_index
+
+        index: dict[str, tuple[str, bool]] = {}
+        for gene in self.genes:
+            symbol = gene["symbol"]
+            for alias in gene.get("aliases", []):
+                if not alias:
+                    continue
+                key = alias.lower()
+                if key not in index:
+                    index[key] = (symbol, False)
+            # approved symbol indexed last so it overrides any alias collision
+            index[symbol.lower()] = (symbol, True)
+
+        self._symbol_index = index
+        return index
+
+    def normalize_symbol(self, symbol: str) -> tuple[str, str] | None:
+        """
+        Resolve an input gene symbol/alias/previous symbol to its current
+        approved HGNC symbol via EXACT case-insensitive lookup (no fuzzy
+        matching, so no ranked false positives).
+
+        Returns (approved_symbol, matched_on) where matched_on is 'approved'
+        when the input is already an approved symbol, else 'alias_or_previous'
+        (the HGNC load merges alias_symbol and prev_symbol without retaining
+        which list a match came from). Returns None if the input is unknown.
+        """
+        if not symbol or not symbol.strip():
+            return None
+        hit = self._ensure_symbol_index().get(symbol.strip().lower())
+        if hit is None:
+            return None
+        approved, is_symbol = hit
+        return approved, "approved" if is_symbol else "alias_or_previous"
 
     def search(
         self,
