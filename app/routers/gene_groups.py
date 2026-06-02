@@ -113,3 +113,53 @@ async def gene_group_members(
         "count": len(members),
         "members": members,
     }
+
+
+@router.get(
+    "/gene/normalize",
+    summary="Normalize gene symbols to current approved HGNC symbols",
+    responses={
+        200: {"description": "Successful response"},
+        400: {"description": "symbols parameter is required"},
+        401: {"description": "Not authenticated"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def normalize_gene_symbols(
+    symbols: str = Query(
+        ...,
+        description="Comma-separated gene symbols, aliases, or previous symbols",
+    ),
+    search_index: SearchIndex = Depends(get_search_index),
+) -> dict:
+    """
+    Resolve each input gene symbol to its current approved HGNC symbol via
+    EXACT case-insensitive matching against the in-memory HGNC index
+    (approved symbol, alias, or previous symbol). No fuzzy matching is used,
+    so the result never contains ranked near-miss false positives.
+
+    `matched_on` is 'approved' when the input is already an approved symbol,
+    or 'alias_or_previous' when matched through an alias / previous symbol
+    (the HGNC load merges those two lists without keeping their origin).
+    Inputs with no exact match are returned in `unresolved`.
+    """
+    inputs = [s.strip() for s in symbols.split(",")]
+    inputs = [s for s in inputs if s]
+
+    mappings = []
+    unresolved = []
+    for input_symbol in inputs:
+        resolved = search_index.normalize_symbol(input_symbol)
+        if resolved is None:
+            unresolved.append(input_symbol)
+            continue
+        approved, matched_on = resolved
+        mappings.append(
+            {
+                "input": input_symbol,
+                "approved": approved,
+                "matched_on": matched_on,
+            }
+        )
+
+    return {"mappings": mappings, "unresolved": unresolved}
