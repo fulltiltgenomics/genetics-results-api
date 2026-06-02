@@ -31,6 +31,9 @@ class SearchIndex:
         self.phenotypes = []
         self.genes = []
         self.search_items = []
+        # hgnc_id -> gene record, the single bridge from HGNC ids (used by
+        # GeneGroupService) back to symbol/ensembl/coords already loaded here
+        self.genes_by_hgnc_id: dict[str, dict] = {}
         self._hgnc_file = hgnc_file
         self._data_access = data_access
         self._gene_name_mapping = gene_name_mapping
@@ -163,6 +166,7 @@ class SearchIndex:
                 symbol = row.get("symbol")
                 name = row.get("name")
                 ensembl_id = row.get("ensembl_gene_id")
+                hgnc_id = row.get("hgnc_id")
 
                 if not symbol:
                     continue
@@ -179,6 +183,7 @@ class SearchIndex:
                 coords = coords_lookup.get(ensembl_id) if ensembl_id else None
                 gene = {
                     "type": "gene",
+                    "hgnc_id": hgnc_id or "",
                     "symbol": symbol,
                     "name": name or "",
                     "aliases": aliases,
@@ -192,6 +197,8 @@ class SearchIndex:
                     + [ensembl_id.lower() if ensembl_id else ""],
                 }
                 self.genes.append(gene)
+                if hgnc_id:
+                    self.genes_by_hgnc_id[hgnc_id] = gene
 
                 # add symbol as primary search key
                 self.search_items.append(
@@ -240,6 +247,10 @@ class SearchIndex:
         except Exception as e:
             logger.error(f"Error loading genes: {e}")
             raise e
+
+    def get_gene_by_hgnc_id(self, hgnc_id: str) -> dict | None:
+        """Look up a loaded gene record (symbol/ensembl/coords) by HGNC id."""
+        return self.genes_by_hgnc_id.get(hgnc_id)
 
     def search(
         self,
