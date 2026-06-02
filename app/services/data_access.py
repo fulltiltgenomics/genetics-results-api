@@ -611,15 +611,25 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 f"No data found for resources: {resources}"
             )
 
-        chunk_iterators = [
-            await access.stream_range(
-                [pos["chrom"] for pos in coords[access.gencode_version]],
-                [pos["gene_start"] for pos in coords[access.gencode_version]],
-                [pos["gene_end"] for pos in coords[access.gencode_version]],
-                in_chunk_size,
-            )
-            for access in accesses
-        ]
+        # skip accesses whose data file has no combined file for range queries
+        # (mirrors stream_range; e.g. ibd exome has per-pheno files but no all_exome_file)
+        accesses_and_iterators = []
+        for access in accesses:
+            try:
+                iterator = await access.stream_range(
+                    [pos["chrom"] for pos in coords[access.gencode_version]],
+                    [pos["gene_start"] for pos in coords[access.gencode_version]],
+                    [pos["gene_end"] for pos in coords[access.gencode_version]],
+                    in_chunk_size,
+                )
+            except ValueError:
+                continue
+            accesses_and_iterators.append((access, iterator))
+
+        if not accesses_and_iterators:
+            raise NotFoundException(f"No data found for resources: {resources}")
+
+        accesses, chunk_iterators = zip(*accesses_and_iterators)
 
         # select column config based on data type
         columns = exome_variant_columns if data_type == "exome" else cs_variant_columns

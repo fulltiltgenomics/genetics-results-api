@@ -10,7 +10,9 @@ BASE_PATH = "/api/v1/variant_annotation"
 
 # columns expected in the response
 EXPECTED_COLUMNS = {
-    "#variant", "chr", "pos", "ref", "alt", "INFO", "AF", "AC_Het",
+    # the header's leading '#' is stripped by the tabix header reader, so the
+    # first column surfaces as 'variant' (not '#variant')
+    "variant", "chr", "pos", "ref", "alt", "INFO", "AF", "AC_Het",
     "AC_Hom", "most_severe", "gene_most_severe", "rsid",
     "EXOME_enrichment_nfe", "GENOME_enrichment_nfe", "index",
 }

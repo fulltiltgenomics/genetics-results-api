@@ -12,7 +12,7 @@ exome_data_files = [
             "version": "v1",
             "prefix": "gs://daly-genetics-results/exome_results/genebass/individual/",
             "suffix": ".mlog10p4.tsv",
-            "all_exome_file": "gs://daly-genetics-results/exome_results/genebass/genebass_variant_results_mlog10p4.tsv.gz",
+            "all_exome_file": "gs://daly-genetics-results/exome_results/genebass/genebass_variant_results_mlog10p4.tsv.bgz",
         },
     },
     {

@@ -411,7 +411,7 @@ async def credible_sets_by_region(
 
     if resources is None:  # use all credible set resources if none given
         resources = config_util.get_resources(data_type="cs")
-    if not request_util.check_resources(resources):
+    if not request_util.check_resources(resources, data_type="cs"):
         raise HTTPException(
             status_code=404,
             detail=f"Unrecognized resource in {resources}. Available credible set resources: "
@@ -546,7 +546,7 @@ async def credible_sets_by_variant(
 
     if resources is None:  # use all credible set resources if none given
         resources = config_util.get_resources(data_type="cs")
-    if not request_util.check_resources(resources):
+    if not request_util.check_resources(resources, data_type="cs"):
         raise HTTPException(
             status_code=404,
             detail=f"Unrecognized resource in {resources}. Available credible set resources: "
@@ -638,7 +638,7 @@ async def credible_sets_by_variant_post(
 
     if resources is None:
         resources = config_util.get_resources(data_type="cs")
-    if not request_util.check_resources(resources):
+    if not request_util.check_resources(resources, data_type="cs"):
         raise HTTPException(
             status_code=404,
             detail=f"Unrecognized resource in {resources}. Available credible set resources: "
@@ -797,7 +797,7 @@ async def credible_sets_by_gene(
 
     if resources is None:  # use all credible set resources if none given
         resources = config_util.get_resources(data_type="cs")
-    if not request_util.check_resources(resources):
+    if not request_util.check_resources(resources, data_type="cs"):
         raise HTTPException(
             status_code=404,
             detail=f"Unrecognized resource in {resources}. Available credible set resources: "
@@ -924,7 +924,7 @@ async def credible_sets_by_qtl_gene(
     start_time = time.time()
     if resources is None:  # use all credible set resources if none given
         resources = config_util.get_resources(data_type="cs")
-    if not request_util.check_resources(resources):
+    if not request_util.check_resources(resources, data_type="cs"):
         raise HTTPException(
             status_code=404,
             detail=f"Unrecognized resource in {resources}. Available credible set resources: "
