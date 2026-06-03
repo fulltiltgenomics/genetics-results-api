@@ -26,6 +26,7 @@ FAMILY_CSV = '''id,name,abbreviation
 110,"GPCRs","GPCR"
 120,"Ion channels","ICH"
 170,"5-HT1 receptors","HTR1"
+180,"Olfactory receptors","OR"
 '''
 
 HIERARCHY_CLOSURE_CSV = '''parent_fam_id,child_fam_id,distance
@@ -33,12 +34,18 @@ HIERARCHY_CLOSURE_CSV = '''parent_fam_id,child_fam_id,distance
 100,170,2
 110,170,1
 100,120,1
+100,180,2
+110,180,1
 '''
 
+# real hgnc_gene_has_family.csv uses BARE numeric hgnc ids; the search index
+# (fake below) keys on the prefixed "HGNC:NNNN" form. The endpoint must resolve
+# across that mismatch -> symbols populated, not null.
 GENE_HAS_FAMILY_CSV = '''hgnc_id,family_id
-HGNC:5286,170
-HGNC:5287,170
-HGNC:9999,120
+5286,170
+5287,170
+9999,120
+8000,180
 '''
 
 
@@ -68,6 +75,13 @@ GENE_RECORDS = {
         "gene_start": 1000,
         "gene_end": 2000,
     },
+    "HGNC:8000": {
+        "symbol": "OR1A1",
+        "ensembl_id": "ENSG00000888888",
+        "chrom": 17,
+        "gene_start": 3000,
+        "gene_end": 4000,
+    },
 }
 
 
@@ -86,6 +100,9 @@ def _make_service(tmp_path):
 
 
 def _call(service, search_index, **kwargs):
+    # the route is invoked directly (no FastAPI layer), so Query(...) defaults
+    # are not resolved -- supply the same default FastAPI would inject.
+    kwargs.setdefault("exclude_olfactory", False)
     return asyncio.run(
         gene_group_members(
             gene_group_service=service, search_index=search_index, **kwargs
@@ -110,7 +127,8 @@ def test_resolve_by_group_id(service, search_index):
     assert body["count"] == 2
     by_hgnc = {m["hgnc_id"]: m for m in body["members"]}
     assert set(by_hgnc) == {"HGNC:5286", "HGNC:5287"}
-    # member with a record is fully populated
+    # member with a record is fully populated -- proves the bare->prefixed
+    # hgnc_id canonicalization resolves against the (prefixed) search index
     assert by_hgnc["HGNC:5286"]["symbol"] == "HTR1A"
     assert by_hgnc["HGNC:5286"]["chr"] == 5
     assert by_hgnc["HGNC:5286"]["ensembl_id"] == "ENSG00000178394"
@@ -123,15 +141,31 @@ def test_resolve_by_group_name_case_insensitive(service, search_index):
     body = _call(service, search_index, group_id=None, group_name="gpcrs")
     assert body["group_id"] == 110
     assert body["group_name"] == "GPCRs"
-    assert {m["hgnc_id"] for m in body["members"]} == {"HGNC:5286", "HGNC:5287"}
+    assert {m["hgnc_id"] for m in body["members"]} == {
+        "HGNC:5286",
+        "HGNC:5287",
+        "HGNC:8000",
+    }
+
+
+def test_exclude_olfactory_drops_olfactory_members(service, search_index):
+    full = _call(service, search_index, group_id=110, group_name=None)
+    assert full["exclude_olfactory"] is False
+    assert "HGNC:8000" in {m["hgnc_id"] for m in full["members"]}
+
+    trimmed = _call(
+        service, search_index, group_id=110, group_name=None, exclude_olfactory=True
+    )
+    assert trimmed["exclude_olfactory"] is True
+    assert {m["hgnc_id"] for m in trimmed["members"]} == {"HGNC:5286", "HGNC:5287"}
 
 
 def test_hierarchical_group_returns_descendants(service, search_index):
     # root group 100 returns every descendant gene including the deep-leaf HTR1A
     body = _call(service, search_index, group_id=100, group_name=None)
-    assert body["count"] == 3
+    assert body["count"] == 4
     hgnc_ids = {m["hgnc_id"] for m in body["members"]}
-    assert hgnc_ids == {"HGNC:5286", "HGNC:5287", "HGNC:9999"}
+    assert hgnc_ids == {"HGNC:5286", "HGNC:5287", "HGNC:9999", "HGNC:8000"}
     # X=23 convention is passed through unchanged
     chan1 = next(m for m in body["members"] if m["hgnc_id"] == "HGNC:9999")
     assert chan1["symbol"] == "CHAN1"

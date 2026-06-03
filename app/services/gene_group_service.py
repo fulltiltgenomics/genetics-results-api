@@ -110,9 +110,13 @@ class GeneGroupService:
                 continue
             ancestors_by_child[child].add(parent)
 
-        # gene_has_family: hgnc_id -> leaf family ids, expanded to full lineage
+        # gene_has_family: hgnc_id -> leaf family ids, expanded to full lineage.
+        # The gene-group files use BARE numeric hgnc ids ('3023') while the HGNC
+        # complete set (and thus the search index) uses the prefixed 'HGNC:3023'
+        # form. Canonicalize here so members resolve against the search index
+        # instead of coming back with null symbols/coordinates.
         for row in gene_has_family.iter_rows(named=True):
-            hgnc_id = row.get("hgnc_id")
+            hgnc_id = _canonical_hgnc_id(row.get("hgnc_id"))
             leaf = _to_int(row.get("family_id"))
             if not hgnc_id or leaf is None:
                 continue
@@ -144,17 +148,21 @@ class GeneGroupService:
 
     def group_ids_for_hgnc_id(self, hgnc_id: str) -> set[int]:
         """Full lineage group ids (leaf + all ancestors) for an hgnc_id."""
-        return set(self._lineage_by_hgnc_id.get(hgnc_id, set()))
+        return set(self._lineage_by_hgnc_id.get(_canonical_hgnc_id(hgnc_id), set()))
 
     def groups_for_hgnc_id(self, hgnc_id: str) -> list[tuple[int, str | None]]:
         """Full lineage as (group_id, group_name) pairs for an hgnc_id."""
+        hgnc_id = _canonical_hgnc_id(hgnc_id)
         return [
             (gid, self._group_names.get(gid))
             for gid in sorted(self._lineage_by_hgnc_id.get(hgnc_id, set()))
         ]
 
     def members_of_group(
-        self, group_id: int | None = None, group_name: str | None = None
+        self,
+        group_id: int | None = None,
+        group_name: str | None = None,
+        exclude_olfactory: bool = False,
     ) -> set[str]:
         """
         hgnc_ids of all genes whose lineage contains the given group.
@@ -162,12 +170,46 @@ class GeneGroupService:
         Resolution is by descendant: any group id (leaf or ancestor/root)
         returns every gene below it in the hierarchy. Accepts either a group
         id or a (case-insensitive) group name.
+
+        Olfactory receptors are themselves GPCRs and dominate large families by
+        count; set exclude_olfactory=True to drop any member whose lineage
+        contains the 'Olfactory receptors' group.
         """
         if group_id is None and group_name is not None:
             group_id = self.resolve_group_id(group_name)
         if group_id is None:
             return set()
-        return set(self._members_by_group_id.get(group_id, set()))
+        members = set(self._members_by_group_id.get(group_id, set()))
+        if exclude_olfactory:
+            olfactory_id = self.resolve_group_id(_OLFACTORY_GROUP_NAME)
+            if olfactory_id is not None:
+                members -= self._members_by_group_id.get(olfactory_id, set())
+        return members
+
+
+# HGNC gene-group name for olfactory receptors; excluded on request because they
+# are GPCRs that dominate large families by sheer count.
+_OLFACTORY_GROUP_NAME = "Olfactory receptors"
+
+
+def _canonical_hgnc_id(value) -> str | None:
+    """Normalize an HGNC id to its canonical 'HGNC:NNNN' form.
+
+    The HGNC sources disagree on format: hgnc_complete_set.txt (and the search
+    index) use the prefixed 'HGNC:3023' form, while the gene-group files
+    (hgnc_gene_has_family.csv) use bare numeric ids ('3023'). Normalizing both
+    to one key is what lets group members resolve to symbols/coordinates.
+    """
+    if value is None:
+        return None
+    v = str(value).strip()
+    if not v:
+        return None
+    if v.upper().startswith("HGNC:"):
+        return "HGNC:" + v[5:].strip()
+    if v.isdigit():
+        return f"HGNC:{v}"
+    return v
 
 
 def _to_int(value) -> int | None:
