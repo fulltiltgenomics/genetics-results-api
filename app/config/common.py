@@ -11,6 +11,7 @@ from app.config.profile import load_profile_module
 
 log_level = "INFO"
 deploy_env = os.environ.get("DEPLOY_ENV", "dev1")
+log_source = os.environ.get("LOG_SOURCE", f"genetics-results-api-{deploy_env}")
 
 # use Cloud Logging API directly on VM
 # on GKE, stdout is captured automatically so this should be False

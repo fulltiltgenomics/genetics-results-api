@@ -48,6 +48,9 @@ async def auth_required(request: Request) -> str | None:
     user = get_verified_user(request)
     if user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    # store for usage logging middleware to pick up (bearer token users
+    # don't have the X-Goog-Authenticated-User-Email header)
+    request.state.authenticated_user = user
     return user
 
 
