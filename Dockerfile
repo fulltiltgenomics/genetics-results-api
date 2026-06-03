@@ -22,8 +22,8 @@ ENV GOOGLE_APPLICATION_CREDENTIALS=""
 
 RUN pip install uv --upgrade
 
-COPY requirements.txt .
-RUN uv pip install --system -r requirements.txt
+COPY pyproject.toml .
+RUN uv pip install --system -r pyproject.toml
 
 # htslib
 WORKDIR /opt/htslib

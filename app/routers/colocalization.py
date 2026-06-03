@@ -186,7 +186,7 @@ router = APIRouter()
 async def colocalization_by_variant(
     request: Request,
     variant: str = Path(
-        ..., description="Variant (chr-pos-ref-alt)", example="19-44908684-T-C"
+        ..., description="Variant (chr-pos-ref-alt)", examples=["19-44908684-T-C"]
     ),
     include_variants: bool = Query(
         default=False,
@@ -248,13 +248,13 @@ async def colocalization_by_variant(
 async def colocalization_by_variant_filtered(
     request: Request,
     variant: str = Path(
-        ..., description="Variant (chr-pos-ref-alt)", example="19-44908684-T-C"
+        ..., description="Variant (chr-pos-ref-alt)", examples=["19-44908684-T-C"]
     ),
     resource: str = Path(
-        ..., description="Resource name to filter by", example="finngen"
+        ..., description="Resource name to filter by", examples=["finngen"]
     ),
     phenotype: str = Path(
-        ..., description="Phenotype or study to filter by", example="I9_HYPERLIPID"
+        ..., description="Phenotype or study to filter by", examples=["I9_HYPERLIPID"]
     ),
     include_variants: bool = Query(
         default=False,
@@ -401,12 +401,12 @@ async def colocalization_by_variant_filtered(
 )
 async def colocalization_by_credible_set_id(
     request: Request,
-    resource: str = Path(..., description="Resource", example="finngen"),
+    resource: str = Path(..., description="Resource", examples=["finngen"]),
     phenotype_or_study: str = Path(
-        ..., description="Phenotype or study", example="K11_IBD_STRICT"
+        ..., description="Phenotype or study", examples=["K11_IBD_STRICT"]
     ),
     credible_set_id: str = Path(
-        ..., description="Credible set id", example="chr1:65744548-68744548_3"
+        ..., description="Credible set id", examples=["chr1:65744548-68744548_3"]
     ),
     dual_format: bool = Query(
         default=False,

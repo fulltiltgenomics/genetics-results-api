@@ -54,7 +54,7 @@ async def get_rsid_variants(
     rsids: str = Query(
         ...,
         description="Comma-separated list of rsids (e.g., rs1234567,rs7654321)",
-        example="rs1234567,rs7654321",
+        examples=["rs1234567,rs7654321"],
     ),
     rsid_db=Depends(get_rsid_db),
 ):

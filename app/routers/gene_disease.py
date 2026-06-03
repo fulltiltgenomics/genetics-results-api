@@ -71,7 +71,7 @@ router = APIRouter()
 )
 async def get_gene_disease(
     request: Request,
-    gene_name: str = Path(..., description="Gene symbol", example="BRCA1"),
+    gene_name: str = Path(..., description="Gene symbol", examples=["BRCA1"]),
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),

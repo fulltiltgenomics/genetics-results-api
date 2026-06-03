@@ -20,11 +20,10 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
 
     def __init__(self, data_file_id: str, data_type: Literal["cs", "assoc"]):
         DataAccessObject.__init__(self, data_file_id, data_type)
-        GCloudTabixBase.__init__(self)
 
         df = data_file_by_id[data_file_id]
 
-        # check if this data file supports the requested data type
+        # check config validity BEFORE creating aiohttp session in GCloudTabixBase
         valid_data_types = {"cs", "assoc", "exome", "gene_based"}
         if data_type not in df:
             available = [k for k in df.keys() if k in valid_data_types]
@@ -32,6 +31,8 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
                 f"Data file '{data_file_id}' does not support '{data_type}'. "
                 f"Supported: {available or 'none'}"
             )
+
+        GCloudTabixBase.__init__(self)
 
         self.resource_config = df[data_type]
         self.gencode_version = df.get("gencode_version")
@@ -75,21 +76,32 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
             raise e
         return True
 
-    def get_header(self, qtl: bool = False) -> list[bytes]:
+    def get_header(self, qtl: bool = False) -> list[bytes] | None:
         """Get the header for the all data file. Doing this with tabix to also be sure that the file is tabix-indexed and tabixing works."""
         if qtl:
             gs_path = self.resource_config["all_cs_qtl_file"]
             return self._cache_header("qtl_header", gs_path)
         else:
             # TODO configure this better
-            gs_path = self.resource_config["all_cs_file"] if "all_cs_file" in self.resource_config else self.resource_config["all_exome_file"]
+            if "all_cs_file" in self.resource_config:
+                gs_path = self.resource_config["all_cs_file"]
+            elif "all_exome_file" in self.resource_config:
+                gs_path = self.resource_config["all_exome_file"]
+            else:
+                # no combined file available (e.g. IBD exome with per-phenotype files only)
+                return None
             return self._cache_header("header", gs_path)
 
     async def stream_range(
         self, chr: list[int], start: list[int], end: list[int], chunk_size: int
     ) -> AsyncGenerator[bytes, None]:
         """Stream data from a tabix-indexed file for a chromosome range."""
-        blob_path = self.resource_config["all_cs_file"] if "all_cs_file" in self.resource_config else self.resource_config["all_exome_file"]
+        if "all_cs_file" in self.resource_config:
+            blob_path = self.resource_config["all_cs_file"]
+        elif "all_exome_file" in self.resource_config:
+            blob_path = self.resource_config["all_exome_file"]
+        else:
+            raise ValueError("No combined file available for range queries")
         logger.debug(f"Streaming range for {chr}, {start}, {end}")
         return await self._stream_range(blob_path, chr, start, end, chunk_size)
 

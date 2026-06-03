@@ -64,13 +64,13 @@ class TestCredibleSetsByPhenotype:
         assert response.status_code == 422
 
     def test_credible_sets_by_phenotype_not_found(
-        self, server_url, available_resources
+        self, server_url, cs_resources
     ):
         """Test that non-existent phenotype returns 404."""
-        if not available_resources:
+        if not cs_resources:
             pytest.skip("No resources available")
 
-        resource = available_resources[0]
+        resource = cs_resources[0]
         fake_phenotype = "NONEXISTENT_PHENOTYPE_12345"
 
         response = requests.get(
@@ -120,13 +120,13 @@ class TestCredibleSetsByRegion:
             ], f"JSON validation failed: {validation['errors']}"
 
     def test_credible_sets_by_region_with_single_resource(
-        self, server_url, test_region, available_resources
+        self, server_url, test_region, cs_resources
     ):
         """Test credible sets by region with single resource specified."""
-        if not available_resources:
+        if not cs_resources:
             pytest.skip("No resources available")
 
-        resource = available_resources[0]
+        resource = cs_resources[0]
 
         response = requests.get(
             f"{server_url}/api/v1/credible_sets_by_region/{test_region}",
@@ -137,13 +137,13 @@ class TestCredibleSetsByRegion:
         assert response.status_code == 200
 
     def test_credible_sets_by_region_with_multiple_resources(
-        self, server_url, test_region, available_resources
+        self, server_url, test_region, cs_resources
     ):
         """Test credible sets by region with multiple resources."""
-        if len(available_resources) < 2:
+        if len(cs_resources) < 2:
             pytest.skip("Need at least 2 resources for this test")
 
-        resources = available_resources[:2]
+        resources = cs_resources[:2]
         params = {"format": "json", "interval": 95, "resources": resources}
         from urllib.parse import urlencode
 
@@ -245,13 +245,13 @@ class TestCredibleSetsByVariant:
             ], f"JSON validation failed: {validation['errors']}"
 
     def test_credible_sets_by_variant_with_resources(
-        self, server_url, test_variant, available_resources
+        self, server_url, test_variant, cs_resources
     ):
         """Test credible sets by variant with resources parameter."""
-        if not available_resources:
+        if not cs_resources:
             pytest.skip("No resources available")
 
-        resource = available_resources[0]
+        resource = cs_resources[0]
 
         response = requests.get(
             f"{server_url}/api/v1/credible_sets_by_variant/{test_variant}",
@@ -317,13 +317,13 @@ class TestCredibleSetsByVariantPost:
         assert isinstance(data, list)
 
     def test_post_credible_sets_by_variant_with_resources(
-        self, server_url, test_variant, available_resources
+        self, server_url, test_variant, cs_resources
     ):
         """Test POST with resources parameter."""
-        if not available_resources:
+        if not cs_resources:
             pytest.skip("No resources available")
 
-        resource = available_resources[0]
+        resource = cs_resources[0]
         response = requests.post(
             f"{server_url}/api/v1/credible_sets_by_variant",
             json={"variants": test_variant},
@@ -395,13 +395,13 @@ class TestCredibleSetsByGene:
         assert response.status_code == 200
 
     def test_credible_sets_by_gene_with_resources(
-        self, server_url, test_gene, available_resources
+        self, server_url, test_gene, cs_resources
     ):
         """Test credible sets by gene with resources parameter."""
-        if not available_resources:
+        if not cs_resources:
             pytest.skip("No resources available")
 
-        resource = available_resources[0]
+        resource = cs_resources[0]
 
         response = requests.get(
             f"{server_url}/api/v1/credible_sets_by_gene/{test_gene}",
@@ -478,10 +478,10 @@ class TestCredibleSetsByQTLGene:
             ], f"JSON validation failed: {validation['errors']}"
 
     def test_credible_sets_by_qtl_gene_with_resources(
-        self, server_url, test_gene_large_window, available_resources
+        self, server_url, test_gene_large_window, cs_resources
     ):
         """Test credible sets by QTL gene with resources parameter."""
-        if not available_resources:
+        if not cs_resources:
             pytest.skip("No resources available")
 
         resource = "eqtl_catalogue"

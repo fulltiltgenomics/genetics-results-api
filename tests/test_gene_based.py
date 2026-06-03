@@ -94,8 +94,10 @@ class TestGeneBased:
 
     def test_gene_based_multiple_resources(self, server_url):
         """Test that results include data from all configured resources (genebass and SCHEMA)."""
+        # SETD1A is present across all gene-based resources (genebass, SCHEMA2, BipEx2,
+        # IBD); GRIN2A is absent from genebass so it can't verify multi-resource merging
         response = requests.get(
-            f"{server_url}/api/v1/gene_based/GRIN2A",
+            f"{server_url}/api/v1/gene_based/SETD1A",
             timeout=30,
         )
 
@@ -115,7 +117,7 @@ class TestGeneBased:
             datasets.add(dataset)
 
         assert "genebass" in datasets, f"Expected genebass in datasets, got: {datasets}"
-        assert "SCHEMA" in datasets, f"Expected SCHEMA in datasets, got: {datasets}"
+        assert "SCHEMA2" in datasets, f"Expected SCHEMA2 in datasets, got: {datasets}"
 
     def test_gene_based_response_has_single_header(self, server_url):
         """Test that merged response contains exactly one header line."""

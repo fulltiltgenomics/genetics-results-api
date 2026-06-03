@@ -24,6 +24,66 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_EXAMPLE_TSV_HEADER = "dataset\tchr\tpos\tref\talt\tgene\tannotation\tmlog10p\tbeta\tse\taf_overall\taf_cases\taf_controls\tac\tan\tn_cases\tn_controls\ttrait\ttrait_original"
+_EXAMPLE_TSV_ROW = "genebass\t1\t925947\tC\tT\tSAMD11\tsynonymous\t5.0214\t6.564e+00\t1.483e+00\t1.140e-05\t3.456e-03\t7.606e-06\t9\t789602\tNA\tNA\tcategorical_41210_both_sexes_S068_\tcategorical_41210_both_sexes_S068_"
+_EXAMPLE_TSV_HEADER_WITH_RESOURCE = "resource\tversion\t" + _EXAMPLE_TSV_HEADER
+
+_EXAMPLE_JSON_PROPERTIES = {
+    "dataset": {"type": "string"},
+    "chr": {"type": "integer"},
+    "pos": {"type": "integer"},
+    "ref": {"type": "string"},
+    "alt": {"type": "string"},
+    "gene": {"type": "string"},
+    "annotation": {"type": "string"},
+    "mlog10p": {"type": "number"},
+    "beta": {"type": "number"},
+    "se": {"type": "number"},
+    "af_overall": {"type": "number"},
+    "af_cases": {"type": "number"},
+    "af_controls": {"type": "number"},
+    "ac": {"type": "integer"},
+    "an": {"type": "integer"},
+    "n_cases": {"type": "integer"},
+    "n_controls": {"type": "integer"},
+    "trait": {"type": "string"},
+    "trait_original": {"type": "string"},
+}
+
+_EXAMPLE_JSON_PROPERTIES_WITH_RESOURCE = {
+    "resource": {"type": "string"},
+    "version": {"type": "string"},
+    **_EXAMPLE_JSON_PROPERTIES,
+}
+
+_EXAMPLE_JSON_ROW = {
+    "dataset": "genebass",
+    "chr": 1,
+    "pos": 925947,
+    "ref": "C",
+    "alt": "T",
+    "gene": "SAMD11",
+    "annotation": "synonymous",
+    "mlog10p": 5.0214,
+    "beta": 6.564,
+    "se": 1.483,
+    "af_overall": 0.0000114,
+    "af_cases": 0.003456,
+    "af_controls": 0.000007606,
+    "ac": 9,
+    "an": 789602,
+    "n_cases": None,
+    "n_controls": None,
+    "trait": "categorical_41210_both_sexes_S068_",
+    "trait_original": "categorical_41210_both_sexes_S068_",
+}
+
+_EXAMPLE_JSON_ROW_WITH_RESOURCE = {
+    "resource": "genebass",
+    "version": "NA",
+    **_EXAMPLE_JSON_ROW,
+}
+
 
 @router.get(
     "/exome_results_by_phenotype/{resource}/{phenotype_or_study}",
@@ -34,32 +94,14 @@ router = APIRouter()
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "dataset\tchr\tpos\tref\talt\tgene\tannotation\tmlog10p\tbeta\tse\taf_overall\taf_cases\taf_controls\tac\tan\theritability\ttrait\ngenebass\t1\t925947\tC\tT\tSAMD11\tsynonymous\t5.0214\t6.564e+00\t1.483e+00\t1.140e-05\t3.456e-03\t7.606e-06\t9\t789602\t2.868e-02\tcategorical_41210_both_sexes_S068_\n...",
+                    "example": f"{_EXAMPLE_TSV_HEADER}\n{_EXAMPLE_TSV_ROW}\n...",
                 },
                 "application/json": {
                     "schema": {
                         "type": "array",
                         "items": {
                             "type": "object",
-                            "properties": {
-                                "dataset": {"type": "string"},
-                                "chr": {"type": "integer"},
-                                "pos": {"type": "integer"},
-                                "ref": {"type": "string"},
-                                "alt": {"type": "string"},
-                                "gene": {"type": "string"},
-                                "annotation": {"type": "string"},
-                                "mlog10p": {"type": "number"},
-                                "beta": {"type": "number"},
-                                "se": {"type": "number"},
-                                "af_overall": {"type": "number"},
-                                "af_cases": {"type": "number"},
-                                "af_controls": {"type": "number"},
-                                "ac": {"type": "integer"},
-                                "an": {"type": "integer"},
-                                "heritability": {"type": "number"},
-                                "trait": {"type": "string"},
-                            },
+                            "properties": _EXAMPLE_JSON_PROPERTIES,
                         },
                     },
                 },
@@ -73,11 +115,11 @@ router = APIRouter()
 )
 async def exome_results_by_phenotype(
     request: Request,
-    resource: str = Path(..., description="Data resource", example="genebass"),
+    resource: str = Path(..., description="Data resource", examples=["genebass"]),
     phenotype_or_study: str = Path(
         ...,
         description="Phenotype or study code",
-        example="categorical_41210_both_sexes_S068_",
+        examples=["categorical_41210_both_sexes_S068_"],
     ),
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
@@ -156,59 +198,17 @@ async def exome_results_by_phenotype(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tdataset\tchr\tpos\tref\talt\tgene\tannotation\tmlog10p\tbeta\tse\taf_overall\taf_cases\taf_controls\tac\tan\theritability\ttrait\ngenebass\tNA\tgenebass\t1\t55050000\tC\tT\tPCSK9\tmissense\t5.0214\t6.564e+00\t1.483e+00\t1.140e-05\t3.456e-03\t7.606e-06\t9\t789602\t2.868e-02\tcategorical_41210_both_sexes_S068_\n...",
+                    "example": f"{_EXAMPLE_TSV_HEADER_WITH_RESOURCE}\ngenebass\tNA\t{_EXAMPLE_TSV_ROW}\n...",
                 },
                 "application/json": {
                     "schema": {
                         "type": "array",
                         "items": {
                             "type": "object",
-                            "properties": {
-                                "resource": {"type": "string"},
-                                "version": {"type": "string"},
-                                "dataset": {"type": "string"},
-                                "chr": {"type": "integer"},
-                                "pos": {"type": "integer"},
-                                "ref": {"type": "string"},
-                                "alt": {"type": "string"},
-                                "gene": {"type": "string"},
-                                "annotation": {"type": "string"},
-                                "mlog10p": {"type": "number"},
-                                "beta": {"type": "number"},
-                                "se": {"type": "number"},
-                                "af_overall": {"type": "number"},
-                                "af_cases": {"type": "number"},
-                                "af_controls": {"type": "number"},
-                                "ac": {"type": "integer"},
-                                "an": {"type": "integer"},
-                                "heritability": {"type": "number"},
-                                "trait": {"type": "string"},
-                            },
+                            "properties": _EXAMPLE_JSON_PROPERTIES_WITH_RESOURCE,
                         },
                     },
-                    "example": [
-                        {
-                            "resource": "genebass",
-                            "version": "NA",
-                            "dataset": "genebass",
-                            "chr": 1,
-                            "pos": 55050000,
-                            "ref": "C",
-                            "alt": "T",
-                            "gene": "PCSK9",
-                            "annotation": "missense",
-                            "mlog10p": 5.0214,
-                            "beta": 6.564,
-                            "se": 1.483,
-                            "af_overall": 0.0000114,
-                            "af_cases": 0.003456,
-                            "af_controls": 0.000007606,
-                            "ac": 9,
-                            "an": 789602,
-                            "heritability": 0.02868,
-                            "trait": "categorical_41210_both_sexes_S068_",
-                        },
-                    ],
+                    "example": [_EXAMPLE_JSON_ROW_WITH_RESOURCE],
                 },
             },
         },
@@ -221,7 +221,7 @@ async def exome_results_by_phenotype(
 async def exome_results_by_region(
     request: Request,
     region: str = Path(
-        ..., description="Chromosome region", example="1:1000000-1000100"
+        ..., description="Chromosome region", examples=["1:1000000-1000100"]
     ),
     resources: list[str] | None = Query(
         default=None,
@@ -279,59 +279,17 @@ async def exome_results_by_region(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tdataset\tchr\tpos\tref\talt\tgene\tannotation\tmlog10p\tbeta\tse\taf_overall\taf_cases\taf_controls\tac\tan\theritability\ttrait\ngenebass\tNA\tgenebass\t1\t925947\tC\tT\tSAMD11\tsynonymous\t5.0214\t6.564e+00\t1.483e+00\t1.140e-05\t3.456e-03\t7.606e-06\t9\t789602\t2.868e-02\tcategorical_41210_both_sexes_S068_\n...",
+                    "example": f"{_EXAMPLE_TSV_HEADER_WITH_RESOURCE}\ngenebass\tNA\t{_EXAMPLE_TSV_ROW}\n...",
                 },
                 "application/json": {
                     "schema": {
                         "type": "array",
                         "items": {
                             "type": "object",
-                            "properties": {
-                                "resource": {"type": "string"},
-                                "version": {"type": "string"},
-                                "dataset": {"type": "string"},
-                                "chr": {"type": "integer"},
-                                "pos": {"type": "integer"},
-                                "ref": {"type": "string"},
-                                "alt": {"type": "string"},
-                                "gene": {"type": "string"},
-                                "annotation": {"type": "string"},
-                                "mlog10p": {"type": "number"},
-                                "beta": {"type": "number"},
-                                "se": {"type": "number"},
-                                "af_overall": {"type": "number"},
-                                "af_cases": {"type": "number"},
-                                "af_controls": {"type": "number"},
-                                "ac": {"type": "integer"},
-                                "an": {"type": "integer"},
-                                "heritability": {"type": "number"},
-                                "trait": {"type": "string"},
-                            },
+                            "properties": _EXAMPLE_JSON_PROPERTIES_WITH_RESOURCE,
                         },
                     },
-                    "example": [
-                        {
-                            "resource": "genebass",
-                            "version": "NA",
-                            "dataset": "genebass",
-                            "chr": 1,
-                            "pos": 925947,
-                            "ref": "C",
-                            "alt": "T",
-                            "gene": "SAMD11",
-                            "annotation": "synonymous",
-                            "mlog10p": 5.0214,
-                            "beta": 6.564,
-                            "se": 1.483,
-                            "af_overall": 0.0000114,
-                            "af_cases": 0.003456,
-                            "af_controls": 0.000007606,
-                            "ac": 9,
-                            "an": 789602,
-                            "heritability": 0.02868,
-                            "trait": "categorical_41210_both_sexes_S068_",
-                        },
-                    ],
+                    "example": [_EXAMPLE_JSON_ROW_WITH_RESOURCE],
                 },
             },
         },
@@ -344,7 +302,7 @@ async def exome_results_by_region(
 async def exome_results_by_variant(
     request: Request,
     variant: str = Path(
-        ..., description="Variant (chr-pos-ref-alt)", example="1-925947-C-T"
+        ..., description="Variant (chr-pos-ref-alt)", examples=["1-925947-C-T"]
     ),
     resources: list[str] | None = Query(
         default=None,
@@ -403,59 +361,17 @@ async def exome_results_by_variant(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tdataset\tchr\tpos\tref\talt\tgene\tannotation\tmlog10p\tbeta\tse\taf_overall\taf_cases\taf_controls\tac\tan\theritability\ttrait\ngenebass\tNA\tgenebass\t1\t925947\tC\tT\tSAMD11\tsynonymous\t5.0214\t6.564e+00\t1.483e+00\t1.140e-05\t3.456e-03\t7.606e-06\t9\t789602\t2.868e-02\tcategorical_41210_both_sexes_S068_\n...",
+                    "example": f"{_EXAMPLE_TSV_HEADER_WITH_RESOURCE}\ngenebass\tNA\t{_EXAMPLE_TSV_ROW}\n...",
                 },
                 "application/json": {
                     "schema": {
                         "type": "array",
                         "items": {
                             "type": "object",
-                            "properties": {
-                                "resource": {"type": "string"},
-                                "version": {"type": "string"},
-                                "dataset": {"type": "string"},
-                                "chr": {"type": "integer"},
-                                "pos": {"type": "integer"},
-                                "ref": {"type": "string"},
-                                "alt": {"type": "string"},
-                                "gene": {"type": "string"},
-                                "annotation": {"type": "string"},
-                                "mlog10p": {"type": "number"},
-                                "beta": {"type": "number"},
-                                "se": {"type": "number"},
-                                "af_overall": {"type": "number"},
-                                "af_cases": {"type": "number"},
-                                "af_controls": {"type": "number"},
-                                "ac": {"type": "integer"},
-                                "an": {"type": "integer"},
-                                "heritability": {"type": "number"},
-                                "trait": {"type": "string"},
-                            },
+                            "properties": _EXAMPLE_JSON_PROPERTIES_WITH_RESOURCE,
                         },
                     },
-                    "example": [
-                        {
-                            "resource": "genebass",
-                            "version": "NA",
-                            "dataset": "genebass",
-                            "chr": 1,
-                            "pos": 925947,
-                            "ref": "C",
-                            "alt": "T",
-                            "gene": "SAMD11",
-                            "annotation": "synonymous",
-                            "mlog10p": 5.0214,
-                            "beta": 6.564,
-                            "se": 1.483,
-                            "af_overall": 0.0000114,
-                            "af_cases": 0.003456,
-                            "af_controls": 0.000007606,
-                            "ac": 9,
-                            "an": 789602,
-                            "heritability": 0.02868,
-                            "trait": "categorical_41210_both_sexes_S068_",
-                        },
-                    ],
+                    "example": [_EXAMPLE_JSON_ROW_WITH_RESOURCE],
                 },
             },
         },
@@ -467,7 +383,7 @@ async def exome_results_by_variant(
 )
 async def exome_results_by_gene(
     request: Request,
-    gene: str = Path(..., description="Gene name or comma-separated list of gene names", example="SAMD11"),
+    gene: str = Path(..., description="Gene name or comma-separated list of gene names", examples=["SAMD11"]),
     window: int = Query(
         default=0,
         description="One-sided window in base pairs around the gene (default 0, which means the gene itself)",

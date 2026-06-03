@@ -38,6 +38,14 @@ def available_resources():
 
 
 @pytest.fixture(scope="session")
+def cs_resources():
+    """Resources that offer credible-set data (for credible_sets endpoint tests)."""
+    from app.services.config_util import get_resources
+
+    return get_resources(data_type="cs")
+
+
+@pytest.fixture(scope="session")
 def resources_with_metadata():
     """Get list of resources that have metadata available."""
     from app.services.config_util import get_resources_with_metadata

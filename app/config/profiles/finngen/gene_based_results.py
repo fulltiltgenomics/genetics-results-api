@@ -8,14 +8,7 @@ gene_based_data_files = [
         "data_source": "gcloud",
         "gencode_version": 35,
         "gene_based": {
-            "file": "gs://finngen-commons/results_api_data/exome_results/genebass/gene_burden_results.tsv.gz",
-        },
-        "metadata": {
-            "metadata_file": "gs://finngen-commons/results_api_data/mapping_files/genebass_pheno_results.txt.bgz",
-            "type": "genebass",
-            "author": "GeneBass",
-            "publication_date": "2022-09-14",
-            "version_label": "N_394841",
+            "file": "gs://finngen-commons/results_api_data/exome_results4/genebass/gene_burden_results.tsv.gz",
         },
     },
     {
@@ -23,15 +16,49 @@ gene_based_data_files = [
         "dataset_id": "schema_gene_based",
         "resource": "schema",
         "data_source": "gcloud",
-        "gencode_version": 19,
+        "gencode_version": 39,
         "gene_based": {
-            "file": "gs://finngen-commons/results_api_data/exome_results/schema/SCHEMA_gene_results.munged.tsv.gz",
+            "file": "gs://finngen-commons/results_api_data/exome_results4/schema/SCHEMA2_gene_results.munged.tsv.gz",
         },
-        "metadata": {
-            "type": "schema",
-            "author": "SCHEMA Consortium",
-            "publication_date": "NA",
-            "version_label": "N_121570_EUR_ASN",
+    },
+    {
+        "id": "bipex_gene_based",
+        "dataset_id": "bipex_gene_based",
+        "resource": "bipex",
+        "data_source": "gcloud",
+        "gencode_version": 39,
+        "gene_based": {
+            "file": "gs://finngen-commons/results_api_data/exome_results4/bipex/BipEx2_gene_results.munged.tsv.gz",
+        },
+    },
+    {
+        "id": "ibd_ibd_gene_based",
+        "dataset_id": "ibd_gene_based",
+        "resource": "ibd",
+        "data_source": "gcloud",
+        "gencode_version": 43,
+        "gene_based": {
+            "file": "gs://finngen-commons/results_api_data/exome_results4/ibd/IBD_exome_IBD_gene_results.munged.tsv.gz",
+        },
+    },
+    {
+        "id": "ibd_uc_gene_based",
+        "dataset_id": "ibd_gene_based",
+        "resource": "ibd",
+        "data_source": "gcloud",
+        "gencode_version": 43,
+        "gene_based": {
+            "file": "gs://finngen-commons/results_api_data/exome_results4/ibd/IBD_exome_UC_gene_results.munged.tsv.gz",
+        },
+    },
+    {
+        "id": "ibd_cd_gene_based",
+        "dataset_id": "ibd_gene_based",
+        "resource": "ibd",
+        "data_source": "gcloud",
+        "gencode_version": 43,
+        "gene_based": {
+            "file": "gs://finngen-commons/results_api_data/exome_results4/ibd/IBD_exome_CD_gene_results.munged.tsv.gz",
         },
     },
 ]

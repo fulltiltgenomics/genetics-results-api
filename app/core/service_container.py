@@ -59,10 +59,14 @@ def _register_services():
         from app.services.request_util import RequestUtil
         return RequestUtil()
 
-    # search index - depends on hgnc file and data access
+    # search index - depends on hgnc file, data access, and gene name mapping
     def create_search_index():
         from app.services.search_service import SearchIndex
-        return SearchIndex(config.hgnc_file, container.get("data_access"))
+        return SearchIndex(
+            config.hgnc_file,
+            container.get("data_access"),
+            container.get("gene_name_mapping"),
+        )
 
     # data access services
     def create_data_access():
@@ -85,6 +89,11 @@ def _register_services():
     def create_gene_name_mapping():
         from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
         return GeneNameAndPositionMapping()
+
+    # gene group / lineage service
+    def create_gene_group_service():
+        from app.services.gene_group_service import GeneGroupService
+        return GeneGroupService()
 
     # gene disease data
     def create_gene_disease_data():
@@ -128,6 +137,10 @@ def _register_services():
         from app.services.sumstats_data_access import SumstatsDataAccess
         return SumstatsDataAccess()
 
+    def create_variant_annotation_service():
+        from app.services.variant_annotation_service import VariantAnnotationService
+        return VariantAnnotationService()
+
     # register all services
     container.register("request_util", create_request_util)
     container.register("search_index", create_search_index)
@@ -136,6 +149,7 @@ def _register_services():
     container.register("data_access_expression", create_data_access_expression)
     container.register("data_access_chromatin_peaks", create_data_access_chromatin_peaks)
     container.register("gene_name_mapping", create_gene_name_mapping)
+    container.register("gene_group_service", create_gene_group_service)
     container.register("gene_disease_data", create_gene_disease_data)
     container.register("finemapped", create_finemapped)
     container.register("rsid_db", create_rsid_db)
@@ -146,6 +160,7 @@ def _register_services():
     container.register("phenotype_markdown_service", create_phenotype_markdown_service)
     container.register("credible_set_stats_service", create_credible_set_stats_service)
     container.register("sumstats_data_access", create_sumstats_data_access)
+    container.register("variant_annotation_service", create_variant_annotation_service)
 
 
 # register services on module load

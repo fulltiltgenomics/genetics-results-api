@@ -95,6 +95,9 @@ class TestSearchAutocomplete:
         assert first_result["ensembl_id"] == "ENSG00000012048"
         assert first_result["symbol"] == "BRCA1"
         assert first_result["match_type"] == "exact"
+        assert "chrom" in first_result
+        assert "gene_start" in first_result
+        assert "gene_end" in first_result
 
     def test_search_phenotype(self, server_url):
         """Test phenotype search."""
@@ -224,6 +227,12 @@ class TestSearchAutocomplete:
             assert "aliases" in gene
             assert isinstance(gene["aliases"], list)
             assert "ensembl_id" in gene
+            assert "chrom" in gene
+            assert "gene_start" in gene
+            assert "gene_end" in gene
+            assert isinstance(gene["chrom"], int)
+            assert isinstance(gene["gene_start"], int)
+            assert isinstance(gene["gene_end"], int)
             assert "match_type" in gene
             assert "match_score" in gene
             assert "rank_score" in gene
@@ -246,6 +255,8 @@ class TestSearchAutocomplete:
             assert "name" in pheno
             assert "resource" in pheno
             assert "sample_size" in pheno or pheno.get("sample_size") is not None
+            assert "n_cases" in pheno
+            assert "n_controls" in pheno
             assert "match_type" in pheno
             assert "match_score" in pheno
             assert "rank_score" in pheno
@@ -349,6 +360,9 @@ class TestSearchAutocomplete:
             assert "symbol" in header
             assert "name" in header
             assert "aliases" in header
+            assert "chrom" in header
+            assert "gene_start" in header
+            assert "gene_end" in header
             assert "match_type" in header
 
     def test_search_tsv_format_phenotypes(self, server_url):
@@ -371,6 +385,8 @@ class TestSearchAutocomplete:
             assert "name" in header
             assert "resource" in header
             assert "sample_size" in header
+            assert "n_cases" in header
+            assert "n_controls" in header
 
     @pytest.mark.parametrize("invalid_limit", [0, -1, 101, 1000])
     def test_search_invalid_limit(self, server_url, invalid_limit):

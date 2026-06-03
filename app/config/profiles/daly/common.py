@@ -13,6 +13,9 @@ gnomad = {
     "version": "4.0",
 }
 
+# TODO migrate dataset_to_resource to datasets.yaml — the YAML has pattern-based
+# dataset_to_resource_rules but not the exact BQ dataset name -> (resource, version)
+# mapping that dataset_mapping.py needs. Keep hardcoded until YAML schema supports it.
 dataset_to_resource = {
     "FinnGen_ATACseq": ("finngen", "R12"),
     "FinnGen_snRNAseq": ("finngen", "R12"),
@@ -36,6 +39,7 @@ dataset_to_resource = {
     "GTEx_v10": ("gtex", "v10"),
     "HPA_24.1": ("hpa", "24.1"),
     "genebass": ("genebass", "v1"),
+    "IBD_exome_2026": ("ibd_exome_2026", "2026"),
 }
 
 dataset_mapping_files = [
@@ -56,6 +60,17 @@ variant_set_files = {
     },
     "COVID19_HGI_severity": {
         "file": "gs://daly-genetics-results/variant_sets/COVID19_HGI_severity",
+    },
+}
+
+variant_annotation_sources = {
+    "finngen": {
+        "file": "gs://daly-genetics-results/variant_annotations/R13_annotated_variants_v0.small.gz",
+    },
+    "gnomad": {
+        "file": "gs://daly-genetics-results/gnomad/gnomad.genomes.exomes.v4.0.sites.v2.tsv.bgz",
+        # gnomad cpra layout differs from finngen: chr=0,pos=1,ref=2,alt=3
+        "cpra_cols": [0, 1, 2, 3],
     },
 }
 

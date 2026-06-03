@@ -59,12 +59,12 @@ async def list_datasets(
     resource: str | None = Query(
         default=None,
         description="Optional: filter to datasets for a specific resource",
-        example="finngen",
+        examples=["finngen"],
     ),
     data_type: str | None = Query(
         default=None,
         description="Optional: filter to datasets of a specific data type (e.g. gwas, expression, gene_disease)",
-        example="gwas",
+        examples=["gwas"],
     ),
     include_stats: bool = Query(
         default=True,
@@ -104,6 +104,7 @@ async def list_datasets(
             "caqtl": ["caQTL"],
             "sqtl": ["sQTL"],
             "metaboqtl": ["metaboQTL"],
+            "asmqtl": ["asmQTL"],
         }
         qtl_types = entry.get("qtl_types") or qtl_type_map.get(entry.get("data_type", ""))
         if qtl_types:

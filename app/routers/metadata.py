@@ -80,7 +80,7 @@ router = APIRouter()
     },
 )
 async def resource_metadata(
-    resource: str = Path(..., description="Data resource", example="finngen"),
+    resource: str = Path(..., description="Data resource", examples=["finngen"]),
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),

@@ -31,6 +31,9 @@ chromatin_peaks_header_schema = {
     "hurdle_count_nlog10p": float,
     "hurdle_aic": float,
     "hurdle_bic": float,
+    "gene_chrom": str,
+    "gene_start": int,
+    "gene_end": int,
 }
 
 _profile = load_profile_module("chromatin_peaks")

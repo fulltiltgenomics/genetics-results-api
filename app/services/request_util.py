@@ -105,12 +105,17 @@ class RequestUtil:
             )
         return (chr, start, end)
 
-    def check_resources(self, resources_list: list[str]) -> bool:
+    def check_resources(
+        self, resources_list: list[str], data_type: str | None = None
+    ) -> bool:
         """
-        Check if the resources are valid (included in config).
+        Check if the resources are valid (included in config). When data_type is
+        given, validate against resources offering that data type only (e.g. "cs"),
+        so a valid-but-wrong-product resource is rejected up front instead of
+        failing mid-stream.
         """
         from app.services.config_util import get_resources
-        valid_resources = get_resources()
+        valid_resources = get_resources(data_type)
         for resource in resources_list:
             if resource not in valid_resources:
                 return False

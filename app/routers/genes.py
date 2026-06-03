@@ -1,15 +1,14 @@
 import logging
-import subprocess
 from typing import Literal
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Response
-from fastapi.responses import StreamingResponse, PlainTextResponse
-from app.dependencies import get_gene_name_mapping, ensure_gcs_token
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
+from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
+from app.dependencies import get_gene_name_mapping
 from app.core.variant import Variant
 from app.core.exceptions import (
     ParseException,
 )
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
-import app.config.common as config_common
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +102,7 @@ async def genes_in_region(
             .replace("mt", "25")
             .strip()
         )
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(status_code=422, detail="invalid chromosome")
     genes = gene_name_and_position_mapping.get_genes_in_region(
         chr, start, end, gene_type=gene_type, gencode_version=gencode_version
@@ -135,7 +134,7 @@ async def genes_in_region(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "gene_name\tgene_start\tgene_end\tgene_strand\tgene_type\tdistance\thgnc_symbol\thgnc_name\thgnc_alias_symbol\thgnc_prev_symbol\nPCSK9\t55039445\t55064852\t+\tprotein_coding\t0\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tHCHOLA3\nUSP24\t55066359\t55215753\t-\tprotein_coding\t16359\tUSP24\tubiquitin specific peptidase 24\tKIAA1057\tNone\n...",
+                    "example": "gene_name\tchrom\tgene_start\tgene_end\tgene_strand\tgene_type\tdistance\thgnc_symbol\thgnc_name\thgnc_alias_symbol\thgnc_prev_symbol\nPCSK9\t1\t55039445\t55064852\t+\tprotein_coding\t0\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tHCHOLA3\nUSP24\t1\t55066359\t55215753\t-\tprotein_coding\t16359\tUSP24\tubiquitin specific peptidase 24\tKIAA1057\tNone\n...",
                 },
                 "application/json": {
                     "schema": {
@@ -144,6 +143,7 @@ async def genes_in_region(
                             "type": "object",
                             "properties": {
                                 "gene_name": {"type": "string"},
+                                "chrom": {"type": "integer"},
                                 "gene_start": {"type": "integer"},
                                 "gene_end": {"type": "integer"},
                                 "gene_strand": {"type": "string"},
@@ -159,6 +159,7 @@ async def genes_in_region(
                     "example": [
                         {
                             "gene_name": "PCSK9",
+                            "chrom": 1,
                             "gene_start": 55039445,
                             "gene_end": 55064852,
                             "gene_strand": "+",
@@ -171,6 +172,7 @@ async def genes_in_region(
                         },
                         {
                             "gene_name": "USP24",
+                            "chrom": 1,
                             "gene_start": 55066359,
                             "gene_end": 55215753,
                             "gene_strand": "-",
@@ -194,7 +196,7 @@ async def genes_in_region(
 )
 async def nearest_genes(
     variant: str = Path(
-        ..., description="Variant (chr-pos-ref-alt)", example="7-5397122-C-T"
+        ..., description="Variant (chr-pos-ref-alt)", examples=["7-5397122-C-T"]
     ),
     gene_type: Literal["protein_coding", "all"] = Query(
         default="protein_coding", description="Type of genes to return"
@@ -249,9 +251,6 @@ async def nearest_genes(
         return genes
 
 
-from pydantic import BaseModel
-
-
 class NearestGenesRequest(BaseModel):
     variants: str
 
@@ -265,12 +264,45 @@ class NearestGenesRequest(BaseModel):
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
+                    "example": "gene_name\tchrom\tgene_start\tgene_end\tgene_strand\tgene_type\tdistance\thgnc_symbol\thgnc_name\thgnc_alias_symbol\thgnc_prev_symbol\tvariant\nPCSK9\t1\t55039445\t55064852\t+\tprotein_coding\t0\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tHCHOLA3\t1-55050000-C-T\n...",
                 },
                 "application/json": {
                     "schema": {
                         "type": "array",
-                        "items": {"type": "object"},
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "gene_name": {"type": "string"},
+                                "chrom": {"type": "integer"},
+                                "gene_start": {"type": "integer"},
+                                "gene_end": {"type": "integer"},
+                                "gene_strand": {"type": "string"},
+                                "gene_type": {"type": "string"},
+                                "distance": {"type": "integer"},
+                                "hgnc_symbol": {"type": "string"},
+                                "hgnc_name": {"type": "string"},
+                                "hgnc_alias_symbol": {"type": "string"},
+                                "hgnc_prev_symbol": {"type": ["string", "null"]},
+                                "variant": {"type": "string"},
+                            },
+                        },
                     },
+                    "example": [
+                        {
+                            "gene_name": "PCSK9",
+                            "chrom": 1,
+                            "gene_start": 55039445,
+                            "gene_end": 55064852,
+                            "gene_strand": "+",
+                            "gene_type": "protein_coding",
+                            "distance": 0,
+                            "hgnc_symbol": "PCSK9",
+                            "hgnc_name": "proprotein convertase subtilisin/kexin type 9",
+                            "hgnc_alias_symbol": "NARC-1|FH3",
+                            "hgnc_prev_symbol": "HCHOLA3",
+                            "variant": "1-55050000-C-T",
+                        },
+                    ],
                 },
             },
         },
@@ -408,131 +440,3 @@ async def nearest_genes_post(
 #     )
 
 
-@router.post(
-    "/variant_annotation_range/{chr}/{start}/{end}",
-    include_in_schema=False,
-    responses={
-        200: {
-            "description": "Successful response",
-            "content": {"application/octet-stream": {"schema": {"type": "string"}}},
-        },
-        401: {"description": "Not authenticated"},
-        422: {"description": "Invalid start or end parameter"},
-        500: {"description": "Internal server error"},
-    },
-)
-async def variant_annotation_range(
-    chr: str,
-    start: str,
-    end: str,
-    variants: list[str] = Body(...),
-    _=Depends(ensure_gcs_token),
-) -> StreamingResponse:
-    try:
-        start = int(start)
-        end = int(end)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail="invalid start or end")
-    variant_dict = {v.encode("utf-8"): True for v in variants}
-
-    def iter_stdout():
-        process = subprocess.Popen(
-            [
-                "tabix",
-                "-h",
-                config_common.gnomad["file"],
-                f"{chr}:{start}-{end}",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd="/tmp/tbi_cache",
-        )
-        try:
-            n = 0
-            header = process.stdout.readline()
-            yield header
-            for line in process.stdout:
-                n += 1
-                fields = line.split(b"\t")
-                # only return specified variants - we don't to return all variants in the region because there can be quite many of them
-                if (
-                    b":".join([fields[0], fields[1], fields[2], fields[3]])
-                    in variant_dict
-                ):
-                    yield line
-            process.stdout.close()
-            process.wait()
-            if process.returncode != 0:
-                error_message = process.stderr.read().decode("utf-8")
-                logger.error(error_message)
-                yield f"!error: failed to read"
-        except Exception as e:
-            logger.exception(e)
-            yield f"!error: failed to read"
-
-    return StreamingResponse(iter_stdout(), media_type="application/octet-stream")
-
-
-@router.post(
-    "/variant_annotation",
-    include_in_schema=False,
-    responses={
-        200: {
-            "description": "Successful response",
-            "content": {"application/octet-stream": {"schema": {"type": "string"}}},
-        },
-        401: {"description": "Not authenticated"},
-        500: {"description": "Internal server error"},
-    },
-)
-async def variant_annotation(
-    variants: list[str] = Body(...),
-    _=Depends(ensure_gcs_token),
-) -> StreamingResponse:
-    variant_dict = {v.encode("utf-8"): True for v in variants}
-
-    def iter_stdout():
-        regions = "".join(
-            f"{v.split(':')[0]}\t{v.split(':')[1]}\t{v.split(':')[1]}\n"
-            for v in variants
-        )
-        process = subprocess.Popen(
-            [
-                "tabix",
-                "-h",
-                "-R",
-                "/dev/stdin",
-                config_common.gnomad["file"],
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd="/tmp/tbi_cache",
-        )
-        # send regions to tabix's stdin
-        process.stdin.write(regions.encode())
-        process.stdin.close()
-        try:
-            n = 0
-            header = process.stdout.readline()
-            yield header
-            for line in process.stdout:
-                n += 1
-                fields = line.split(b"\t")
-                # only return specified variants because multiallelics
-                if (
-                    b":".join([fields[0], fields[1], fields[2], fields[3]])
-                    in variant_dict
-                ):
-                    yield line
-            process.stdout.close()
-            process.wait()
-            if process.returncode != 0:
-                error_message = process.stderr.read().decode("utf-8")
-                logger.error(error_message)
-                yield f"!error: failed to read"
-        except Exception as e:
-            logger.exception(e)
-            yield f"!error: failed to read"
-
-    return StreamingResponse(iter_stdout(), media_type="application/octet-stream")

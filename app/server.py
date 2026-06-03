@@ -16,6 +16,7 @@ from app.routers import (
     datasets,
     expression,
     genes,
+    gene_groups,
     gene_disease,
     gene_based,
     chromatin_peaks,
@@ -25,6 +26,7 @@ from app.routers import (
     resources,
     rsid,
     summary_stats,
+    variant_annotation,
 )
 
 
@@ -64,6 +66,7 @@ app.include_router(credible_sets.router, prefix="/api/v1", tags=["credible-sets"
 app.include_router(colocalization.router, prefix="/api/v1", tags=["colocalization"])
 app.include_router(expression.router, prefix="/api/v1", tags=["expression"])
 app.include_router(genes.router, prefix="/api/v1", tags=["genes"])
+app.include_router(gene_groups.router, prefix="/api/v1", tags=["gene-groups"])
 app.include_router(gene_disease.router, prefix="/api/v1", tags=["gene-disease"])
 app.include_router(gene_based.router, prefix="/api/v1", tags=["gene-based"])
 app.include_router(chromatin_peaks.router, prefix="/api/v1", tags=["chromatin-peaks"])
@@ -73,6 +76,7 @@ app.include_router(resources.router, prefix="/api/v1", tags=["resources"])
 app.include_router(datasets.router, prefix="/api/v1", tags=["datasets"])
 app.include_router(rsid.router, prefix="/api/v1", tags=["rsid"])
 app.include_router(summary_stats.router, prefix="/api/v1", tags=["summary-stats"])
+app.include_router(variant_annotation.router, prefix="/api/v1", tags=["variant-annotation"])
 
 
 def get_all_endpoints():

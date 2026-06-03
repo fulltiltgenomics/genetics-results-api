@@ -132,6 +132,7 @@ class DataAccessChromatinPeaks(BaseDataAccess[DataAccessObjectChromatinPeaks]):
         resources: List[str],
         in_chunk_size: int,
         out_chunk_size: int,
+        coordinates_lookup: dict[str, tuple[int, int, int]] | None = None,
     ) -> AsyncGenerator[bytes, None]:
         """
         Stream data for a specific peak_id from multiple resources.
@@ -141,6 +142,7 @@ class DataAccessChromatinPeaks(BaseDataAccess[DataAccessObjectChromatinPeaks]):
             resources: List of resource names to query
             in_chunk_size: Size of chunks to read from tabix
             out_chunk_size: Size of chunks to write to response
+            coordinates_lookup: Optional mapping from ENSG ID to (chrom, gene_start, gene_end)
 
         Returns:
             AsyncGenerator yielding response chunks
@@ -156,11 +158,14 @@ class DataAccessChromatinPeaks(BaseDataAccess[DataAccessObjectChromatinPeaks]):
                 peak_id,
                 access.get_resource_name(),
                 access.get_version(),
+                coordinates_lookup=coordinates_lookup,
             )
             for access in accesses
         ]
 
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
+        if coordinates_lookup is not None:
+            header_with_resources += [b"gene_chrom", b"gene_start", b"gene_end"]
         sort_key_fn = create_sort_key(
             header_with_resources, SORT_CONFIG_CHROMATIN_PEAKS
         )

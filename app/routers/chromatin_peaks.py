@@ -2,10 +2,11 @@ import time
 import logging
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
-from app.dependencies import get_data_access_chromatin_peaks
+from app.dependencies import get_data_access_chromatin_peaks, get_gene_name_mapping
 from app.core.responses import range_response
 from app.core.exceptions import NotFoundException
 from app.services.data_access_chromatin_peaks import DataAccessChromatinPeaks
+from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 import app.config.chromatin_peaks as config
 import app.config.common as config_common
 
@@ -23,7 +24,7 @@ router = APIRouter()
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tchrom\tstart\tend\tpeak_id\tgene_id\tsymbol\tcell_type\ttotal_cell_num\texpr_cell_num\topen_cell_num\thurdle_zero_beta\thurdle_zero_se\thurdle_zero_z\thurdle_zero_nlog10p\thurdle_count_beta\thurdle_count_se\thurdle_count_z\thurdle_count_nlog10p\thurdle_aic\thurdle_bic\nfinngen_atacseq\t\tchr1\t817095\t817594\tchr1-817095-817594\tENSG00000228794\tLINC01128\tpredicted.celltype.l1.PBMC\t7088529\t187191\t118742\t0.122891591499534\t0.0139613929348723\t8.80224430848729\t17.8725490512647\t0.287993450475682\t0.0381107939160484\t7.55674235257555\t13.3837456571306\t1645822.3526141\t1645973.86648652\n...",
+                    "example": "resource\tversion\tchrom\tstart\tend\tpeak_id\tgene_id\tsymbol\tcell_type\ttotal_cell_num\texpr_cell_num\topen_cell_num\thurdle_zero_beta\thurdle_zero_se\thurdle_zero_z\thurdle_zero_nlog10p\thurdle_count_beta\thurdle_count_se\thurdle_count_z\thurdle_count_nlog10p\thurdle_aic\thurdle_bic\tgene_chrom\tgene_start\tgene_end\nfinngen_atacseq\t\tchr1\t817095\t817594\tchr1-817095-817594\tENSG00000228794\tLINC01128\tpredicted.celltype.l1.PBMC\t7088529\t187191\t118742\t0.122891591499534\t0.0139613929348723\t8.80224430848729\t17.8725490512647\t0.287993450475682\t0.0381107939160484\t7.55674235257555\t13.3837456571306\t1645822.3526141\t1645973.86648652\tchr1\t826206\t827522\n...",
                 },
                 "application/json": {
                     "schema": {
@@ -53,6 +54,9 @@ router = APIRouter()
                                 "hurdle_count_nlog10p": {"type": "number"},
                                 "hurdle_aic": {"type": "number"},
                                 "hurdle_bic": {"type": "number"},
+                                "gene_chrom": {"type": "string"},
+                                "gene_start": {"type": "integer"},
+                                "gene_end": {"type": "integer"},
                             },
                         },
                     },
@@ -80,6 +84,9 @@ router = APIRouter()
                             "hurdle_count_nlog10p": 13.3837456571306,
                             "hurdle_aic": 1645822.3526141,
                             "hurdle_bic": 1645973.86648652,
+                            "gene_chrom": "chr1",
+                            "gene_start": 826206,
+                            "gene_end": 827522,
                         },
                     ],
                 },
@@ -96,16 +103,21 @@ async def peak_to_genes(
     peak_id: str = Path(
         ...,
         description="Peak ID in format chr-start-end",
-        example="chr1-817095-817594",
+        examples=["chr1-817095-817594"],
     ),
     resources: list[str] | None = Query(
         default=None,
         description="Comma-separated list of resources to get data from (if not given, all available resources are used)",
     ),
+    gencode_version: int | None = Query(
+        default=None,
+        description="GENCODE version to use for gene coordinates (default: latest available)",
+    ),
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),
     data_access_chromatin_peaks: DataAccessChromatinPeaks = Depends(get_data_access_chromatin_peaks),
+    gene_name_mapping: GeneNameAndPositionMapping = Depends(get_gene_name_mapping),
 ) -> Response:
     """
     Get genes associated with a chromatin peak.
@@ -135,12 +147,19 @@ async def peak_to_genes(
             + ", ".join(available_resources),
         )
 
+    coordinates_lookup = None
+    try:
+        coordinates_lookup = gene_name_mapping.get_coordinates_lookup(gencode_version)
+    except Exception as e:
+        logger.warning(f"Could not load gene coordinates: {e}")
+
     try:
         stream = await data_access_chromatin_peaks.stream_by_peak_id(
             peak_id,
             resources,
             config_common.read_chunk_size,
             config_common.response_chunk_size,
+            coordinates_lookup=coordinates_lookup,
         )
     except NotFoundException as e:
         raise HTTPException(status_code=404, detail=str(e))

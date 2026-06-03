@@ -22,11 +22,13 @@ if TYPE_CHECKING:
     from app.services.data_access_expression import DataAccessExpression
     from app.services.data_access_chromatin_peaks import DataAccessChromatinPeaks
     from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
+    from app.services.gene_group_service import GeneGroupService
     from app.services.gene_disease_data import GeneDiseaseData
     from app.services.phenotype_markdown_service import PhenotypeMarkdownService
     from app.services.credible_set_stats_service import CredibleSetStatsService
     from app.services.rsid_db import RsidDB
     from app.services.sumstats_data_access import SumstatsDataAccess
+    from app.services.variant_annotation_service import VariantAnnotationService
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +94,11 @@ def get_gene_name_mapping() -> "GeneNameAndPositionMapping":
     return container.get("gene_name_mapping")
 
 
+def get_gene_group_service() -> "GeneGroupService":
+    """Get GeneGroupService service instance."""
+    return container.get("gene_group_service")
+
+
 def get_gene_disease_data() -> "GeneDiseaseData":
     """Get GeneDiseaseData service instance."""
     return container.get("gene_disease_data")
@@ -115,3 +122,8 @@ def get_rsid_db() -> "RsidDB":
 def get_sumstats_data_access() -> "SumstatsDataAccess":
     """Get SumstatsDataAccess service instance."""
     return container.get("sumstats_data_access")
+
+
+def get_variant_annotation_service() -> "VariantAnnotationService":
+    """Get VariantAnnotationService instance."""
+    return container.get("variant_annotation_service")

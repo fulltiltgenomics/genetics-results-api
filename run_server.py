@@ -7,6 +7,7 @@ import app.config.credible_sets as config_credible_sets
 from app.core.variant import Variant
 from app.core.service_container import container
 import uvicorn
+from app.core.logging_config import setup_logging
 
 
 def _get_data_access():
@@ -130,6 +131,15 @@ async def _cleanup_services():
                         await obj.cleanup()
 
 
+async def _run_async_validations():
+    """Run all async validations and clean up sessions on the same event loop."""
+    await _validata_example_phenos()
+    await _validate_range()
+    await _validate_qtl_gene()
+    await _validate_coloc()
+    await _cleanup_services()
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python run_server.py <port>")
@@ -138,19 +148,16 @@ if __name__ == "__main__":
     try:
         # create tbi cache dir and clean stale index files
         os.makedirs("/tmp/tbi_cache", exist_ok=True)
-        for file in glob.glob("/tmp/tbi_cache/*.tbi") + glob.glob("/tmp/tbi_cache/*.csi"):
+        for file in glob.glob("/tmp/tbi_cache/**/*.tbi", recursive=True) + glob.glob("/tmp/tbi_cache/**/*.csi", recursive=True):
             os.remove(file)
         _validate_metadata_files()
-        asyncio.run(_validata_example_phenos())
-        asyncio.run(_validate_range())
-        asyncio.run(_validate_qtl_gene())
-        asyncio.run(_validate_coloc())
+        asyncio.run(_run_async_validations())
         _validate_gene_disease()
-        # clean up aiohttp sessions before resetting container
-        asyncio.run(_cleanup_services())
+        # configure JSON logging before uvicorn starts so its loggers propagate to root
+        setup_logging()
         # use asyncio event loop instead of uvloop - uvloop uses sockets instead of pipes
         # for subprocess stdin, which can break tabix's -R /dev/stdin option (uvloop issue #532)
-        uvicorn.run("app.server:app", host="0.0.0.0", port=port, reload=True, loop="asyncio")
+        uvicorn.run("app.server:app", host="0.0.0.0", port=port, reload=True, loop="asyncio", log_config=None)
     except Exception as e:
         # log error without exposing full traceback to stdout in production
         import logging

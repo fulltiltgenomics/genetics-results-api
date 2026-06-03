@@ -1,7 +1,7 @@
 from typing_extensions import Literal, NotRequired, TypedDict
 
 
-Datatype = Literal["GWAS", "eQTL", "sQTL", "pQTL", "edQTL", "metaboQTL", "NA"]
+Datatype = Literal["GWAS", "eQTL", "sQTL", "pQTL", "edQTL", "metaboQTL", "asmQTL", "NA"]
 TraitType = Literal["case-control", "continuous"]
 
 

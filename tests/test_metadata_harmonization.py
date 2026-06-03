@@ -106,7 +106,7 @@ class TestMetadataHarmonization:
             item = r13_items[0]
             assert item["trait_type"] == "binary"
             assert item["author"] == "FinnGen Consortium"
-            assert item["date"] == "2025-09-01"
+            assert item["date"] == "2025-09-12"
             # n_samples should be sum of cases and controls
             assert item["n_samples"] == item["n_cases"] + item["n_controls"]
 
@@ -150,7 +150,7 @@ class TestMetadataHarmonization:
         # author should be study_label
         assert item["author"] != ""
         assert item["version"] == "R7"
-        assert item["date"] == "2020-01-01"
+        assert item["date"] == "2024-06-01"
 
     def test_metadata_open_targets(self, server_url):
         """Test Open Targets metadata harmonization."""

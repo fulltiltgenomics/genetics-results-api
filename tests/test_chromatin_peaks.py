@@ -139,6 +139,9 @@ class TestPeakToGenes:
                     "gene_id",
                     "symbol",
                     "cell_type",
+                    "gene_chrom",
+                    "gene_start",
+                    "gene_end",
                 ]
                 for field in expected_fields:
                     assert field in first_item, f"Missing expected field: {field}"
@@ -165,6 +168,9 @@ class TestPeakToGenes:
                 "gene_id",
                 "symbol",
                 "cell_type",
+                "gene_chrom",
+                "gene_start",
+                "gene_end",
             ]
             for col in expected_columns:
                 assert col in header, f"Missing expected column: {col}"

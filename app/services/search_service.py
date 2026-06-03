@@ -2,12 +2,18 @@ import logging
 from typing import Literal, TYPE_CHECKING
 import polars as pl
 from rapidfuzz import fuzz, process
+from app.config.summary_stats import get_available_resources_and_types
 from app.services.config_util import get_datasets, get_resources_with_metadata
 
 if TYPE_CHECKING:
     from app.services.data_access import DataAccess
+    from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 
 logger = logging.getLogger(__name__)
+
+# (resource, data_type) pairs that have summary statistics available, used to
+# annotate phenotype search results with has_summary_stats
+_SUMSTATS_PAIRS = set(get_available_resources_and_types())
 
 
 class SearchIndex:
@@ -16,12 +22,24 @@ class SearchIndex:
     Indexes phenotypes and genes at startup for fuzzy search.
     """
 
-    def __init__(self, hgnc_file: str, data_access: "DataAccess | None" = None):
+    def __init__(
+        self,
+        hgnc_file: str,
+        data_access: "DataAccess | None" = None,
+        gene_name_mapping: "GeneNameAndPositionMapping | None" = None,
+    ):
         self.phenotypes = []
         self.genes = []
         self.search_items = []
+        # hgnc_id -> gene record, the single bridge from HGNC ids (used by
+        # GeneGroupService) back to symbol/ensembl/coords already loaded here
+        self.genes_by_hgnc_id: dict[str, dict] = {}
+        # lazily-built exact symbol/alias/prev -> approved symbol index
+        # (see _ensure_symbol_index / normalize_symbol)
+        self._symbol_index: dict[str, tuple[str, bool]] | None = None
         self._hgnc_file = hgnc_file
         self._data_access = data_access
+        self._gene_name_mapping = gene_name_mapping
         self._initialize()
 
     def _initialize(self):
@@ -41,8 +59,11 @@ class SearchIndex:
 
         for resource in get_resources_with_metadata():
             try:
-                # get harmonized metadata which handles configs internally
-                harmonized_dicts = self._data_access.get_harmonized_metadata(resource)
+                # get harmonized metadata which handles configs internally;
+                # data_type is needed so /search can expose summary_stats availability
+                harmonized_dicts = self._data_access.get_harmonized_metadata(
+                    resource, include_data_type=True
+                )
                 logger.debug(f"Loading {len(harmonized_dicts)} phenotypes from {resource}")
 
                 for item_dict in harmonized_dicts:
@@ -57,12 +78,20 @@ class SearchIndex:
                         sample_size = n_samples
 
                     if code and name:
+                        n_cases = item_dict.get("n_cases", "NA")
+                        n_controls = item_dict.get("n_controls", "NA")
+                        data_type = item_dict.get("data_type")
+
                         phenotype = {
                             "type": "phenotype",
                             "code": code,
                             "name": name,
                             "resource": resource,
+                            "data_type": data_type,
                             "sample_size": sample_size,
+                            "n_cases": n_cases,
+                            "n_controls": n_controls,
+                            "has_summary_stats": (resource, data_type) in _SUMSTATS_PAIRS,
                             # store normalized search strings
                             "search_strings": [
                                 code.lower(),
@@ -89,17 +118,24 @@ class SearchIndex:
             if not inline_phenos:
                 continue
             resource = entry.get("resource", dataset_id)
+            data_type = entry.get("data_type")
             for item_dict in inline_phenos:
                 code = item_dict.get("phenotype_code")
                 name = item_dict.get("phenotype_string")
                 n_samples = item_dict.get("n_samples", 0)
+                n_cases = item_dict.get("n_cases", "NA")
+                n_controls = item_dict.get("n_controls", "NA")
                 if code and name:
                     phenotype = {
                         "type": "phenotype",
                         "code": code,
                         "name": name,
                         "resource": resource,
+                        "data_type": data_type,
                         "sample_size": n_samples,
+                        "n_cases": n_cases,
+                        "n_controls": n_controls,
+                        "has_summary_stats": (resource, data_type) in _SUMSTATS_PAIRS,
                         "search_strings": [code.lower(), name.lower()],
                     }
                     self.phenotypes.append(phenotype)
@@ -112,7 +148,7 @@ class SearchIndex:
                     )
 
     def _load_genes(self):
-        """Load genes from HGNC complete set"""
+        """Load genes from HGNC complete set, enriched with coordinates if available"""
         try:
             logger.debug(f"Loading genes from {self._hgnc_file}")
 
@@ -121,10 +157,19 @@ class SearchIndex:
             df = pl.read_csv(self._hgnc_file, separator="\t", infer_schema_length=0)
             logger.debug(f"Loaded {len(df)} genes from HGNC")
 
+            # build coordinates lookup using default gencode version
+            coords_lookup: dict[str, tuple[int, int, int]] = {}
+            if self._gene_name_mapping is not None:
+                try:
+                    coords_lookup = self._gene_name_mapping.get_coordinates_lookup()
+                except Exception as e:
+                    logger.warning(f"Could not load gene coordinates: {e}")
+
             for row in df.iter_rows(named=True):
                 symbol = row.get("symbol")
                 name = row.get("name")
                 ensembl_id = row.get("ensembl_gene_id")
+                hgnc_id = row.get("hgnc_id")
 
                 if not symbol:
                     continue
@@ -138,18 +183,25 @@ class SearchIndex:
                 if prev_symbol and prev_symbol != "":
                     aliases.extend(prev_symbol.split("|"))
 
+                coords = coords_lookup.get(ensembl_id) if ensembl_id else None
                 gene = {
                     "type": "gene",
+                    "hgnc_id": hgnc_id or "",
                     "symbol": symbol,
                     "name": name or "",
                     "aliases": aliases,
                     "ensembl_id": ensembl_id or "",
+                    "chrom": coords[0] if coords else None,
+                    "gene_start": coords[1] if coords else None,
+                    "gene_end": coords[2] if coords else None,
                     "search_strings": [symbol.lower()]
                     + [name.lower() if name else ""]
                     + [a.lower() for a in aliases if a]
                     + [ensembl_id.lower() if ensembl_id else ""],
                 }
                 self.genes.append(gene)
+                if hgnc_id:
+                    self.genes_by_hgnc_id[hgnc_id] = gene
 
                 # add symbol as primary search key
                 self.search_items.append(
@@ -199,11 +251,66 @@ class SearchIndex:
             logger.error(f"Error loading genes: {e}")
             raise e
 
+    def get_gene_by_hgnc_id(self, hgnc_id: str) -> dict | None:
+        """Look up a loaded gene record (symbol/ensembl/coords) by HGNC id."""
+        return self.genes_by_hgnc_id.get(hgnc_id)
+
+    def _ensure_symbol_index(self) -> dict[str, tuple[str, bool]]:
+        """
+        Build (once) a case-insensitive EXACT-match index from any gene
+        symbol/alias/previous-symbol string to its approved HGNC symbol.
+
+        Built from self.genes (loaded in _load_genes), whose `symbol` is the
+        approved HGNC symbol and whose `aliases` is the merged
+        alias_symbol + prev_symbol list. The free-text gene `name` and the
+        ensembl id are deliberately NOT indexed here -- normalization accepts
+        only symbols/aliases/previous symbols. The map value is
+        (approved_symbol, is_symbol); an approved symbol wins over an alias
+        when both collide on the same key.
+        """
+        if self._symbol_index is not None:
+            return self._symbol_index
+
+        index: dict[str, tuple[str, bool]] = {}
+        for gene in self.genes:
+            symbol = gene["symbol"]
+            for alias in gene.get("aliases", []):
+                if not alias:
+                    continue
+                key = alias.lower()
+                if key not in index:
+                    index[key] = (symbol, False)
+            # approved symbol indexed last so it overrides any alias collision
+            index[symbol.lower()] = (symbol, True)
+
+        self._symbol_index = index
+        return index
+
+    def normalize_symbol(self, symbol: str) -> tuple[str, str] | None:
+        """
+        Resolve an input gene symbol/alias/previous symbol to its current
+        approved HGNC symbol via EXACT case-insensitive lookup (no fuzzy
+        matching, so no ranked false positives).
+
+        Returns (approved_symbol, matched_on) where matched_on is 'approved'
+        when the input is already an approved symbol, else 'alias_or_previous'
+        (the HGNC load merges alias_symbol and prev_symbol without retaining
+        which list a match came from). Returns None if the input is unknown.
+        """
+        if not symbol or not symbol.strip():
+            return None
+        hit = self._ensure_symbol_index().get(symbol.strip().lower())
+        if hit is None:
+            return None
+        approved, is_symbol = hit
+        return approved, "approved" if is_symbol else "alias_or_previous"
+
     def search(
         self,
         query: str,
         limit: int = 10,
         types: list[Literal["phenotypes", "genes"]] | None = None,
+        gencode_version: int | None = None,
     ) -> list[dict]:
         """
         Search for phenotypes and genes with fuzzy matching.
@@ -212,6 +319,8 @@ class SearchIndex:
             query: Search query string
             limit: Maximum number of results to return
             types: Filter by types (None = both)
+            gencode_version: Optional gencode version for gene coordinates.
+                When provided and different from default, re-looks up coordinates.
 
         Returns:
             List of matching items with scores and match types
@@ -263,7 +372,6 @@ class SearchIndex:
             # determine match type
             query_lower = query.lower()
             search_key_lower = search_item["search_key"].lower()
-            primary_lower = search_item["primary"].lower()
 
             if query_lower == search_key_lower:
                 match_type = "exact"
@@ -307,4 +415,19 @@ class SearchIndex:
         )
 
         # return top N results
-        return ranked_results[:limit]
+        results = ranked_results[:limit]
+
+        # override gene coordinates if a non-default gencode version is requested
+        if gencode_version is not None and self._gene_name_mapping is not None:
+            try:
+                alt_coords = self._gene_name_mapping.get_coordinates_lookup(gencode_version)
+                for result in results:
+                    if result["type"] == "gene" and result.get("ensembl_id"):
+                        coords = alt_coords.get(result["ensembl_id"])
+                        result["chrom"] = coords[0] if coords else None
+                        result["gene_start"] = coords[1] if coords else None
+                        result["gene_end"] = coords[2] if coords else None
+            except Exception as e:
+                logger.warning(f"Could not load coordinates for gencode {gencode_version}: {e}")
+
+        return results

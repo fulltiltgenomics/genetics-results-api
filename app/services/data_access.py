@@ -2,6 +2,7 @@ from abc import abstractmethod
 import json
 
 import fsspec
+from app.config.datasets import build_harmonizer_config, get_dataset
 from app.config.credible_sets import (
     data_file_by_id as cs_data_file_by_id,
     variant_columns as cs_variant_columns,
@@ -34,6 +35,30 @@ import logging
 data_file_by_id = {**cs_data_file_by_id, **exome_data_file_by_id, **gene_based_data_file_by_id}
 
 logger = logging.getLogger(__name__)
+
+
+def _dedup_by_combined_file(
+    data_file_ids: list[str], data_type: str
+) -> list[str]:
+    """Drop duplicate data file IDs that point at the same combined (all_cs/all_exome) file.
+
+    When several datasets share one collected TSV (e.g. EXT pseudo CS), tabixing it
+    once per data file ID would re-fetch the same bytes; keep only the first ID per
+    unique combined file. Per-row resource attribution is preserved by tsv_line_iterator.
+    """
+    seen: set[str] = set()
+    result: list[str] = []
+    for did in data_file_ids:
+        df = data_file_by_id.get(did)
+        combined: str | None = None
+        if df and data_type in df:
+            cfg = df[data_type]
+            combined = cfg.get("all_cs_file") or cfg.get("all_exome_file")
+        if combined is None or combined not in seen:
+            if combined is not None:
+                seen.add(combined)
+            result.append(did)
+    return result
 
 
 class DataAccessObject(BaseDataAccessObject):
@@ -185,11 +210,12 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 continue
             df = data_file_by_id[data_file_id]
 
-            # check if metadata section exists and has metadata_file
-            metadata_config = df.get("metadata", {})
-            metadata_file = metadata_config.get("metadata_file")
-            if not metadata_file:
+            # look up metadata_file from the dataset registry
+            dataset_id = df["dataset_id"]
+            harm_config = build_harmonizer_config(dataset_id)
+            if not harm_config:
                 continue
+            metadata_file = harm_config["metadata"]["metadata_file"]
 
             compression = (
                 "gzip"
@@ -212,8 +238,15 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
 
         return all_meta
 
-    def get_harmonized_metadata(self, resource: str) -> list[dict[str, Any]]:
-        """Get harmonized metadata for a resource in unified format."""
+    def get_harmonized_metadata(
+        self, resource: str, include_data_type: bool = False
+    ) -> list[dict[str, Any]]:
+        """Get harmonized metadata for a resource in unified format.
+
+        When ``include_data_type`` is set, each returned dict carries the
+        owning dataset's ``data_type`` so callers (e.g. the search index) can
+        match phenotypes against summary_stats (resource, data_type) pairs.
+        """
         from app.services.config_util import get_data_file_ids_for_resource
 
         # get all data file IDs for the resource
@@ -223,25 +256,42 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
 
         all_harmonized = []
         harmonizer = MetadataHarmonizer()
-        seen_metadata_files = set()
 
+        # group data file configs by metadata_file so a file shared by multiple
+        # datasets (e.g. genebass exome + gene_based) is read only once. the
+        # per-phenotype data_type lives on the dataset registry entry, not in the
+        # metadata rows, so we collect the data_types of every dataset sharing a
+        # file and expand each harmonized phenotype across them when requested.
+        metadata_groups: dict[str, dict[str, Any]] = {}
         for data_file_id in data_file_ids:
             if data_file_id not in data_file_by_id:
                 continue
             df_config = data_file_by_id[data_file_id]
 
-            # check if metadata section exists and has metadata_file
-            metadata_config = df_config.get("metadata", {})
-            metadata_file = metadata_config.get("metadata_file")
-            if not metadata_file:
+            # look up metadata from the dataset registry
+            dataset_id = df_config["dataset_id"]
+            harm_config = build_harmonizer_config(dataset_id)
+            if not harm_config:
                 continue
+            metadata_file = harm_config["metadata"]["metadata_file"]
 
-            # skip if already processed this metadata file
-            if metadata_file in seen_metadata_files:
-                continue
-            seen_metadata_files.add(metadata_file)
+            group = metadata_groups.get(metadata_file)
+            if group is None:
+                # keep the first dataset's harm_config; harmonization output does
+                # not depend on data_type, so any dataset sharing the file is fine
+                group = {"harm_config": harm_config, "data_types": []}
+                metadata_groups[metadata_file] = group
 
-            # read raw metadata for this data file
+            data_type = (get_dataset(dataset_id) or {}).get("data_type")
+            # ordered-unique: a file shared by datasets with the SAME data_type
+            # must not duplicate rows
+            if data_type not in group["data_types"]:
+                group["data_types"].append(data_type)
+
+        for metadata_file, group in metadata_groups.items():
+            harm_config = group["harm_config"]
+
+            # read raw metadata for this file
             compression = (
                 "gzip"
                 if metadata_file.endswith(".gz")
@@ -262,15 +312,26 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                         s = line.strip().split("\t")
                         raw_metadata.append(dict(zip(header, s)))
 
-            # harmonize with config
-            if raw_metadata:
-                harmonized = harmonizer.harmonize_metadata(
-                    resource, raw_metadata, df_config
-                )
-                all_harmonized.extend(harmonized)
+            if not raw_metadata:
+                continue
 
-        # convert to dicts for JSON serialization
-        return [item.to_dict() for item in all_harmonized]
+            # harmonize with config from dataset registry
+            harmonized = harmonizer.harmonize_metadata(
+                resource, raw_metadata, harm_config
+            )
+            if include_data_type:
+                # emit one dict per (phenotype, data_type) so a phenotype with
+                # multiple result types appears once per type in the search index
+                for item in harmonized:
+                    base = item.to_dict()
+                    for data_type in group["data_types"]:
+                        item_dict = dict(base)
+                        item_dict["data_type"] = data_type
+                        all_harmonized.append(item_dict)
+            else:
+                all_harmonized.extend(item.to_dict() for item in harmonized)
+
+        return all_harmonized
 
     async def stream_phenotype(
         self,
@@ -392,6 +453,11 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 # fallback: treat as data file ID directly
                 data_file_ids.append(resource)
 
+        # dedup data file IDs that share the same combined file (tabix it once)
+        data_file_ids = _dedup_by_combined_file(data_file_ids, data_type)
+        # row-level filter for shared-file rows belonging to other resources
+        resource_filter = {r.encode() for r in resources}
+
         # get access objects and chunk iterators, skipping any that fail
         accesses_and_iterators = []
         for data_file_id in data_file_ids:
@@ -419,7 +485,9 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         columns = exome_variant_columns if data_type == "exome" else cs_variant_columns
 
         line_iterators = [
-            tsv_line_iterator(iterator, access.get_header(), columns, variant)
+            tsv_line_iterator(
+                iterator, access.get_header(), columns, variant, resource_filter
+            )
             for access, iterator in zip(accesses, chunk_iterators)
         ]
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
@@ -450,6 +518,9 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
             else:
                 data_file_ids.append(resource)
 
+        data_file_ids = _dedup_by_combined_file(data_file_ids, data_type)
+        resource_filter = {r.encode() for r in resources}
+
         chrs = [v.chr for v in variants]
         positions = [v.pos for v in variants]
         variant_set = set(variants)
@@ -478,7 +549,9 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         columns = exome_variant_columns if data_type == "exome" else cs_variant_columns
 
         line_iterators = [
-            tsv_line_iterator(iterator, access.get_header(), columns, variant_set)
+            tsv_line_iterator(
+                iterator, access.get_header(), columns, variant_set, resource_filter
+            )
             for access, iterator in zip(accesses, chunk_iterators)
         ]
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
@@ -512,6 +585,9 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 # fallback: treat as data file ID directly
                 data_file_ids.append(resource)
 
+        data_file_ids = _dedup_by_combined_file(data_file_ids, data_type)
+        resource_filter = {r.encode() for r in resources}
+
         # create access objects, skipping data files that don't support this data type
         accesses = []
         for data_file_id in data_file_ids:
@@ -535,21 +611,33 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 f"No data found for resources: {resources}"
             )
 
-        chunk_iterators = [
-            await access.stream_range(
-                [pos["chrom"] for pos in coords[access.gencode_version]],
-                [pos["gene_start"] for pos in coords[access.gencode_version]],
-                [pos["gene_end"] for pos in coords[access.gencode_version]],
-                in_chunk_size,
-            )
-            for access in accesses
-        ]
+        # skip accesses whose data file has no combined file for range queries
+        # (mirrors stream_range; e.g. ibd exome has per-pheno files but no all_exome_file)
+        accesses_and_iterators = []
+        for access in accesses:
+            try:
+                iterator = await access.stream_range(
+                    [pos["chrom"] for pos in coords[access.gencode_version]],
+                    [pos["gene_start"] for pos in coords[access.gencode_version]],
+                    [pos["gene_end"] for pos in coords[access.gencode_version]],
+                    in_chunk_size,
+                )
+            except ValueError:
+                continue
+            accesses_and_iterators.append((access, iterator))
+
+        if not accesses_and_iterators:
+            raise NotFoundException(f"No data found for resources: {resources}")
+
+        accesses, chunk_iterators = zip(*accesses_and_iterators)
 
         # select column config based on data type
         columns = exome_variant_columns if data_type == "exome" else cs_variant_columns
 
         line_iterators = [
-            tsv_line_iterator(iterator, access.get_header(), columns, variant)
+            tsv_line_iterator(
+                iterator, access.get_header(), columns, variant, resource_filter
+            )
             for access, iterator in zip(accesses, chunk_iterators)
         ]
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()

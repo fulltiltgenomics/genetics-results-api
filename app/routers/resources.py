@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 import app.config.credible_sets as credible_sets_config
 import app.config.coloc as coloc_config
+import app.config.datasets as datasets_config
 import app.config.expression as expression_config
 import app.config.chromatin_peaks as chromatin_peaks_config
 import app.config.exome_results as exome_results_config
@@ -14,6 +15,21 @@ import app.config.gene_based_results as gene_based_config
 import app.config.gene_disease as gene_disease_config
 
 router = APIRouter()
+
+
+def _registry_metadata(dataset_id: str) -> dict | None:
+    """Get display metadata (author, publication_date, version) from the dataset registry."""
+    entry = datasets_config.get_dataset(dataset_id)
+    if not entry:
+        return None
+    meta = {}
+    if entry.get("author"):
+        meta["author"] = entry["author"]
+    if entry.get("publication_date"):
+        meta["publication_date"] = entry["publication_date"]
+    if entry.get("version"):
+        meta["version_label"] = entry["version"]
+    return meta if meta else None
 
 
 def _extract_credible_set_info(data_file: dict) -> dict:
@@ -24,16 +40,15 @@ def _extract_credible_set_info(data_file: dict) -> dict:
     }
     if "gencode_version" in data_file:
         info["gencode_version"] = data_file["gencode_version"]
-    if "metadata" in data_file:
-        meta = data_file["metadata"]
-        info["metadata"] = {
-            k: v for k, v in meta.items() if k != "metadata_file" and k != "type"
-        }
+    meta = _registry_metadata(data_file["dataset_id"])
+    if meta:
+        info["metadata"] = meta
     return info
 
 
 def _extract_exome_info(data_file: dict) -> dict:
     """Extract relevant info from an exome results config entry."""
+    dataset_id = data_file["dataset_id"]
     info = {
         "id": data_file["id"],
         "resource": data_file.get("resource", data_file["id"]),
@@ -42,27 +57,24 @@ def _extract_exome_info(data_file: dict) -> dict:
         info["gencode_version"] = data_file["gencode_version"]
     if "exome" in data_file and "version" in data_file["exome"]:
         info["version"] = data_file["exome"]["version"]
-    if "metadata" in data_file:
-        meta = data_file["metadata"]
-        info["metadata"] = {
-            k: v for k, v in meta.items() if k != "metadata_file" and k != "type"
-        }
+    meta = _registry_metadata(dataset_id)
+    if meta:
+        info["metadata"] = meta
     return info
 
 
 def _extract_gene_based_info(data_file: dict) -> dict:
     """Extract relevant info from a gene-based config entry."""
+    dataset_id = data_file["dataset_id"]
     info = {
         "id": data_file["id"],
         "resource": data_file.get("resource", data_file["id"]),
     }
     if "gencode_version" in data_file:
         info["gencode_version"] = data_file["gencode_version"]
-    if "metadata" in data_file:
-        meta = data_file["metadata"]
-        info["metadata"] = {
-            k: v for k, v in meta.items() if k != "metadata_file" and k != "type"
-        }
+    meta = _registry_metadata(dataset_id)
+    if meta:
+        info["metadata"] = meta
     return info
 
 

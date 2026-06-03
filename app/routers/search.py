@@ -27,10 +27,17 @@ router = APIRouter()
                                 "code": {"type": "string", "description": "Phenotype results only"},
                                 "name": {"type": "string"},
                                 "resource": {"type": "string", "description": "Phenotype results only"},
+                                "data_type": {"type": "string", "description": "Phenotype results only; pass to summary_stats/{resource}/{data_type}"},
                                 "sample_size": {"type": "integer", "description": "Phenotype results only"},
+                                "n_cases": {"type": ["integer", "string"], "description": "Phenotype results only, int or 'NA'"},
+                                "n_controls": {"type": ["integer", "string"], "description": "Phenotype results only, int or 'NA'"},
+                                "has_summary_stats": {"type": "boolean", "description": "Phenotype results only; whether summary stats are available for (resource, data_type)"},
                                 "symbol": {"type": "string", "description": "Gene results only"},
                                 "aliases": {"type": "array", "description": "Gene results only"},
                                 "ensembl_id": {"type": "string", "description": "Gene results only"},
+                                "chrom": {"type": "integer", "description": "Gene results only"},
+                                "gene_start": {"type": "integer", "description": "Gene results only"},
+                                "gene_end": {"type": "integer", "description": "Gene results only"},
                                 "search_strings": {"type": "array", "items": {"type": "string"}},
                                 "match_type": {"type": "string"},
                                 "match_score": {"type": "number"},
@@ -46,6 +53,9 @@ router = APIRouter()
                             "name": "proprotein convertase subtilisin/kexin type 9",
                             "aliases": ["NARC-1", "FH3", "HCHOLA3"],
                             "ensembl_id": "ENSG00000169174",
+                            "chrom": 1,
+                            "gene_start": 55039447,
+                            "gene_end": 55064852,
                             "search_strings": ["pcsk9", "proprotein convertase subtilisin/kexin type 9", "narc-1", "fh3", "hchola3", "ensg00000169174"],
                             "match_type": "exact",
                             "match_score": 100,
@@ -57,7 +67,11 @@ router = APIRouter()
                             "code": "I9_HYPERLIPID",
                             "name": "Hyperlipidaemia",
                             "resource": "finngen",
+                            "data_type": "gwas",
                             "sample_size": 156438,
+                            "n_cases": 56438,
+                            "n_controls": 100000,
+                            "has_summary_stats": True,
                             "search_strings": ["i9_hyperlipid", "hyperlipidaemia"],
                             "match_type": "prefix",
                             "match_score": 95,
@@ -68,7 +82,7 @@ router = APIRouter()
                 },
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "type\tsymbol\tname\taliases\tensembl_id\tmatch_type\tmatch_score\trank_score\tmatched_key\ngene\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tENSG00000169174\texact\t100\t1200\tPCSK9\nphenotype\tI9_HYPERLIPID\tHyperlipidaemia\t\t\tprefix\t95\t965\tI9_HYPERLIPID\n...",
+                    "example": "type\tsymbol\tname\taliases\tensembl_id\tchrom\tgene_start\tgene_end\tmatch_type\tmatch_score\trank_score\tmatched_key\ngene\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tENSG00000169174\t1\t55039447\t55064852\texact\t100\t1200\tPCSK9\n\ntype\tcode\tname\tresource\tdata_type\tsample_size\tn_cases\tn_controls\thas_summary_stats\tmatch_type\tmatch_score\trank_score\tmatched_key\nphenotype\tI9_HYPERLIPID\tHyperlipidaemia\tfinngen\tgwas\t156438\t56438\t100000\ttrue\tprefix\t95\t965\tI9_HYPERLIPID\n...",
                 },
             },
         },
@@ -93,6 +107,14 @@ async def search_autocomplete(
     format: Literal["json", "tsv"] = Query(
         default="json", description="Response format"
     ),
+    gencode_version: int | None = Query(
+        default=None,
+        description="GENCODE version to use for gene coordinates (default: latest available)",
+    ),
+    has_summary_stats: bool = Query(
+        default=False,
+        description="If true, drop phenotype results that have no summary statistics available",
+    ),
     search_index: SearchIndex = Depends(get_search_index),
 ):
     """
@@ -100,6 +122,10 @@ async def search_autocomplete(
 
     Supports comma-separated queries (e.g., 'SLC26A3,CLCA,PCSK9') to search
     for multiple terms in a single request.
+
+    A phenotype may appear once per data_type when it has multiple result types
+    (e.g. genebass exome and gene_based), so the same code can occur in more than
+    one result row.
 
     Results are ranked by:
     1. Exact matches first
@@ -131,16 +157,28 @@ async def search_autocomplete(
         seen_ids = set()
         results = []
         for term in query_terms:
-            term_results = search_index.search(query=term, limit=limit, types=type_list)
+            term_results = search_index.search(query=term, limit=limit, types=type_list, gencode_version=gencode_version)
             for result in term_results:
-                # use code (phenotype) or symbol (gene) as unique identifier
+                # use code (phenotype) or symbol (gene) as unique identifier;
+                # include data_type so a phenotype with multiple result types
+                # (e.g. genebass exome + gene_based) survives as separate rows
                 result_id = (
                     result["type"],
                     result.get("code") or result.get("symbol"),
+                    result.get("data_type"),
                 )
                 if result_id not in seen_ids:
                     seen_ids.add(result_id)
                     results.append(result)
+
+        # drop phenotypes without summary stats when requested; gene results
+        # have no has_summary_stats field and are always kept
+        if has_summary_stats:
+            results = [
+                r
+                for r in results
+                if r["type"] != "phenotype" or r.get("has_summary_stats")
+            ]
 
         # format response
         if format == "json":
@@ -160,23 +198,26 @@ async def search_autocomplete(
 
             # determine format based on type filter
             if type_list[0] == "genes":
-                header = "type\tsymbol\tname\taliases\tensembl_id\tmatch_type\tmatch_score\trank_score\tmatched_key"
+                header = "type\tsymbol\tname\taliases\tensembl_id\tchrom\tgene_start\tgene_end\tmatch_type\tmatch_score\trank_score\tmatched_key"
                 rows = []
                 for r in results:
                     aliases_str = "|".join(r.get("aliases", []))
                     row = (
                         f"{r['type']}\t{r['symbol']}\t{r.get('name', '')}\t"
                         f"{aliases_str}\t{r.get('ensembl_id', '')}\t"
+                        f"{r.get('chrom') or ''}\t{r.get('gene_start') or ''}\t{r.get('gene_end') or ''}\t"
                         f"{r['match_type']}\t{r['match_score']}\t{r['rank_score']}\t{r['matched_key']}"
                     )
                     rows.append(row)
             else:  # phenotypes
-                header = "type\tcode\tname\tresource\tsample_size\tmatch_type\tmatch_score\trank_score\tmatched_key"
+                header = "type\tcode\tname\tresource\tdata_type\tsample_size\tn_cases\tn_controls\thas_summary_stats\tmatch_type\tmatch_score\trank_score\tmatched_key"
                 rows = []
                 for r in results:
                     row = (
                         f"{r['type']}\t{r.get('code', '')}\t{r.get('name', '')}\t"
-                        f"{r.get('resource', '')}\t{r.get('sample_size', 0)}\t"
+                        f"{r.get('resource', '')}\t{r.get('data_type', '')}\t{r.get('sample_size', 0)}\t"
+                        f"{r.get('n_cases', 'NA')}\t{r.get('n_controls', 'NA')}\t"
+                        f"{str(r.get('has_summary_stats', False)).lower()}\t"
                         f"{r['match_type']}\t{r['match_score']}\t{r['rank_score']}\t{r['matched_key']}"
                     )
                     rows.append(row)

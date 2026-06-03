@@ -8,18 +8,35 @@ exome_data_files = [
         "data_source": "gcloud",
         "example_pheno_or_study": "categorical_41210_both_sexes_S068_",
         "gencode_version": 35,
-        "metadata": {
-            "metadata_file": "gs://daly-genetics-results/mapping_files/genebass_pheno_results.txt.bgz",
-            "type": "genebass",
-            "author": "GeneBass",
-            "publication_date": "2022-01-01",
-            "version_label": "500k",
-        },
         "exome": {
             "version": "v1",
             "prefix": "gs://daly-genetics-results/exome_results/genebass/individual/",
             "suffix": ".mlog10p4.tsv",
-            "all_exome_file": "gs://daly-genetics-results/exome_results/genebass/genebass_variant_results_mlog10p4.tsv.gz",
+            "all_exome_file": "gs://daly-genetics-results/exome_results/genebass/genebass_variant_results_mlog10p4.tsv.bgz",
+        },
+    },
+    {
+        "id": "ibd_exome_2026",
+        "dataset_id": "ibd_exome",
+        "resource": "ibd_exome_2026",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "IBD",
+        "gencode_version": 43,
+        "exome": {
+            "version": "2026",
+            "prefix": "gs://daly-genetics-results/exome_results/ibd/IBD_exome_",
+            "suffix": "_variant_results.munged.mlog10p_gt4.tsv.gz",
+        },
+    },
+    {
+        "id": "schema2_exome",
+        "dataset_id": "schema_exome",
+        "resource": "schema2",
+        "data_source": "gcloud",
+        "gencode_version": 39,
+        "exome": {
+            "version": "v2",
+            "all_exome_file": "gs://daly-genetics-results/exome_results/schema/SCHEMA2_variant_results.munged.mlog10p_gt4.tsv.gz",
         },
     },
 ]
