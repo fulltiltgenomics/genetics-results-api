@@ -12,7 +12,7 @@ exome_data_files = [
             "version": "v1",
             "prefix": "gs://finngen-commons/results_api_data/exome_results/genebass/individual/",
             "suffix": ".mlog10p4.tsv",
-            "all_exome_file": "gs://finngen-commons/results_api_data/exome_results4/genebass/genebass_variant_results_mlog10p4.tsv.bgz",
+            "all_exome_file": "gs://finngen-commons/results_api_data/exome_results/genebass/genebass_variant_results_mlog10p4.tsv.bgz",
         },
     },
     {
@@ -24,7 +24,7 @@ exome_data_files = [
         "gencode_version": 43,
         "exome": {
             "version": "2026",
-            "prefix": "gs://finngen-commons/results_api_data/exome_results4/ibd/IBD_exome_",
+            "prefix": "gs://finngen-commons/results_api_data/exome_results/ibd/IBD_exome_",
             "suffix": "_variant_results.munged.mlog10p_gt4.tsv.gz",
         },
     },
@@ -36,7 +36,7 @@ exome_data_files = [
         "gencode_version": 39,
         "exome": {
             "version": "v2",
-            "all_exome_file": "gs://finngen-commons/results_api_data/exome_results4/schema/SCHEMA2_variant_results.munged.mlog10p_gt4.tsv.gz",
+            "all_exome_file": "gs://finngen-commons/results_api_data/exome_results/schema/SCHEMA2_variant_results.munged.mlog10p_gt4.tsv.gz",
         },
     },
 ]
