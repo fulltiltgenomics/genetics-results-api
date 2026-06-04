@@ -39,18 +39,6 @@ def _validate_metadata_files():
             pass
 
 
-async def _validata_example_phenos():
-    """Validate that all example phenos exist."""
-    data_access = _get_data_access()
-    for df in config_credible_sets.data_files:
-        if "example_pheno_or_study" in df:
-            await data_access.check_phenotype_exists(
-                df["id"],
-                df["example_pheno_or_study"],
-                95,
-            )
-
-
 async def _validate_range():
     """Validate that a range can be queried across resources."""
     from app.services.config_util import get_resources
@@ -133,7 +121,6 @@ async def _cleanup_services():
 
 async def _run_async_validations():
     """Run all async validations and clean up sessions on the same event loop."""
-    await _validata_example_phenos()
     await _validate_range()
     await _validate_qtl_gene()
     await _validate_coloc()
@@ -150,6 +137,11 @@ if __name__ == "__main__":
         os.makedirs("/tmp/tbi_cache", exist_ok=True)
         for file in glob.glob("/tmp/tbi_cache/**/*.tbi", recursive=True) + glob.glob("/tmp/tbi_cache/**/*.csi", recursive=True):
             os.remove(file)
+        # verify every configured tabix/mapping file is reachable before serving;
+        # raises and aborts startup (below) if any are missing or unreadable
+        from app.services.startup_checks import verify_all_data_files
+
+        verify_all_data_files()
         _validate_metadata_files()
         asyncio.run(_run_async_validations())
         _validate_gene_disease()
