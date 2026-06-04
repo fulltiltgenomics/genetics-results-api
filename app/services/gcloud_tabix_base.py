@@ -25,20 +25,33 @@ _tbi_cleanup_lock = threading.Lock()
 _tbi_last_cleanup = 0.0
 _TBI_CLEANUP_INTERVAL = 600  # only check every 10 minutes
 
+# htslib reports transient GCS access failures (timed-out/partial HTTPS requests)
+# as misleading "Invalid argument" / "No such file or directory" / index-load
+# errors and never retries them itself, so a single network blip permanently
+# fails an otherwise-valid file. retry tabix a few times with backoff.
+_TABIX_MAX_ATTEMPTS = 3
+_TABIX_RETRY_BASE_DELAY = 0.5
+
 
 def ensure_gcs_token() -> None:
     """Ensure GCS OAuth token env var is valid for tabix subprocess calls."""
     global _gcs_credentials
-    if _gcs_credentials is None:
-        _gcs_credentials, _ = default(
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
-        )
-        _gcs_credentials.refresh(Request())
-        os.environ["GCS_OAUTH_TOKEN"] = _gcs_credentials.token
-        logger.info(f"GCS_OAUTH_TOKEN set, expires at: {_gcs_credentials.expiry}")
-        return
-
+    # the whole check-and-refresh must hold the lock, including first init:
+    # concurrent first calls would otherwise each fetch credentials and race on
+    # the GCS_OAUTH_TOKEN env var, occasionally exporting a half-written token
     with _gcs_token_lock:
+        if _gcs_credentials is None:
+            creds, _ = default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            creds.refresh(Request())
+            os.environ["GCS_OAUTH_TOKEN"] = creds.token
+            # publish only after a successful refresh so a failed refresh does
+            # not leave a credentials object that the None-check would skip
+            _gcs_credentials = creds
+            logger.info(f"GCS_OAUTH_TOKEN set, expires at: {_gcs_credentials.expiry}")
+            return
+
         if (
             _gcs_credentials.expiry
             and _gcs_credentials.expiry > datetime.now() + timedelta(minutes=5)
@@ -66,7 +79,10 @@ class GCloudTabixBase:
         self.storage = None
         self.session = None
         os.makedirs("/tmp/tbi_cache", exist_ok=True)
-        self._init_storage()
+        # the aiohttp GCS client is only used by _stream_file; header and range
+        # access go through the tabix subprocess. creating the session eagerly
+        # here leaks an unclosed aiohttp session for every object used solely for
+        # tabix (e.g. the whole credible-set/coloc path), so create it lazily.
         ensure_gcs_token()
 
     async def __aenter__(self):
@@ -159,6 +175,11 @@ class GCloudTabixBase:
         self.session = aiohttp.ClientSession(connector=connector)
         self.storage = Storage(session=self.session)
 
+    def _ensure_storage(self):
+        """Lazily create the aiohttp GCS client on first streaming use."""
+        if self.session is None:
+            self._init_storage()
+
     def _get_header(self, gs_path: str) -> list[bytes]:
         """
         Get the header for a tabix-indexed file.
@@ -174,20 +195,29 @@ class GCloudTabixBase:
         Raises:
             RuntimeError: If tabix operation fails
         """
-        ensure_gcs_token()
-
-        try:
-            process = subprocess.run(
-                ["tabix", "-H", gs_path],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=True,
-                cwd=self._get_tbi_cache_dir(gs_path),
-            )
-        except subprocess.CalledProcessError as e:
-            stderr = e.stderr.decode()
-            logger.error(f"Tabix failed: {stderr}")
-            raise RuntimeError(f"Getting file header failed")
+        cache_dir = self._get_tbi_cache_dir(gs_path)
+        last_stderr = ""
+        for attempt in range(_TABIX_MAX_ATTEMPTS):
+            ensure_gcs_token()
+            try:
+                process = subprocess.run(
+                    ["tabix", "-H", gs_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=True,
+                    cwd=cache_dir,
+                )
+                break
+            except subprocess.CalledProcessError as e:
+                last_stderr = e.stderr.decode()
+                if attempt < _TABIX_MAX_ATTEMPTS - 1:
+                    time.sleep(_TABIX_RETRY_BASE_DELAY * (2**attempt))
+                    continue
+                logger.error(
+                    f"Tabix header failed after {_TABIX_MAX_ATTEMPTS} attempts "
+                    f"for {gs_path}: {last_stderr}"
+                )
+                raise RuntimeError("Getting file header failed")
 
         header_line = process.stdout.strip()
         # remove leading '#' from header columns
@@ -240,6 +270,7 @@ class GCloudTabixBase:
             aiohttp.client_exceptions.ClientResponseError: For other HTTP errors
         """
         start_time = time.time()
+        self._ensure_storage()
         headers = await self.storage._headers()
         url = blob_path.replace("gs://", "https://storage.googleapis.com/")
         try:
@@ -298,27 +329,60 @@ class GCloudTabixBase:
         # coordinates for tabix are 1-based, prevent 0
         start = [max(1, s) for s in start]
 
-        ensure_gcs_token()
         cache_dir = self._get_tbi_cache_dir(file_path)
-        process = await asyncio.create_subprocess_exec(
-            "tabix",
-            "-R",
-            "/dev/stdin",
-            file_path,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=cache_dir,
-        )
-        process.stdin.write(
-            "\n".join(f"{c}\t{s}\t{e}" for c, s, e in zip(chr, start, end)).encode()
-        )
-        process.stdin.close()
-
+        regions = "\n".join(
+            f"{c}\t{s}\t{e}" for c, s, e in zip(chr, start, end)
+        ).encode()
         maybe_cleanup = self._maybe_cleanup_tbi_cache
 
+        async def _start_tabix():
+            ensure_gcs_token()
+            process = await asyncio.create_subprocess_exec(
+                "tabix",
+                "-R",
+                "/dev/stdin",
+                file_path,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cache_dir,
+            )
+            process.stdin.write(regions)
+            process.stdin.close()
+            return process
+
         async def tabix_iterator() -> AsyncGenerator[bytes, None]:
+            # transient htslib/GCS failures surface before any data is produced
+            # (index load / file open), so retry while nothing has been yielded;
+            # once bytes are flowing the query has succeeded and we stream on.
+            first_chunk = b""
+            process = None
+            for attempt in range(_TABIX_MAX_ATTEMPTS):
+                process = await _start_tabix()
+                try:
+                    first_chunk = await process.stdout.read(chunk_size)
+                    if first_chunk:
+                        break
+                    # no output: either an empty result or an early failure
+                    await process.wait()
+                    if process.returncode == 0:
+                        maybe_cleanup()
+                        return
+                    stderr = (await process.stderr.read()).decode()
+                    if attempt < _TABIX_MAX_ATTEMPTS - 1:
+                        await asyncio.sleep(_TABIX_RETRY_BASE_DELAY * (2**attempt))
+                        continue
+                    raise RuntimeError(
+                        f"Tabix failed with return code {process.returncode} "
+                        f"after {_TABIX_MAX_ATTEMPTS} attempts for {file_path}: {stderr}"
+                    )
+                finally:
+                    if process.returncode is None and not first_chunk:
+                        process.terminate()
+                        await process.wait()
+
             try:
+                yield first_chunk
                 while True:
                     chunk = await process.stdout.read(chunk_size)
                     if not chunk:

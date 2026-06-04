@@ -91,6 +91,6 @@ run_server.py       # server entry point
 ### Deployment
 
 - Docker container built with htslib (for tabix) and gcloud SDK
-- GCS authentication via Workload Identity or service account key
+- GCS authentication via Workload Identity or service account key. `GCloudTabixBase.ensure_gcs_token()` fetches/refreshes the OAuth token used by tabix subprocesses (exported as `GCS_OAUTH_TOKEN`); the whole check-and-refresh (including first init) holds `_gcs_token_lock` so concurrent first calls can't race on the env var. htslib reports transient GCS access failures (timed-out/partial HTTPS requests) as misleading `Invalid argument` / `No such file or directory` / index-load errors and never retries them, so `_get_header` and `_stream_range` retry tabix up to `_TABIX_MAX_ATTEMPTS` (3) times with exponential backoff; range streaming only retries while no bytes have been yielded yet (early index-load/open failures), and an empty-but-successful result is never treated as an error. The aiohttp GCS client (used only by `_stream_file`) is created lazily via `_ensure_storage()` on first streaming use rather than eagerly in `__init__`, so objects used solely for tabix (the whole credible-set/coloc path) no longer leak an unclosed aiohttp session.
 - Default port: 4000
 - Entry point: `/opt/genetics-results-api/start.sh` which initializes gcloud auth and starts uvicorn
