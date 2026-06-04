@@ -12,16 +12,19 @@ from app.services.gene_group_service import GeneGroupService
 
 
 # hierarchy: 100 (root "Receptors") -> 110 ("GPCRs") -> 170 ("5-HT1 receptors")
+#            110 ("GPCRs") -> 180 ("Olfactory receptors")
 #            100 -> 120 ("Ion channels")
 # genes:
 #   HGNC:5286 (HTR1A) leaf = 170 (deep child)
 #   HGNC:5287 (HTR1B) leaf = 170
 #   HGNC:9999 (CHAN1) leaf = 120
+#   HGNC:8000 (OR1A1) leaf = 180 (olfactory)
 FAMILY_CSV = '''id,name,abbreviation
 100,"Receptors","RCPT"
 110,"GPCRs","GPCR"
 120,"Ion channels","ICH"
 170,"5-HT1 receptors","HTR1"
+180,"Olfactory receptors","OR"
 '''
 
 # closure is already transitive and includes proper ancestors only (distance>0)
@@ -30,12 +33,18 @@ HIERARCHY_CLOSURE_CSV = '''parent_fam_id,child_fam_id,distance
 100,170,2
 110,170,1
 100,120,1
+100,180,2
+110,180,1
 '''
 
+# NOTE: real hgnc_gene_has_family.csv uses BARE numeric hgnc ids ("5286"),
+# while the HGNC complete set / search index use the prefixed "HGNC:5286" form.
+# The service must canonicalize these to the prefixed form (asserted below).
 GENE_HAS_FAMILY_CSV = '''hgnc_id,family_id
-HGNC:5286,170
-HGNC:5287,170
-HGNC:9999,120
+5286,170
+5287,170
+9999,120
+8000,180
 '''
 
 
@@ -67,18 +76,44 @@ def test_lineage_resolves_group_names(service):
     assert groups[100] == "Receptors"
 
 
+def test_members_resolve_to_canonical_prefixed_ids(service):
+    # bare ids in gene_has_family must come out canonicalized to 'HGNC:NNNN'
+    # so they resolve against the search index (which keys on the prefixed form)
+    assert service.group_ids_for_hgnc_id("5286") == {170, 110, 100}
+    assert service.members_of_group(group_id=170) == {"HGNC:5286", "HGNC:5287"}
+
+
 def test_members_of_root_group_returns_all_descendants(service):
     # root group 100 contains every gene below it in the hierarchy
     assert service.members_of_group(group_id=100) == {
         "HGNC:5286",
         "HGNC:5287",
         "HGNC:9999",
+        "HGNC:8000",
     }
 
 
 def test_members_of_intermediate_group(service):
-    # GPCRs (110) covers only the 5-HT1 genes, not the ion channel gene
-    assert service.members_of_group(group_id=110) == {"HGNC:5286", "HGNC:5287"}
+    # GPCRs (110) covers the 5-HT1 genes and the olfactory gene, not ion channels
+    assert service.members_of_group(group_id=110) == {
+        "HGNC:5286",
+        "HGNC:5287",
+        "HGNC:8000",
+    }
+
+
+def test_exclude_olfactory_drops_olfactory_members(service):
+    # the olfactory gene (8000) is dropped; the other GPCRs remain
+    assert service.members_of_group(group_id=110, exclude_olfactory=True) == {
+        "HGNC:5286",
+        "HGNC:5287",
+    }
+    # also works via group name
+    assert service.members_of_group(
+        group_name="GPCRs", exclude_olfactory=True
+    ) == {"HGNC:5286", "HGNC:5287"}
+    # default keeps them
+    assert "HGNC:8000" in service.members_of_group(group_id=110)
 
 
 def test_members_of_leaf_group(service):
@@ -91,6 +126,7 @@ def test_members_by_group_name_case_insensitive(service):
         "HGNC:5286",
         "HGNC:5287",
         "HGNC:9999",
+        "HGNC:8000",
     }
     assert service.resolve_group_id("GPCRs") == 110
 

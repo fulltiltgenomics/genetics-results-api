@@ -252,8 +252,18 @@ class SearchIndex:
             raise e
 
     def get_gene_by_hgnc_id(self, hgnc_id: str) -> dict | None:
-        """Look up a loaded gene record (symbol/ensembl/coords) by HGNC id."""
-        return self.genes_by_hgnc_id.get(hgnc_id)
+        """Look up a loaded gene record (symbol/ensembl/coords) by HGNC id.
+
+        Tolerant of both the prefixed 'HGNC:3023' form (used by the HGNC
+        complete set this index is built from) and the bare numeric '3023' form
+        used by the HGNC gene-group files, so callers passing either resolve.
+        """
+        if hgnc_id is None:
+            return None
+        gene = self.genes_by_hgnc_id.get(hgnc_id)
+        if gene is None and not str(hgnc_id).upper().startswith("HGNC:") and str(hgnc_id).strip().isdigit():
+            gene = self.genes_by_hgnc_id.get(f"HGNC:{str(hgnc_id).strip()}")
+        return gene
 
     def _ensure_symbol_index(self) -> dict[str, tuple[str, bool]]:
         """

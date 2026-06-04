@@ -29,6 +29,14 @@ async def gene_group_members(
     group_name: str | None = Query(
         default=None, description="HGNC gene-group name (case-insensitive)"
     ),
+    exclude_olfactory: bool = Query(
+        default=False,
+        description=(
+            "Exclude olfactory receptors, which are GPCRs that dominate large "
+            "families (e.g. GPCRs) by sheer count. Defaults to False to return "
+            "full membership; set True for a more analysis-relevant gene set."
+        ),
+    ),
     gene_group_service: GeneGroupService = Depends(get_gene_group_service),
     search_index: SearchIndex = Depends(get_search_index),
 ) -> dict:
@@ -76,7 +84,9 @@ async def gene_group_members(
     if resolved_name is None:
         raise HTTPException(status_code=404, detail=f"Unknown gene group: {group_id}")
 
-    hgnc_ids = gene_group_service.members_of_group(group_id=group_id)
+    hgnc_ids = gene_group_service.members_of_group(
+        group_id=group_id, exclude_olfactory=exclude_olfactory
+    )
 
     members = []
     for hgnc_id in sorted(hgnc_ids):
@@ -110,6 +120,7 @@ async def gene_group_members(
     return {
         "group_id": group_id,
         "group_name": resolved_name,
+        "exclude_olfactory": exclude_olfactory,
         "count": len(members),
         "members": members,
     }
