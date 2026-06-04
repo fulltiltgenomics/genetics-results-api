@@ -19,6 +19,7 @@ from app.config.sort_keys import (
     SORT_CONFIG_CS_QTL,
 )
 from app.core.exceptions import NotFoundException
+from app.core.gcs_retry import with_gcs_retry
 from app.core.streams import chunk_iterator, tsv_line_iterator, tsv_line_iterator_qtl
 from app.core.variant import Variant
 from app.services.base_data_access import (
@@ -35,6 +36,40 @@ import logging
 data_file_by_id = {**cs_data_file_by_id, **exome_data_file_by_id, **gene_based_data_file_by_id}
 
 logger = logging.getLogger(__name__)
+
+# harmonized metadata is derived from small, slowly-changing metadata files;
+# cache per (resource, include_data_type) for the process lifetime so the
+# /metadata and search hot paths don't re-read GCS on every request. keyed
+# module-level so it is shared across the multiple DataAccess instances that
+# get constructed (container, search_service, coloc).
+_harmonized_metadata_cache: dict[tuple[str, bool], list[dict[str, Any]]] = {}
+
+
+def clear_metadata_cache() -> None:
+    """Clear the harmonized metadata cache (used by tests)."""
+    _harmonized_metadata_cache.clear()
+
+
+def _read_metadata_file(metadata_file: str) -> list[dict[str, Any]]:
+    """Read a metadata file (TSV or JSON, optionally gzipped) into a list of rows.
+
+    Wrapped in with_gcs_retry so a transient egress-quota 429 is absorbed rather
+    than surfaced. The whole read happens inside the retried closure so a retry
+    re-opens the file.
+    """
+    compression = (
+        "gzip" if metadata_file.endswith((".gz", ".bgz")) else None
+    )
+
+    def _read() -> list[dict[str, Any]]:
+        with fsspec.open(metadata_file, "rt", compression=compression) as f:
+            if metadata_file.endswith((".json", ".json.gz")):
+                meta = json.load(f)
+                return meta if isinstance(meta, list) else [meta]
+            header = f.readline().strip().split("\t")
+            return [dict(zip(header, line.strip().split("\t"))) for line in f]
+
+    return with_gcs_retry(_read)
 
 
 def _dedup_by_combined_file(
@@ -217,24 +252,7 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 continue
             metadata_file = harm_config["metadata"]["metadata_file"]
 
-            compression = (
-                "gzip"
-                if metadata_file.endswith(".gz")
-                or metadata_file.endswith(".bgz")
-                else None
-            )
-            with fsspec.open(metadata_file, "rt", compression=compression) as f:
-                if metadata_file.endswith(".json") or metadata_file.endswith(".json.gz"):
-                    meta = json.load(f)
-                    if isinstance(meta, list):
-                        all_meta.extend(meta)
-                    else:
-                        all_meta.append(meta)
-                else:
-                    header = f.readline().strip().split("\t")
-                    for line in f:
-                        s = line.strip().split("\t")
-                        all_meta.append(dict(zip(header, s)))
+            all_meta.extend(_read_metadata_file(metadata_file))
 
         return all_meta
 
@@ -247,6 +265,11 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         owning dataset's ``data_type`` so callers (e.g. the search index) can
         match phenotypes against summary_stats (resource, data_type) pairs.
         """
+        cache_key = (resource, include_data_type)
+        cached = _harmonized_metadata_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         from app.services.config_util import get_data_file_ids_for_resource
 
         # get all data file IDs for the resource
@@ -292,25 +315,7 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
             harm_config = group["harm_config"]
 
             # read raw metadata for this file
-            compression = (
-                "gzip"
-                if metadata_file.endswith(".gz")
-                or metadata_file.endswith(".bgz")
-                else None
-            )
-            raw_metadata = []
-            with fsspec.open(metadata_file, "rt", compression=compression) as f:
-                if metadata_file.endswith(".json") or metadata_file.endswith(".json.gz"):
-                    meta = json.load(f)
-                    if isinstance(meta, list):
-                        raw_metadata = meta
-                    else:
-                        raw_metadata = [meta]
-                else:
-                    header = f.readline().strip().split("\t")
-                    for line in f:
-                        s = line.strip().split("\t")
-                        raw_metadata.append(dict(zip(header, s)))
+            raw_metadata = _read_metadata_file(metadata_file)
 
             if not raw_metadata:
                 continue
@@ -331,6 +336,7 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
             else:
                 all_harmonized.extend(item.to_dict() for item in harmonized)
 
+        _harmonized_metadata_cache[cache_key] = all_harmonized
         return all_harmonized
 
     async def stream_phenotype(

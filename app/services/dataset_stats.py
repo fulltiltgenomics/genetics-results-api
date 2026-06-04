@@ -14,6 +14,7 @@ from typing import Any
 
 import fsspec
 
+from app.core.gcs_retry import with_gcs_retry
 from app.config.datasets import datasets as _registry, build_harmonizer_config
 from app.services.data_access import DataAccess
 from app.services.metadata_harmonizer import MetadataHarmonizer
@@ -73,14 +74,15 @@ def _load_and_harmonize(dataset_id: str, entry: dict) -> list[dict] | None:
         else None
     )
 
-    try:
+    def _read() -> list[dict]:
         with fsspec.open(metadata_file, "rt", compression=compression) as f:
             if metadata_file.endswith(".json") or metadata_file.endswith(".json.gz"):
                 meta = json.load(f)
-                raw = meta if isinstance(meta, list) else list(meta.values()) if isinstance(meta, dict) else []
-            else:
-                reader = csv.DictReader(f, delimiter="\t")
-                raw = list(reader)
+                return meta if isinstance(meta, list) else list(meta.values()) if isinstance(meta, dict) else []
+            return list(csv.DictReader(f, delimiter="\t"))
+
+    try:
+        raw = with_gcs_retry(_read)
     except Exception as e:
         logger.warning(f"Could not read metadata file for {dataset_id}: {e}")
         return None

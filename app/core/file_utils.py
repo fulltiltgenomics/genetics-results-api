@@ -7,6 +7,8 @@ import logging
 
 import fsspec
 
+from app.core.gcs_retry import with_gcs_retry
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,8 +26,12 @@ def read_file(path: str) -> str:
         FileNotFoundError: If file not found
     """
     compression = "gzip" if path.endswith((".gz", ".bgz")) else None
-    with fsspec.open(path, "rt", compression=compression) as f:
-        return f.read()
+
+    def _read() -> str:
+        with fsspec.open(path, "rt", compression=compression) as f:
+            return f.read()
+
+    return with_gcs_retry(_read)
 
 
 def read_tsv_as_json(path: str) -> list[dict]:

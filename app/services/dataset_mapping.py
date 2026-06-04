@@ -1,5 +1,5 @@
 from app.config.common import dataset_to_resource, dataset_mapping_files
-import fsspec
+from app.core.file_utils import read_file
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,16 +13,16 @@ class DatasetMapping:
         self.dataset_to_resource_version = dataset_to_resource
         if dataset_mapping_files:
             for path, key, resource, version in dataset_mapping_files:
-                # use fsspec to support both local files and gs:// URLs
-                with fsspec.open(path, "rt") as f:
-                    header = f.readline().strip().split("\t")
-                    key_index = header.index(key)
-                    for line in f:
-                        s = line.strip().split("\t")
-                        self.dataset_to_resource_version[s[key_index]] = (
-                            resource,
-                            version,
-                        )
+                # read_file supports both local files and gs:// URLs (with retry)
+                lines = read_file(path).splitlines()
+                header = lines[0].strip().split("\t")
+                key_index = header.index(key)
+                for line in lines[1:]:
+                    s = line.strip().split("\t")
+                    self.dataset_to_resource_version[s[key_index]] = (
+                        resource,
+                        version,
+                    )
         self.dataset_to_resource_version_bytes = {}
         for dataset, (resource, version) in self.dataset_to_resource_version.items():
             self.dataset_to_resource_version_bytes[dataset.encode()] = (

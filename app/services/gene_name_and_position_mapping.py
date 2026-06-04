@@ -1,6 +1,6 @@
 from typing import Literal
 from app.config.genes import genes
-import fsspec
+from app.core.file_utils import read_file
 from collections import defaultdict as dd
 import polars as pl
 import logging
@@ -27,23 +27,23 @@ class GeneNameAndPositionMapping:
         gencode_versions = genes["gencode_versions"]
         # ensg -> {version: name}, used for version-aware dedup below
         ensg_names_by_version: dict[str, dict[int, str]] = {}
-        # use fsspec to support both local files and gs:// URLs
-        with fsspec.open(path, "rt") as f:
-            header = f.readline().strip().split("\t")
-            for line in f:
-                s = line.strip().split("\t")
-                ensg = s[header.index("ensg")].strip()
-                names_by_version = {
-                    version: s[header.index(f"gene_name_{version}")].strip()
-                    for version in gencode_versions
-                }
-                ensg_names_by_version[ensg] = names_by_version
-                for anchor in names_by_version.values():
-                    if anchor == "NA":
-                        continue
-                    for version in gencode_versions:
-                        if names_by_version[version] != "NA":
-                            self.gene_name_mapping[anchor][version].add(ensg)
+        # read_file supports both local files and gs:// URLs (with retry)
+        lines = read_file(path).splitlines()
+        header = lines[0].strip().split("\t")
+        for line in lines[1:]:
+            s = line.strip().split("\t")
+            ensg = s[header.index("ensg")].strip()
+            names_by_version = {
+                version: s[header.index(f"gene_name_{version}")].strip()
+                for version in gencode_versions
+            }
+            ensg_names_by_version[ensg] = names_by_version
+            for anchor in names_by_version.values():
+                if anchor == "NA":
+                    continue
+                for version in gencode_versions:
+                    if names_by_version[version] != "NA":
+                        self.gene_name_mapping[anchor][version].add(ensg)
 
         # add hgnc alias and prev symbols to gene name mapping
         # for each alias and prev symbol whose real symbol is in the gene name mapping, add the alias and prev symbol with the same content
