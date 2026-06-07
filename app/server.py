@@ -36,6 +36,14 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app):
+    # Preload gene-disease data at startup rather than lazily on the first
+    # request. The load is a blocking, network-bound GCS read; doing it on the
+    # request path means a slow/stalled read wedges the worker and takes down
+    # /healthz. This runs in the actual serving process (the validations in
+    # run_server.py's __main__ block do not execute in uvicorn's reload worker
+    # subprocess). A failure here aborts startup loudly, as intended.
+    logger.info("Preloading gene-disease data")
+    container.get("gene_disease_data")
     yield
     # close aiohttp sessions in all GCloudTabixBase-derived services
     for name, instance in list(container._instances.items()):
