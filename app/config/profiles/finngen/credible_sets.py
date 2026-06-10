@@ -174,9 +174,9 @@ data_files = [
         "example_pheno_or_study": "COVID_A2",
         "gencode_version": 49,
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ext/individual/covid_hgi/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ext_pseudo/individual/covid_hgi/",
             "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ext/EXT_20260526_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ext_pseudo/EXT_20260610_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
         },
     },
     {
@@ -187,9 +187,9 @@ data_files = [
         "example_pheno_or_study": "SCZ",
         "gencode_version": 49,
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ext/individual/pgc_scz/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ext_pseudo/individual/pgc_scz/",
             "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ext/EXT_20260526_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ext_pseudo/EXT_20260610_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
         },
     },
     {
@@ -200,9 +200,9 @@ data_files = [
         "example_pheno_or_study": "BIP",
         "gencode_version": 49,
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ext/individual/pgc_bip/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ext_pseudo/individual/pgc_bip/",
             "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ext/EXT_20260526_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ext_pseudo/EXT_20260610_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
         },
     },
     {
@@ -213,9 +213,22 @@ data_files = [
         "example_pheno_or_study": "PD",
         "gencode_version": 49,
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ext/individual/gp2_pd/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ext_pseudo/individual/gp2_pd/",
             "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ext/EXT_20260526_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ext_pseudo/EXT_20260610_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+        },
+    },
+    {
+        "id": "ibd_gwas",
+        "dataset_id": "ibd_gwas",
+        "resource": "ibd_gwas",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "IBD",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ext_pseudo/individual/iibdgc/",
+            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ext_pseudo/EXT_20260610_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
         },
     },
     {

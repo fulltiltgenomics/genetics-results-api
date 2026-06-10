@@ -40,6 +40,10 @@ dataset_to_resource = {
     "HPA_24.1": ("hpa", "24.1"),
     "genebass": ("genebass", "v1"),
     "IBD_exome_2026": ("ibd_exome_2026", "2026"),
+    # IIBDGC IBD/UC/CD pseudo credible sets share the ext_pseudo combined file;
+    # this maps their `dataset` column value to the ibd_gwas resource for per-row
+    # attribution in shared-file range/variant credible-set queries.
+    "IIBDGC": ("ibd_gwas", "2026"),
 }
 
 dataset_mapping_files = [
