@@ -6,7 +6,7 @@ data_files = [
         "dataset_id": "finngen_gwas",
         "resource": "finngen",
         "data_source": "gcloud",
-        "prefix": "gs://daly-genetics-results/sumstats/finngen/R13/",
+        "prefix": "gs://daly-genetics-results/sumstats/finngen/R14/",
         "suffix": ".gz",
         "column_mapping": {
             "chrom": "chr",

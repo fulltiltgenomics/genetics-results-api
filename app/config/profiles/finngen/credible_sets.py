@@ -61,10 +61,10 @@ data_files = [
         "example_pheno_or_study": "AUTOIMMUNE",
         "gencode_version": 49,
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_core/r13_20251024/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_core/r14/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
             "suffix_95": ".SUSIE.munged.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_core/r13_20251024/FinnGen_R13_credible_sets.tsv.gz",
-            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_core/r13_20251024/credible_set_stats.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_core/r14/FinnGen_R14_credible_sets.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_core/r14/credible_set_stats.tsv",
         },
     },
     {
@@ -160,10 +160,10 @@ data_files = [
         "example_pheno_or_study": "QTD000605",
         "gencode_version": 39,
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r7/individual/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r8/individual/",
             "suffix_95": ".SUSIE.munged.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r7/eQTL_Catalogue_R7.tsv.gz",
-            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r7/eQTL_Catalogue_R7.qtl.tsv.gz",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r8/eQTL_Catalogue_R8.tsv.gz",
+            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r8/eQTL_Catalogue_R8.qtl.tsv.gz",
         },
     },
     {

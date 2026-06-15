@@ -7,14 +7,15 @@ A dataset appearing on both sides of a pair means self-colocalization.
 
 coloc = [
     {
-        "name": "FinnGen_R13_vs_many",
+        "name": "FinnGen_R14_vs_many",
         "data_source": "gcloud",
-        "credset_file": "gs://finngen-commons/results_api_data/coloc/coloc.credsets.munged.tsv.gz",
-        "coloc_file": "gs://finngen-commons/results_api_data/coloc/colocQC.munged.tsv.gz",
+        "credset_file": "gs://finngen-commons/results_api_data/coloc/finngen_r14_coloc.credsets.munged.tsv.gz",
+        "coloc_file": "gs://finngen-commons/results_api_data/coloc/finngen_r14_colocQC.munged.tsv.gz",
         "pairs": [
             ("finngen_gwas", "finngen_gwas"),
             ("finngen_gwas", "finngen_kanta"),
             ("finngen_gwas", "finngen_pqtl"),
+            ("finngen_gwas", "finngen_pqtl_5k"),
             ("finngen_gwas", "finngen_nmr"),
             ("finngen_gwas", "finngen_somascan"),
             ("finngen_gwas", "finnliver"),

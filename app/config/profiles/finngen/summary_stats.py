@@ -6,7 +6,7 @@ data_files = [
         "dataset_id": "finngen_gwas",
         "resource": "finngen",
         "data_source": "gcloud",
-        "prefix": "gs://finngen-production-library-green/finngen_R13/finngen_R13_analysis_data/summary_stats/release/",
+        "prefix": "gs://finngen-production-library-green/finngen_R14/finngen_R14_analysis_data/summary_stats/release/",
         "suffix": ".gz",
         "column_mapping": {
             "chrom": "chr",

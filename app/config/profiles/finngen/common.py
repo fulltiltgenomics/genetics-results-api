@@ -19,9 +19,11 @@ gnomad = {
 dataset_to_resource = {
     "FinnGen_ATACseq": ("finngen", "R12"),
     "FinnGen_snRNAseq": ("finngen", "R12"),
-    "FinnGen_Olink": ("finngen", "batch1_4"),
+    "FinnGen_Olink": ("finngen", "3K"),
+    "FinnGen_Olink_3K": ("finngen", "3K"),
+    "FinnGen_Olink_5K": ("finngen", "5K"),
     "FinnGen_SomaScan": ("finngen", "2023-03-02"),
-    "FinnGen_R13": ("finngen", "R13"),
+    "FinnGen_R14": ("finngen", "R14"),
     "FinnGen_R13_MVP_UKBB": ("finngen_mvp_ukbb", "R13"),
     "FinnGen_R13_MVP_UKBB_labs": ("finngen_mvp_ukbb", "R13"),
     "FinnGen_R13_UKBB": ("finngen_ukbb", "R13"),
@@ -54,10 +56,10 @@ dataset_to_resource = {
 
 dataset_mapping_files = [
     (
-        "gs://finngen-commons/results_api_data/mapping_files/eqtl_catalogue_r7_dataset_metadata.tsv",
+        "gs://finngen-commons/results_api_data/mapping_files/eqtl_catalogue_r8_dataset_metadata.tsv",
         "dataset_id",
         "eqtl_catalogue",
-        "R7",
+        "R8",
     ),
 ]
 
