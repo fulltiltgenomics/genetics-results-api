@@ -72,13 +72,13 @@ data_files = [
         "dataset_id": "finngen_kanta",
         "resource": "finngen",
         "data_source": "gcloud",
-        "example_pheno_or_study": "3001122",
+        "example_pheno_or_study": "CAionComb_IRN",
         "gencode_version": 49,
         "cs": {
-            "prefix": "gs://daly-genetics-results/credible_sets/finngen_kanta/r12_20251024/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
+            "prefix": "gs://daly-genetics-results/credible_sets/finngen_kanta/r14/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
             "suffix_95": ".SUSIE.munged.tsv",
-            "all_cs_file": "gs://daly-genetics-results/credible_sets/finngen_kanta/r12_20251024/FinnGen_R12kanta_credible_sets.tsv.gz",
-            "stats_file": "gs://daly-genetics-results/credible_sets/finngen_kanta/r12_20251024/credible_set_stats.tsv",
+            "all_cs_file": "gs://daly-genetics-results/credible_sets/finngen_kanta/r14/FinnGen_R14kanta_credible_sets.tsv.gz",
+            "stats_file": "gs://daly-genetics-results/credible_sets/finngen_kanta/r14/credible_set_stats.tsv",
         },
     },
     {

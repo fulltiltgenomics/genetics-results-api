@@ -230,7 +230,7 @@ data_files = [
         "dataset_id": "finngen_kanta",
         "resource": "finngen",
         "data_source": "gcloud",
-        "prefix": "gs://finngen-production-library-green/lab_values/gwas_release_2025_3_10/summary_stats/",
+        "prefix": "gs://finngen-production-library-green/lab_values/gwas_release_2026_05_29/summary_stats/",
         "suffix": ".gz",
         "column_mapping": {
             "chrom": "chr",

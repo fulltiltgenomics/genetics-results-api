@@ -29,7 +29,7 @@ dataset_to_resource = {
     "FinnGen_R13_UKBB": ("finngen_ukbb", "R13"),
     "FinnGen_R13_UKBB_labs": ("finngen_ukbb", "R13"),
     "FinnGen_R12": ("finngen", "R12"),
-    "FinnGen_kanta": ("finngen", "R12"),
+    "FinnGen_kanta": ("finngen", "R14"),
     "FinnGen_drugs": ("finngen", "R12"),
     "FinnGen_NMR": ("finngen_nmr", "1"),
     "FinnLiver": ("finnliver", "1"),

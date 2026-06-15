@@ -110,7 +110,7 @@ class MetadataHarmonizer:
     def _harmonize_finngen_kanta(
         self, raw_metadata: list[dict], config: dict
     ) -> list[HarmonizedMetadata]:
-        """Harmonize FinnGen Kanta lab test metadata."""
+        """Harmonize FinnGen Kanta lab test metadata (finngen_kanta_pheno JSON)."""
         harmonized = []
 
         author = config.get("author", "FinnGen Consortium")
@@ -119,9 +119,9 @@ class MetadataHarmonizer:
 
         for item in raw_metadata:
             try:
-                analysis_type = item.get("AnalysisType", "Quantitative")
+                # category is "Quantitative"/"Binary" (with optional ", derived" suffix)
+                category = item.get("category", "Quantitative")
 
-                # handle string values from TSV
                 def safe_int(value, default=0):
                     if value in ("NA", "", None):
                         return default
@@ -130,18 +130,18 @@ class MetadataHarmonizer:
                     except (ValueError, TypeError):
                         return default
 
-                n_total = safe_int(item.get("N_total"))
-                n_cases = safe_int(item.get("N_cases"))
-                n_controls = safe_int(item.get("N_controls"))
+                n_total = safe_int(item.get("num_total"))
+                n_cases = safe_int(item.get("num_cases"))
+                n_controls = safe_int(item.get("num_controls"))
 
                 # determine trait type
                 trait_type = (
-                    "quantitative" if analysis_type == "Quantitative" else "binary"
+                    "quantitative" if category.startswith("Quantitative") else "binary"
                 )
 
                 harmonized.append(
                     HarmonizedMetadata(
-                        phenotype_code=item.get("OMOPID", ""),
+                        phenotype_code=item.get("phenocode", ""),
                         phenotype_string=item.get("phenostring", ""),
                         n_samples=n_total,
                         n_cases=n_cases,
