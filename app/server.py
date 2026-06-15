@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
@@ -44,6 +45,19 @@ async def lifespan(app):
     # subprocess). A failure here aborts startup loudly, as intended.
     logger.info("Preloading gene-disease data")
     container.get("gene_disease_data")
+    # Prefetch tabix headers and warm the .tbi index cache for the credible-set and
+    # coloc fan-out paths in this serving process. Without this the first request per
+    # resource pays a blocking tabix -H header fetch and a cold .tbi download; warming
+    # concurrently at startup keeps that cost off the request path. Per-file failures
+    # are logged inside warm_all (verify_all_data_files is the authoritative check),
+    # so a single bad file never aborts startup.
+    logger.info("Warming tabix headers and .tbi cache")
+    await asyncio.gather(
+        container.get("data_access").warm_all(),
+        container.get("data_access_coloc").warm_all(),
+        container.get("data_access_expression").warm_all(),
+        container.get("data_access_chromatin_peaks").warm_all(),
+    )
     yield
     # close aiohttp sessions in all GCloudTabixBase-derived services
     for name, instance in list(container._instances.items()):

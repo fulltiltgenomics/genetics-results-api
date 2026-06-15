@@ -36,11 +36,11 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
 
         self.resource_config = df[data_type]
         self.gencode_version = df.get("gencode_version")
+        # headers are fetched lazily by get_header() and prefetched (non-blocking)
+        # by warm() at startup; constructing the object no longer blocks the event
+        # loop on a tabix -H subprocess
         self.header = None
-        self.header = self.get_header()
         self.qtl_header = None
-        if data_type == "cs" and "all_cs_qtl_file" in self.resource_config:
-            self.qtl_header = self.get_header(True)
         self.gene_positions = None
 
     def _get_blob_path(
@@ -75,6 +75,27 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
                 return False
             raise e
         return True
+
+    def _combined_file(self) -> str | None:
+        """The combined (all_cs/all_exome) file path for header/range queries, if any."""
+        if "all_cs_file" in self.resource_config:
+            return self.resource_config["all_cs_file"]
+        if "all_exome_file" in self.resource_config:
+            return self.resource_config["all_exome_file"]
+        return None
+
+    async def warm(self) -> None:
+        """Prefetch header(s) and the .tbi index without blocking the event loop.
+
+        Called at startup so the request path never hits the blocking tabix -H.
+        """
+        gs_path = self._combined_file()
+        if gs_path is not None:
+            self.header = await self._cache_header_async("header", gs_path)
+        if self.data_type == "cs" and "all_cs_qtl_file" in self.resource_config:
+            self.qtl_header = await self._cache_header_async(
+                "qtl_header", self.resource_config["all_cs_qtl_file"]
+            )
 
     def get_header(self, qtl: bool = False) -> list[bytes] | None:
         """Get the header for the all data file. Doing this with tabix to also be sure that the file is tabix-indexed and tabixing works."""

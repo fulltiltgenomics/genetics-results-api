@@ -20,7 +20,12 @@ from app.config.sort_keys import (
 )
 from app.core.exceptions import NotFoundException
 from app.core.gcs_retry import with_gcs_retry
-from app.core.streams import chunk_iterator, tsv_line_iterator, tsv_line_iterator_qtl
+from app.core.streams import (
+    chunk_iterator,
+    start_iterators,
+    tsv_line_iterator,
+    tsv_line_iterator_qtl,
+)
 from app.core.variant import Variant
 from app.services.base_data_access import (
     BaseFactory,
@@ -30,6 +35,7 @@ from app.services.base_data_access import (
 from app.services.metadata_harmonizer import MetadataHarmonizer
 from asyncstdlib.heapq import merge
 from typing import Any, AsyncGenerator, Literal, List
+import asyncio
 import logging
 
 # merge all config dicts
@@ -202,6 +208,33 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         return await super()._get_resource_access(
             (resource, data_type), resource, data_type
         )
+
+    async def warm_all(self) -> None:
+        """Construct and warm (header + .tbi prefetch) every configured tabix data
+        access object concurrently, so the first request pays no cold-start cost.
+
+        Per-file failures are logged and skipped rather than aborting startup;
+        verify_all_data_files() is the authoritative reachability check.
+        """
+        targets = [
+            (data_file_id, data_type)
+            for data_file_id, df in data_file_by_id.items()
+            if df.get("data_source", "gcloud") == "gcloud"
+            for data_type in ("cs", "exome", "gene_based")
+            if data_type in df
+        ]
+
+        async def _warm(data_file_id: str, data_type: str) -> None:
+            try:
+                access = await self._get_resource_access(data_file_id, data_type)
+                if hasattr(access, "warm"):
+                    await access.warm()
+            except Exception as e:
+                logger.warning(
+                    f"Warm failed for {data_file_id}/{data_type}: {e}"
+                )
+
+        await asyncio.gather(*(_warm(did, dt) for did, dt in targets))
 
     async def check_phenotype_exists(
         self, resource: str, phenotype: str, interval: Literal[95, 99] | None = None, data_type: str = "cs"
@@ -464,21 +497,24 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         # row-level filter for shared-file rows belonging to other resources
         resource_filter = {r.encode() for r in resources}
 
-        # get access objects and chunk iterators, skipping any that fail
-        accesses_and_iterators = []
-        for data_file_id in data_file_ids:
+        # open access objects and chunk iterators concurrently (per-file setup is
+        # network-bound on cold caches), skipping any that fail
+        async def _open(data_file_id: str):
             try:
                 access = await self._get_resource_access(data_file_id, data_type)
                 chunk_iterator_stream = await access.stream_range(
                     [chr], [start], [end], in_chunk_size
                 )
-                accesses_and_iterators.append((access, chunk_iterator_stream))
+                return access, chunk_iterator_stream
             except ValueError:
                 # data file doesn't support this data type, expected - skip silently
-                continue
+                return None
             except Exception as e:
                 logger.warning(f"Skipping data file {data_file_id} due to error: {e}")
-                continue
+                return None
+
+        opened = await asyncio.gather(*(_open(did) for did in data_file_ids))
+        accesses_and_iterators = [r for r in opened if r is not None]
 
         if not accesses_and_iterators:
             raise NotFoundException(
@@ -498,7 +534,9 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         ]
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
         sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_CS)
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        # prime each file's first (network-bound) tabix read concurrently so they
+        # overlap instead of serializing inside merge()'s sequential heap seeding
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
         header_line = (
             b"resource\tversion\t" + b"\t".join(accesses[0].get_header()) + b"\n"
         )
@@ -562,7 +600,7 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         ]
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
         sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_CS)
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
         header_line = (
             b"resource\tversion\t" + b"\t".join(accesses[0].get_header()) + b"\n"
         )
@@ -648,7 +686,7 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         ]
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
         sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_CS)
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
         # header_line = b"\t".join(accesses[0].get_header()) + b"\n"
         header_line = (
             b"resource\tversion\t" + b"\t".join(accesses[0].get_header()) + b"\n"
@@ -723,7 +761,7 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         ]
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header(True)
         sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_CS_QTL)
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
         # header_line = b"\t".join(accesses[0].get_header()) + b"\n"
         header_line = (
             b"resource\tversion\t" + b"\t".join(accesses[0].get_header(True)) + b"\n"

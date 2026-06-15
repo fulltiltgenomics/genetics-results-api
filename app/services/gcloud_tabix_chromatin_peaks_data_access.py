@@ -20,8 +20,13 @@ class GCloudTabixDataAccessChromatinPeaks(
             c for c in chromatin_peaks_data if c["resource"] == resource
         ][0]
         self.file = self.resource_config["file"]
+        # header fetched lazily by get_header() and prefetched (non-blocking) by
+        # warm() at startup, so construction no longer blocks on tabix -H
         self.header = None
-        self.header = self.get_header()
+
+    async def warm(self) -> None:
+        """Prefetch the header and .tbi index without blocking the event loop."""
+        self.header = await self._cache_header_async("header", self.file)
 
     def get_header(self) -> list[bytes]:
         """Get the header for the chromatin peaks data file."""

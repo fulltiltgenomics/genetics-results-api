@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from app.config.expression import expression_data, simple_columns
 from app.config.sort_keys import create_sort_key, SORT_CONFIG_EXPRESSION
-from app.core.streams import chunk_iterator, tsv_line_iterator_simple
+from app.core.streams import chunk_iterator, start_iterators, tsv_line_iterator_simple
 from app.services.base_data_access import (
     BaseFactory,
     BaseDataAccess,
@@ -9,6 +9,7 @@ from app.services.base_data_access import (
 )
 from asyncstdlib.heapq import merge
 from typing import AsyncGenerator, Literal, List
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,20 @@ class DataAccessExpression(BaseDataAccess[DataAccessObjectExpression]):
         """Get or create a data access object for a specific resource and data type."""
         return await super()._get_resource_access((resource, data_type), resource)
 
+    async def warm_all(self) -> None:
+        """Construct and warm (header + .tbi prefetch) every expression data access
+        object concurrently, so the first request pays no cold-start cost."""
+
+        async def _warm(resource: str) -> None:
+            try:
+                access = await self._get_resource_access(resource)
+                if hasattr(access, "warm"):
+                    await access.warm()
+            except Exception as e:
+                logger.warning(f"Expression warm failed for {resource}: {e}")
+
+        await asyncio.gather(*(_warm(c["resource"]) for c in expression_data))
+
     async def stream_range(
         self,
         coords: dict[str, list[dict[Literal["chrom", "gene_start", "gene_end"], int]]],
@@ -105,7 +120,7 @@ class DataAccessExpression(BaseDataAccess[DataAccessObjectExpression]):
         # Create dynamic sort key based on actual header
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
         sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_EXPRESSION)
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
         # header_line = b"\t".join(accesses[0].get_header()) + b"\n"
         header_line = (
             b"resource\tversion\t" + b"\t".join(accesses[0].get_header()) + b"\n"

@@ -225,6 +225,55 @@ class GCloudTabixBase:
         logger.info(f"Header: {header}")
         return header
 
+    async def _get_header_async(self, gs_path: str) -> list[bytes]:
+        """Async, non-blocking equivalent of _get_header.
+
+        Uses asyncio.create_subprocess_exec instead of the blocking subprocess.run
+        so warming/fetching a header never stalls the event loop. Also downloads the
+        .tbi index into the cache dir (same side effect as _get_header), so calling
+        this at startup prefetches the index cache.
+        """
+        cache_dir = self._get_tbi_cache_dir(gs_path)
+        last_stderr = ""
+        for attempt in range(_TABIX_MAX_ATTEMPTS):
+            ensure_gcs_token()
+            process = await asyncio.create_subprocess_exec(
+                "tabix",
+                "-H",
+                gs_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cache_dir,
+            )
+            stdout, stderr = await process.communicate()
+            if process.returncode == 0:
+                header_line = stdout.strip()
+                header = [
+                    h[1:] if h.startswith(b"#") else h for h in header_line.split(b"\t")
+                ]
+                logger.info(f"Header: {header}")
+                return header
+            last_stderr = stderr.decode()
+            if attempt < _TABIX_MAX_ATTEMPTS - 1:
+                await asyncio.sleep(_TABIX_RETRY_BASE_DELAY * (2**attempt))
+        logger.error(
+            f"Tabix header failed after {_TABIX_MAX_ATTEMPTS} attempts "
+            f"for {gs_path}: {last_stderr}"
+        )
+        raise RuntimeError("Getting file header failed")
+
+    async def _cache_header_async(self, cache_key: str, gs_path: str) -> list[bytes]:
+        """Async equivalent of _cache_header: fetch (non-blocking) and cache a header.
+
+        Populates the same instance attribute as _cache_header, so a later synchronous
+        get_header() call hits the cache instead of the blocking subprocess.
+        """
+        if getattr(self, cache_key, None) is not None:
+            return getattr(self, cache_key)
+        header = await self._get_header_async(gs_path)
+        setattr(self, cache_key, header)
+        return header
+
     def _cache_header(self, cache_key: str, gs_path: str) -> list[bytes]:
         """
         Get and cache a header for a file.

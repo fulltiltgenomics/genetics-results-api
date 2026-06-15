@@ -1,8 +1,13 @@
 from abc import abstractmethod
+import asyncio
 import logging
 from app.config.chromatin_peaks import chromatin_peaks_data
 from app.config.sort_keys import create_sort_key, SORT_CONFIG_CHROMATIN_PEAKS
-from app.core.streams import chunk_iterator, tsv_line_iterator_chromatin_peaks
+from app.core.streams import (
+    chunk_iterator,
+    start_iterators,
+    tsv_line_iterator_chromatin_peaks,
+)
 from asyncstdlib.heapq import merge
 from app.services.base_data_access import (
     BaseFactory,
@@ -126,6 +131,20 @@ class DataAccessChromatinPeaks(BaseDataAccess[DataAccessObjectChromatinPeaks]):
         """Get or create a data access object for a specific resource."""
         return await super()._get_resource_access(resource, resource)
 
+    async def warm_all(self) -> None:
+        """Construct and warm (header + .tbi prefetch) every chromatin-peaks data
+        access object concurrently, so the first request pays no cold-start cost."""
+
+        async def _warm(resource: str) -> None:
+            try:
+                access = await self._get_resource_access(resource)
+                if hasattr(access, "warm"):
+                    await access.warm()
+            except Exception as e:
+                logger.warning(f"Chromatin-peaks warm failed for {resource}: {e}")
+
+        await asyncio.gather(*(_warm(c["resource"]) for c in chromatin_peaks_data))
+
     async def stream_by_peak_id(
         self,
         peak_id: str,
@@ -169,7 +188,7 @@ class DataAccessChromatinPeaks(BaseDataAccess[DataAccessObjectChromatinPeaks]):
         sort_key_fn = create_sort_key(
             header_with_resources, SORT_CONFIG_CHROMATIN_PEAKS
         )
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
 
         header_line = b"\t".join(header_with_resources) + b"\n"
 

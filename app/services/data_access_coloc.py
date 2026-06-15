@@ -11,6 +11,7 @@ from app.config.sort_keys import (
 from app.core.exceptions import DataException
 from app.core.streams import (
     chunk_iterator,
+    start_iterators,
     tsv_line_iterator,
     tsv_line_iterator_coloc,
     tsv_line_iterator_coloc_by_trait,
@@ -109,6 +110,20 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
         """Get or create a coloc data access object."""
         return await super()._get_resource_access((name,), name)
 
+    async def warm_all(self) -> None:
+        """Construct and warm (headers + .tbi prefetch) every coloc data access
+        object concurrently, so the first request pays no cold-start cost."""
+
+        async def _warm(name: str) -> None:
+            try:
+                access = await self._get_resource_access(name)
+                if hasattr(access, "warm"):
+                    await access.warm()
+            except Exception as e:
+                logger.warning(f"Coloc warm failed for {name}: {e}")
+
+        await asyncio.gather(*(_warm(c["name"]) for c in coloc))
+
     # TODO can we manage the data with polars fast enough? this is very complex
     async def stream_coloc_by_variant(
         self,
@@ -155,7 +170,9 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
         sort_key_fn = create_sort_key(
             cs_header_with_resources, SORT_CONFIG_COLOC_CREDSET
         )
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        # prime each file's first tabix read concurrently so they overlap instead
+        # of serializing inside merge()'s sequential heap seeding
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
         index_dataset = accesses[0].get_credible_set_header().index(b"dataset") + 2
         index_trait = accesses[0].get_credible_set_header().index(b"trait") + 2
         index_cs_id = accesses[0].get_credible_set_header().index(b"cs_id") + 2
@@ -379,7 +396,7 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
         else:
             sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_COLOC)
 
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
         header_line = b"\t".join(header_with_resources) + b"\n"
 
         return chunk_iterator(merged_iterator, header_line, out_chunk_size)
@@ -423,7 +440,7 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
         sort_key_fn = create_sort_key(
             cs_header_with_resources, SORT_CONFIG_COLOC_CREDSET
         )
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
         index_dataset = cs_header.index(b"dataset") + 2
         index_trait = cs_header.index(b"trait") + 2
         index_cs_id = cs_header.index(b"cs_id") + 2
@@ -456,7 +473,7 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
             b"version2",
         ] + header
         sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_COLOC)
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
 
         index_dataset1 = header.index(b"dataset1") + 4
         index_dataset2 = header.index(b"dataset2") + 4
@@ -504,7 +521,7 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
             for iterator in chunk_iterators
         ]
         sort_key_fn = create_sort_key(cs_header, SORT_CONFIG_COLOC_CREDSET)
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
 
         header_line = (
             b"\t".join([b"variant_" + h for h in cs_header])
@@ -626,7 +643,7 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
                 b"version2",
             ] + header
             sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_COLOC)
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
         header_line = b"\t".join(header_with_resources) + b"\n"
 
         return chunk_iterator(merged_iterator, header_line, out_chunk_size)
