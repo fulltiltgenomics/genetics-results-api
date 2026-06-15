@@ -632,15 +632,19 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         data_file_ids = _dedup_by_combined_file(data_file_ids, data_type)
         resource_filter = {r.encode() for r in resources}
 
-        # create access objects, skipping data files that don't support this data type
-        accesses = []
-        for data_file_id in data_file_ids:
+        # create access objects concurrently, skipping data files that don't support this data type
+        async def _get_access(data_file_id: str):
             try:
-                access = await self._get_resource_access(data_file_id, data_type)
-                accesses.append(access)
+                return await self._get_resource_access(data_file_id, data_type)
             except ValueError:
                 # data file doesn't support this data type, expected - skip silently
-                continue
+                return None
+
+        accesses = [
+            a
+            for a in await asyncio.gather(*(_get_access(did) for did in data_file_ids))
+            if a is not None
+        ]
 
         # skip resources whose gencode version has no coordinates for the queried gene
         accesses = [
@@ -655,10 +659,10 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 f"No data found for resources: {resources}"
             )
 
-        # skip accesses whose data file has no combined file for range queries
-        # (mirrors stream_range; e.g. ibd exome has per-pheno files but no all_exome_file)
-        accesses_and_iterators = []
-        for access in accesses:
+        # open range streams concurrently; skip accesses whose data file has no combined
+        # file for range queries (mirrors stream_range; e.g. ibd exome has per-pheno
+        # files but no all_exome_file)
+        async def _open(access):
             try:
                 iterator = await access.stream_range(
                     [pos["chrom"] for pos in coords[access.gencode_version]],
@@ -667,8 +671,12 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                     in_chunk_size,
                 )
             except ValueError:
-                continue
-            accesses_and_iterators.append((access, iterator))
+                return None
+            return access, iterator
+
+        accesses_and_iterators = [
+            r for r in await asyncio.gather(*(_open(a) for a in accesses)) if r is not None
+        ]
 
         if not accesses_and_iterators:
             raise NotFoundException(f"No data found for resources: {resources}")
@@ -716,15 +724,19 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 # fallback: treat as data file ID directly
                 data_file_ids.append(resource)
 
-        # create access objects, skipping data files that don't support this data type
-        accesses = []
-        for data_file_id in data_file_ids:
+        # create access objects concurrently, skipping data files that don't support this data type
+        async def _get_access(data_file_id: str):
             try:
-                access = await self._get_resource_access(data_file_id, data_type)
-                accesses.append(access)
+                return await self._get_resource_access(data_file_id, data_type)
             except ValueError:
                 # data file doesn't support this data type, expected - skip silently
-                continue
+                return None
+
+        accesses = [
+            a
+            for a in await asyncio.gather(*(_get_access(did) for did in data_file_ids))
+            if a is not None
+        ]
 
         # limit to resources that have QTL gene data and there are coordinates for the corresponding gencode version
         accesses = [
@@ -740,14 +752,16 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 f"No QTL gene data found for resources: {resources}"
             )
 
-        chunk_iterators = [
-            await access.stream_qtl_gene_range(
-                [pos["chrom"] for pos in coords[access.gencode_version]],
-                [pos["gene_start"] for pos in coords[access.gencode_version]],
-                in_chunk_size,
-            )
-            for access in accesses
-        ]
+        chunk_iterators = await asyncio.gather(
+            *[
+                access.stream_qtl_gene_range(
+                    [pos["chrom"] for pos in coords[access.gencode_version]],
+                    [pos["gene_start"] for pos in coords[access.gencode_version]],
+                    in_chunk_size,
+                )
+                for access in accesses
+            ]
+        )
 
         line_iterators = [
             tsv_line_iterator_qtl(

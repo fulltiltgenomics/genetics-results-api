@@ -162,7 +162,6 @@ data_files = [
         "cs": {
             "prefix": "gs://daly-genetics-results/credible_sets/eqtl_catalogue/r8/individual/",
             "suffix_95": ".SUSIE.munged.tsv",
-            # NOTE: main .tsv.gz files missing in bucket (only .tbi present) — may need to be copied
             "all_cs_file": "gs://daly-genetics-results/credible_sets/eqtl_catalogue/r8/eQTL_Catalogue_R8.tsv.gz",
             "all_cs_qtl_file": "gs://daly-genetics-results/credible_sets/eqtl_catalogue/r8/eQTL_Catalogue_R8.qtl.tsv.gz",
         },
