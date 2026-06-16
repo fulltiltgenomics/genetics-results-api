@@ -17,10 +17,19 @@ class GCloudTabixDataAccessColoc(GCloudTabixBase, DataAccessObjectColoc):
         self.configuration = [c for c in coloc if c["name"] == name][0]
         self.credible_set_file = self.configuration["credset_file"]
         self.coloc_file = self.configuration["coloc_file"]
+        # headers are fetched lazily and prefetched (non-blocking) by warm() at
+        # startup, so constructing the object does not block on tabix -H
         self.credible_set_header = None
-        self.credible_set_header = self.get_credible_set_header()
         self.coloc_header = None
-        self.coloc_header = self.get_coloc_header()
+
+    async def warm(self) -> None:
+        """Prefetch both headers and their .tbi indexes without blocking the event loop."""
+        self.credible_set_header = await self._cache_header_async(
+            "credible_set_header", self.credible_set_file
+        )
+        self.coloc_header = await self._cache_header_async(
+            "coloc_header", self.coloc_file
+        )
 
     def get_credible_set_header(self) -> list[bytes]:
         """Get the header for the credible set file."""

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import AsyncGenerator, AsyncIterator, Any, Callable
 
@@ -10,6 +11,46 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 dataset_mapping = DatasetMapping()
+
+
+async def _prepend(iterator: AsyncIterator[Any], kind: str, value: Any) -> AsyncIterator[Any]:
+    """Re-attach an already-pulled head element (or a deferred error) to an iterator."""
+    if kind == "error":
+        # surface the first-read failure exactly where merge()/the consumer would
+        # have hit it, preserving the original error semantics
+        raise value
+    yield value
+    async for item in iterator:
+        yield item
+
+
+async def start_iterators(
+    iterators: list[AsyncIterator[Any]],
+) -> list[AsyncIterator[Any]]:
+    """Eagerly pull the first element of each async iterator concurrently.
+
+    asyncstdlib's ``merge()`` seeds its heap by awaiting the first element of each
+    iterable one-by-one; for tabix-over-GCS streams that serializes the per-file
+    network reads (the dominant fan-out latency). Priming every iterator's first
+    read concurrently here makes those reads overlap. Empty iterators are dropped
+    (as ``merge`` would); an iterator whose first read raised re-raises lazily when
+    consumed, so error handling is unchanged.
+    """
+    async def _first(it: AsyncIterator[Any]) -> tuple[str, Any]:
+        try:
+            return "item", await it.__anext__()
+        except StopAsyncIteration:
+            return "empty", None
+        except Exception as e:  # re-raised lazily by _prepend
+            return "error", e
+
+    heads = await asyncio.gather(*(_first(it) for it in iterators))
+    primed: list[AsyncIterator[Any]] = []
+    for it, (kind, value) in zip(iterators, heads):
+        if kind == "empty":
+            continue
+        primed.append(_prepend(it, kind, value))
+    return primed
 
 
 async def tsv_line_iterator_base(

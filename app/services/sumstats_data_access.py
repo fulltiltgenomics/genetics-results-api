@@ -8,7 +8,7 @@ from asyncstdlib.heapq import merge
 from app.config.summary_stats import get_data_files_by_resource_and_type
 from app.config.sort_keys import create_sort_key, SORT_CONFIG_SUMSTATS
 from app.core.exceptions import NotFoundException
-from app.core.streams import tsv_line_iterator_sumstats, chunk_iterator
+from app.core.streams import tsv_line_iterator_sumstats, chunk_iterator, start_iterators
 from app.core.variant import Variant
 from app.services.gcloud_tabix_base import GCloudTabixBase
 
@@ -162,7 +162,7 @@ class SumstatsDataAccess(GCloudTabixBase):
             )
 
         sort_key_fn = create_sort_key(output_header, SORT_CONFIG_SUMSTATS)
-        merged_iterator = merge(*line_iterators, key=sort_key_fn)
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
         header_line = b"\t".join(output_header) + b"\n"
 
         return chunk_iterator(merged_iterator, header_line, out_chunk_size)
