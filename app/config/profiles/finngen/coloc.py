@@ -41,7 +41,7 @@ coloc = [
         "credset_file": "gs://finngen-commons/results_api_data/coloc/FinnGen-KANTA.eQTL.coloc.credsets.munged.tsv.gz",
         "coloc_file": "gs://finngen-commons/results_api_data/coloc/FinnGen-KANTA.eQTL.colocQC.munged.tsv.gz",
         "pairs": [
-            ("finngen_eqtl", "finngen_kanta"),
+            ("finngen_eqtl", "finngen_kanta_r12"),
         ],
     },
     {
@@ -59,7 +59,7 @@ coloc = [
         "credset_file": "gs://finngen-commons/results_api_data/coloc/FinnGen-KANTA.caQTL.coloc.credsets.munged.tsv.gz",
         "coloc_file": "gs://finngen-commons/results_api_data/coloc/FinnGen-KANTA.caQTL.colocQC.munged.tsv.gz",
         "pairs": [
-            ("finngen_caqtl", "finngen_kanta"),
+            ("finngen_caqtl", "finngen_kanta_r12"),
         ],
     },
 ]
