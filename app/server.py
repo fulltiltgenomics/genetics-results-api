@@ -37,27 +37,32 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app):
-    # Preload gene-disease data at startup rather than lazily on the first
-    # request. The load is a blocking, network-bound GCS read; doing it on the
-    # request path means a slow/stalled read wedges the worker and takes down
-    # /healthz. This runs in the actual serving process (the validations in
-    # run_server.py's __main__ block do not execute in uvicorn's reload worker
-    # subprocess). A failure here aborts startup loudly, as intended.
-    logger.info("Preloading gene-disease data")
-    container.get("gene_disease_data")
-    # Prefetch tabix headers and warm the .tbi index cache for the credible-set and
-    # coloc fan-out paths in this serving process. Without this the first request per
-    # resource pays a blocking tabix -H header fetch and a cold .tbi download; warming
-    # concurrently at startup keeps that cost off the request path. Per-file failures
-    # are logged inside warm_all (verify_all_data_files is the authoritative check),
-    # so a single bad file never aborts startup.
-    logger.info("Warming tabix headers and .tbi cache")
+    # Warm everything the request path would otherwise load lazily on first use,
+    # so no request pays a blocking, network-bound GCS read (which would also wedge
+    # the worker and take down /healthz). Two groups run concurrently and startup
+    # takes the slower of the two, not their sum:
+    #   - sync, GCS-backed singletons (gene-disease, gene name/position maps used by
+    #     every *_by_gene endpoint, and the phenotype/gene search index) load in a
+    #     worker thread so they don't block the event loop;
+    #   - async tabix header/.tbi warming (warm_all) runs on the loop.
+    # This runs in the serving process. Failures abort startup loudly, as intended
+    # (per-tabix-file failures are swallowed inside warm_all; verify_all_data_files
+    # is the authoritative reachability gate).
+    logger.info("Warming services (gene maps, search index, gene-disease, tabix cache)")
+
+    def _preload_sync():
+        container.get("gene_disease_data")
+        container.get("gene_name_mapping")
+        container.get("search_index")
+
     await asyncio.gather(
+        asyncio.to_thread(_preload_sync),
         container.get("data_access").warm_all(),
         container.get("data_access_coloc").warm_all(),
         container.get("data_access_expression").warm_all(),
         container.get("data_access_chromatin_peaks").warm_all(),
     )
+    logger.info("Startup warming complete")
     yield
     # close aiohttp sessions in all GCloudTabixBase-derived services
     for name, instance in list(container._instances.items()):

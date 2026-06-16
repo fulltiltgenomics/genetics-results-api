@@ -147,9 +147,15 @@ if __name__ == "__main__":
         _validate_gene_disease()
         # configure JSON logging before uvicorn starts so its loggers propagate to root
         setup_logging()
+        # reload spawns a separate worker subprocess with its own service container,
+        # so all the warming done above (and in app.server's lifespan) happens in a
+        # process that is then thrown away and re-done — slow startup and a lazy,
+        # slow first request. Default to single-process (reload off) so the serving
+        # process reuses this warming; opt in to reload for local dev with RELOAD=1.
+        reload = os.environ.get("RELOAD", "").lower() in ("1", "true", "yes")
         # use asyncio event loop instead of uvloop - uvloop uses sockets instead of pipes
         # for subprocess stdin, which can break tabix's -R /dev/stdin option (uvloop issue #532)
-        uvicorn.run("app.server:app", host="0.0.0.0", port=port, reload=True, loop="asyncio", log_config=None)
+        uvicorn.run("app.server:app", host="0.0.0.0", port=port, reload=reload, loop="asyncio", log_config=None)
     except Exception as e:
         # log error without exposing full traceback to stdout in production
         import logging

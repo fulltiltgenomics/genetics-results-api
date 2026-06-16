@@ -27,6 +27,13 @@ Update files under [config/](config/) to point to your data files
 uv run python run_server.py 8081
 ```
 
+For local development with auto-reload on code changes, set `RELOAD=1` (off by
+default so production starts as a single warmed process):
+
+```bash
+RELOAD=1 uv run python run_server.py 8081
+```
+
 ## API docs
 
 Once running, open http://localhost:8081/api/v1/docs to see available endpoints
