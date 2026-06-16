@@ -295,6 +295,66 @@ class TestSummaryStatsGet:
             assert item["resource"] == resource
 
 
+class TestSummaryStatsPqtlMeta:
+    """Test the finngen_ukbb pQTL 3-way meta dataset (finngen_ukbb_pqtl)."""
+
+    # PCSK9 cis variant present in the unfiltered pan-asset meta sumstats
+    _PROTEIN = "PCSK9"
+    _VARIANT = "1-55039774-C-T"
+
+    def test_pqtl_meta_returns_mapped_columns(self, server_url):
+        """Query a known protein/variant and assert meta + per-study columns map through."""
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats/finngen_ukbb/pqtl",
+            params={
+                "variants": self._VARIANT,
+                "phenotypes": self._PROTEIN,
+                "format": "json",
+            },
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        validation = validate_json_response(data, min_items=1)
+        assert validation["valid"], f"JSON validation failed: {validation['errors']}"
+
+        item = data[0]
+        assert item["resource"] == "finngen_ukbb"
+        assert item["phenotype"] == self._PROTEIN
+        assert item["chr"] == 1
+        assert item["pos"] == 55039774
+
+        # mapped meta columns
+        for col in ("beta", "se", "pval", "mlog10p", "het_p", "meta_n"):
+            assert col in item, f"missing meta column {col}"
+        # mapped per-study columns for all three studies
+        for col in (
+            "fg2_3k_beta", "ukbb_ppp_beta", "fg3_cb_beta",
+            "leave_fg2_3k_beta", "leave_ukbb_ppp_beta", "leave_fg3_cb_beta",
+        ):
+            assert col in item, f"missing per-study column {col}"
+
+    def test_pqtl_meta_tsv(self, server_url):
+        """Same query in TSV format returns a consistent table with the mapped header."""
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats/finngen_ukbb/pqtl",
+            params={
+                "variants": self._VARIANT,
+                "phenotypes": self._PROTEIN,
+                "format": "tsv",
+            },
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        validation = validate_tsv_response(response.text, min_data_lines=1)
+        assert validation["valid"], f"TSV validation failed: {validation['errors']}"
+        header = validation["header"]
+        for col in ("phenotype", "beta", "mlog10p", "fg2_3k_beta", "ukbb_ppp_beta", "fg3_cb_beta"):
+            assert col in header, f"missing column {col} in TSV header"
+
+
 class TestSummaryStatsPost:
     """Test POST /api/v1/summary_stats/{resource}/{data_type} endpoint."""
 
