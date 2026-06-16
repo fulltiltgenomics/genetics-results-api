@@ -230,7 +230,7 @@ data_files = [
         "dataset_id": "finngen_kanta",
         "resource": "finngen",
         "data_source": "gcloud",
-        "prefix": "gs://daly-genetics-results/sumstats/finngen/R13_labs/",
+        "prefix": "gs://daly-genetics-results/sumstats/finngen/R14_labs/",
         "suffix": ".gz",
         "column_mapping": {
             "chrom": "chr",
