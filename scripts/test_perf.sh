@@ -6,11 +6,11 @@
 # fan-out queries are grouped first since they are the slowest.
 #
 # Usage:
-#   uv run python run_server.py 8081      # start local dev server first
+#   uv run python run_server.py 2000      # start local dev server first
 #   scripts/test_perf.sh
 #
 # Env overrides:
-#   BASE     API base URL              (default http://localhost:8081/api/v1)
+#   BASE     API base URL              (default http://localhost:2000/api/v1)
 #   REPEAT   runs per query            (default 3)
 #   CS_RES / CS_PHENO / CS_ID  credible-set id for the *_by_id endpoints
 #                              (auto-discovered from a region query if unset)
@@ -18,7 +18,7 @@
 set -u
 export LC_ALL=C  # ensure '.' decimal separator so `sort -n` orders times correctly
 
-BASE="${BASE:-http://localhost:8081/api/v1}"
+BASE="${BASE:-http://localhost:2000/api/v1}"
 REPEAT="${REPEAT:-3}"
 ORIGIN="${BASE%/api/v1}"
 
