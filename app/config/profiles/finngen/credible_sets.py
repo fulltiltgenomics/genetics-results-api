@@ -111,6 +111,21 @@ data_files = [
         },
     },
     {
+        "id": "finngen_pqtl_5k",
+        "dataset_id": "finngen_pqtl_5k",
+        "resource": "finngen",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "PCSK9",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_olink_5k/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
+            "suffix_95": ".SUSIE.munged.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_olink_5k/FinnGen_Olink_5K_credible_sets.tsv.gz",
+            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_olink_5k/FinnGen_Olink_5K_credible_sets.qtl.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_olink_5k/credible_set_stats.tsv",
+        },
+    },
+    {
         "id": "ukbb_pqtl",
         "dataset_id": "ukbb_pqtl",
         "resource": "ukbb",
