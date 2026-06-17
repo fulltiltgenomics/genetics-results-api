@@ -8,7 +8,12 @@ from asyncstdlib.heapq import merge
 from app.config.summary_stats import get_data_files_by_resource_and_type
 from app.config.sort_keys import create_sort_key, SORT_CONFIG_SUMSTATS
 from app.core.exceptions import NotFoundException
-from app.core.streams import tsv_line_iterator_sumstats, chunk_iterator, start_iterators
+from app.core.streams import (
+    tsv_line_iterator_sumstats,
+    union_output_columns,
+    chunk_iterator,
+    start_iterators,
+)
 from app.core.variant import Variant
 from app.services.gcloud_tabix_base import GCloudTabixBase
 
@@ -59,16 +64,6 @@ class SumstatsDataAccess(GCloudTabixBase):
         self._header_cache[cache_key] = header
         return header
 
-    def get_output_header(self, data_file_config: dict, file_header: list[bytes]) -> list[bytes]:
-        """Build the unified output header from column mapping."""
-        mapping = data_file_config["column_mapping"]
-        file_header_str = [h.decode() for h in file_header]
-        mapped = [
-            mapping[src_col].encode()
-            for src_col in mapping
-            if src_col in file_header_str
-        ]
-        return [b"resource", b"version", b"phenotype"] + mapped
 
     async def stream_sumstats(
         self,
@@ -99,15 +94,15 @@ class SumstatsDataAccess(GCloudTabixBase):
         chrs = [v.chr for v in variants]
         positions = [v.pos for v in variants]
 
-        # collect all (data_file_config, phenotype) stream tasks
-        line_iterators = []
-        output_header = None
+        # phase 1: find every (config, phenotype) that has a file, fetching each
+        # file's header. Headers determine the shared output schema, which must be
+        # known before any row is serialized — otherwise rows from a narrower file
+        # (e.g. Kanta labs) misalign against a wider file's header (e.g. core GWAS).
+        contributions = []  # (df_config, phenotype, gs_path, file_header)
+        schema_configs = []  # (column_mapping, file_header) per contributing config
+        seen_config_ids = set()
 
         for df_config in data_file_configs:
-            resource_bytes = df_config["resource"].encode()
-            version_bytes = df_config["version"].encode()
-            column_mapping = df_config["column_mapping"]
-
             # single-file configs only serve their configured phenotype
             if "file" in df_config:
                 configured_phenotype = df_config["phenotype"]
@@ -130,32 +125,48 @@ class SumstatsDataAccess(GCloudTabixBase):
                     )
                     continue
 
-                if output_header is None:
-                    output_header = self.get_output_header(df_config, file_header)
+                contributions.append((df_config, phenotype, gs_path, file_header))
+                if df_config["id"] not in seen_config_ids:
+                    seen_config_ids.add(df_config["id"])
+                    schema_configs.append((df_config["column_mapping"], file_header))
 
-                try:
-                    raw_stream = await self._stream_range(
-                        gs_path, chrs, positions, positions, in_chunk_size
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Skipping {phenotype} for {df_config['id']}: tabix failed: {e}"
-                    )
-                    continue
+        if not contributions:
+            raise NotFoundException(
+                f"No data found for resource '{resource}', data type '{data_type}', "
+                f"phenotypes {phenotypes}"
+            )
 
-                phenotype_bytes = phenotype.encode()
-                line_iter = tsv_line_iterator_sumstats(
-                    raw_stream,
-                    file_header,
-                    column_mapping,
-                    resource_bytes,
-                    version_bytes,
-                    phenotype_bytes,
-                    variant_filter,
+        unified_columns = union_output_columns(schema_configs)
+        output_header = [b"resource", b"version", b"phenotype"] + [
+            c.encode() for c in unified_columns
+        ]
+
+        # phase 2: open each tabix stream and align its rows to the shared schema
+        line_iterators = []
+        for df_config, phenotype, gs_path, file_header in contributions:
+            try:
+                raw_stream = await self._stream_range(
+                    gs_path, chrs, positions, positions, in_chunk_size
                 )
-                line_iterators.append(line_iter)
+            except Exception as e:
+                logger.warning(
+                    f"Skipping {phenotype} for {df_config['id']}: tabix failed: {e}"
+                )
+                continue
 
-        if not line_iterators or output_header is None:
+            line_iter = tsv_line_iterator_sumstats(
+                raw_stream,
+                file_header,
+                df_config["column_mapping"],
+                unified_columns,
+                df_config["resource"].encode(),
+                df_config["version"].encode(),
+                phenotype.encode(),
+                variant_filter,
+            )
+            line_iterators.append(line_iter)
+
+        if not line_iterators:
             raise NotFoundException(
                 f"No data found for resource '{resource}', data type '{data_type}', "
                 f"phenotypes {phenotypes}"

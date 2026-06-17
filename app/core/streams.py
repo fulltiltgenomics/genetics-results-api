@@ -130,10 +130,46 @@ def tsv_line_iterator_simple(
     return tsv_line_iterator_base(stream, filter_fn, transform_fn)
 
 
+def mapped_output_columns(
+    column_mapping: dict[str, str], file_header: list[bytes]
+) -> list[str]:
+    """Output column names a sumstats file contributes, in column_mapping order,
+    limited to source columns actually present in the file header."""
+    file_header_str = [h.decode() for h in file_header]
+    return [
+        out_col
+        for src_col, out_col in column_mapping.items()
+        if src_col in file_header_str
+    ]
+
+
+def union_output_columns(
+    configs: list[tuple[dict[str, str], list[bytes]]],
+) -> list[str]:
+    """Ordered union of output columns across (column_mapping, file_header) pairs.
+
+    Summary-stat files can have different schemas — e.g. FinnGen core GWAS carries
+    rsids/nearest_genes/af_cases/af_controls that the Kanta lab files lack. A single
+    query spanning several files must serialize every row against one shared header,
+    so we take the union and each row fills NA for columns its file does not provide.
+    Without this, rows from a narrower file get misaligned against a wider file's
+    header (e.g. beta read as pval).
+    """
+    seen: set[str] = set()
+    unified: list[str] = []
+    for column_mapping, file_header in configs:
+        for out_col in mapped_output_columns(column_mapping, file_header):
+            if out_col not in seen:
+                seen.add(out_col)
+                unified.append(out_col)
+    return unified
+
+
 def tsv_line_iterator_sumstats(
     stream: AsyncIterator[bytes],
     file_header: list[bytes],
     column_mapping: dict[str, str],
+    output_columns: list[str],
     resource: bytes,
     version: bytes,
     phenotype: bytes,
@@ -141,13 +177,16 @@ def tsv_line_iterator_sumstats(
 ) -> AsyncIterator[list[bytes]]:
     """
     TSV line iterator for summary stat files.
-    Applies column mapping (select + rename), prepends resource/version/phenotype,
-    and optionally filters by variant(s).
+    Emits each row aligned to the shared ``output_columns`` schema (filling NA for
+    columns this file lacks), prepends resource/version/phenotype, and optionally
+    filters by variant(s).
 
     Args:
         stream: Async iterator of byte chunks from tabix
         file_header: Raw header columns from the file
-        column_mapping: Maps file column names to output column names (only mapped columns are included)
+        column_mapping: Maps this file's column names to output column names
+        output_columns: Shared, ordered output schema across all queried files
+            (see union_output_columns); rows are positioned by name into it
         resource: Resource name as bytes
         version: Version as bytes
         phenotype: Phenotype code as bytes
@@ -155,11 +194,11 @@ def tsv_line_iterator_sumstats(
     """
     file_header_str = [h.decode() for h in file_header]
 
-    # build list of (source_index, output_name) for columns present in the file
-    mapped_indices = []
+    # map each shared output column to this file's source index (absent -> NA)
+    out_to_idx: dict[str, int] = {}
     for src_col, out_col in column_mapping.items():
         if src_col in file_header_str:
-            mapped_indices.append((file_header_str.index(src_col), out_col))
+            out_to_idx[out_col] = file_header_str.index(src_col)
 
     # find chr/pos/ref/alt indices in the file header for variant filtering
     chr_src = next((k for k, v in column_mapping.items() if v == "chr"), None)
@@ -192,8 +231,11 @@ def tsv_line_iterator_sumstats(
         )
 
     def transform_fn(s: list[bytes]) -> list[bytes]:
-        mapped = [s[idx] if idx < len(s) else b"NA" for idx, _ in mapped_indices]
-        return [resource, version, phenotype] + mapped
+        row = []
+        for out_col in output_columns:
+            idx = out_to_idx.get(out_col)
+            row.append(s[idx] if idx is not None and idx < len(s) else b"NA")
+        return [resource, version, phenotype] + row
 
     return tsv_line_iterator_base(stream, filter_fn, transform_fn)
 
