@@ -100,9 +100,9 @@ def _collect_mapping_files() -> list[tuple[str, str]]:
     """Collect (label, gs_path) for non-tabix mapping files to existence-check.
 
     Excludes the gene-group CSVs (loaded resiliently by design — may not be uploaded
-    yet), `variant_set_files` (configured but consumed by no service), and the
-    phenotype-markdown template (a per-request {resource}/{phenocode} path).
+    yet) and the phenotype-markdown template (a per-request {resource}/{phenocode} path).
     """
+    import app.config.common as config
     from app.config.gene_disease import gene_disease
     from app.config.genes import genes
 
@@ -120,6 +120,11 @@ def _collect_mapping_files() -> list[tuple[str, str]]:
     for key, cfg in gene_disease.items():
         if isinstance(cfg, dict) and "file" in cfg:
             files.append((f"gene_disease:{key}", cfg["file"]))
+
+    # curated variant sets served by the variant_set router
+    for name, cfg in config.variant_set_files.items():
+        if isinstance(cfg, dict) and "file" in cfg:
+            files.append((f"variant_set:{name}", cfg["file"]))
 
     return files
 

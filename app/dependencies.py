@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from app.services.rsid_db import RsidDB
     from app.services.sumstats_data_access import SumstatsDataAccess
     from app.services.variant_annotation_service import VariantAnnotationService
+    from app.services.variant_set_service import VariantSetService
 
 logger = logging.getLogger(__name__)
 
@@ -127,3 +128,8 @@ def get_sumstats_data_access() -> "SumstatsDataAccess":
 def get_variant_annotation_service() -> "VariantAnnotationService":
     """Get VariantAnnotationService instance."""
     return container.get("variant_annotation_service")
+
+
+def get_variant_set_service() -> "VariantSetService":
+    """Get VariantSetService instance."""
+    return container.get("variant_set_service")

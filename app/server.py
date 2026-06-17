@@ -28,6 +28,7 @@ from app.routers import (
     rsid,
     summary_stats,
     variant_annotation,
+    variant_set,
 )
 
 
@@ -104,6 +105,7 @@ app.include_router(datasets.router, prefix="/api/v1", tags=["datasets"])
 app.include_router(rsid.router, prefix="/api/v1", tags=["rsid"])
 app.include_router(summary_stats.router, prefix="/api/v1", tags=["summary-stats"])
 app.include_router(variant_annotation.router, prefix="/api/v1", tags=["variant-annotation"])
+app.include_router(variant_set.router, prefix="/api/v1", tags=["variant-sets"])
 
 
 def get_all_endpoints():

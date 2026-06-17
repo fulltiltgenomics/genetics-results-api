@@ -141,6 +141,10 @@ def _register_services():
         from app.services.variant_annotation_service import VariantAnnotationService
         return VariantAnnotationService()
 
+    def create_variant_set_service():
+        from app.services.variant_set_service import VariantSetService
+        return VariantSetService()
+
     # register all services
     container.register("request_util", create_request_util)
     container.register("search_index", create_search_index)
@@ -161,6 +165,7 @@ def _register_services():
     container.register("credible_set_stats_service", create_credible_set_stats_service)
     container.register("sumstats_data_access", create_sumstats_data_access)
     container.register("variant_annotation_service", create_variant_annotation_service)
+    container.register("variant_set_service", create_variant_set_service)
 
 
 # register services on module load
