@@ -28,15 +28,4 @@ exome_data_files = [
             "suffix": "_variant_results.munged.mlog10p_gt4.tsv.gz",
         },
     },
-    {
-        "id": "schema2_exome",
-        "dataset_id": "schema_exome",
-        "resource": "schema2",
-        "data_source": "gcloud",
-        "gencode_version": 39,
-        "exome": {
-            "version": "v2",
-            "all_exome_file": "gs://finngen-commons/results_api_data/exome_results/schema/SCHEMA2_variant_results.munged.mlog10p_gt4.tsv.gz",
-        },
-    },
 ]
