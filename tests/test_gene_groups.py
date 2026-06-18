@@ -154,10 +154,11 @@ class TestGeneNormalize:
 
     def test_normalize_previous_or_alias_symbol(self, server_url):
         """A previous/alias symbol resolves to its approved symbol."""
-        # NARC1 / NARC-1 is a previous/alias symbol for PCSK9
+        # NARC-1 is the HGNC alias_symbol for PCSK9 (normalize is exact-match, so
+        # the hyphen matters — bare "NARC1" is not an HGNC symbol/alias)
         response = requests.get(
             f"{server_url}/api/v1/gene/normalize",
-            params={"symbols": "NARC1"},
+            params={"symbols": "NARC-1"},
             timeout=30,
         )
 
@@ -169,7 +170,7 @@ class TestGeneNormalize:
         approved = {m["approved"] for m in data["mappings"]}
         assert "PCSK9" in approved
         mapping = next(m for m in data["mappings"] if m["approved"] == "PCSK9")
-        assert mapping["input"] == "NARC1"
+        assert mapping["input"] == "NARC-1"
         assert mapping["matched_on"] == "alias_or_previous"
 
     def test_normalize_approved_symbol_maps_to_itself(self, server_url):

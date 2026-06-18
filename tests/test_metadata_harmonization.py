@@ -149,8 +149,8 @@ class TestMetadataHarmonization:
         assert item["n_controls"] == "NA"
         # author should be study_label
         assert item["author"] != ""
-        assert item["version"] == "R7"
-        assert item["date"] == "2024-06-01"
+        assert item["version"] == "R8_pre"
+        assert item["date"] == "2026-01-01"
 
     def test_metadata_open_targets(self, server_url):
         """Test Open Targets metadata harmonization."""

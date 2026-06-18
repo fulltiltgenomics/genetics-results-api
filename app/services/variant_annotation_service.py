@@ -12,9 +12,6 @@ class VariantAnnotationService(GCloudTabixBase):
     # default cpra (chr/pos/ref/alt) column indices when a source omits "cpra_cols"
     _DEFAULT_CPRA_COLS = (1, 2, 3, 4)
 
-    def _init_storage(self):
-        pass
-
     def __init__(self) -> None:
         super().__init__()
         self._sources = config.variant_annotation_sources

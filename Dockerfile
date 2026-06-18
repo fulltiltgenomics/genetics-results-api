@@ -42,6 +42,11 @@ RUN curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cl
 COPY <<EOF /opt/genetics-results-api/start.sh
 #!/bin/bash
 
+# raise the open-file limit: the range path opens many concurrent GCS sockets
+# (bounded by GCS_MAX_CONNECTIONS in code, but this is defense-in-depth against a
+# default soft limit of 1024 that "Too many open files" can otherwise hit).
+ulimit -n 65536 2>/dev/null || true
+
 source /opt/gcloud/google-cloud-sdk/completion.bash.inc && \
 source /opt/gcloud/google-cloud-sdk/path.bash.inc
 if [ -n "\$GOOGLE_APPLICATION_CREDENTIALS" ] && [ -f "\$GOOGLE_APPLICATION_CREDENTIALS" ]; then
