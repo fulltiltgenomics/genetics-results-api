@@ -12,8 +12,8 @@ collected before raising, so one run reports every problem at once:
 
 Per-phenotype files addressed by `prefix` + <phenotype> + `suffix` are NOT
 enumerable statically (thousands per resource, set unknown), so they are not
-header-checked here; one example phenotype per such resource is smoke-tested via
-the example-phenotype checks in run_server.
+header-checked here. The end-to-end range smoke query in app.server's lifespan
+exercises the combined cross-resource query path instead.
 """
 
 import concurrent.futures

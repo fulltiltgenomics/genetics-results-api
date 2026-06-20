@@ -1,130 +1,8 @@
-import asyncio
 import glob
 import os
 import sys
-import app.config.common as config_common
-import app.config.credible_sets as config_credible_sets
-from app.core.variant import Variant
-from app.core.service_container import container
 import uvicorn
 from app.core.logging_config import setup_logging
-
-
-def _get_data_access():
-    return container.get("data_access")
-
-
-def _get_data_access_coloc():
-    return container.get("data_access_coloc")
-
-
-def _get_gene_name_mapping():
-    return container.get("gene_name_mapping")
-
-
-def _get_gene_disease_data():
-    return container.get("gene_disease_data")
-
-
-def _validate_metadata_files():
-    """Validate that all metadata files can be loaded."""
-    from app.services.config_util import get_resources
-
-    data_access = _get_data_access()
-    for resource in get_resources():
-        try:
-            data_access.get_resource_metadata(resource)
-        except FileNotFoundError:
-            # skip resources without metadata files
-            pass
-
-
-async def _validate_range():
-    """Validate that a range can be queried across resources."""
-    from app.services.config_util import get_resources
-
-    data_access = _get_data_access()
-    resources = [resource for resource in get_resources() if resource != "genebass"]
-    async for chunk in await data_access.stream_range(
-        23,
-        1000000,
-        2000000,
-        resources,
-        "cs",
-        config_common.read_chunk_size,
-        config_common.response_chunk_size,
-    ):
-        pass
-
-
-async def _validate_qtl_gene():
-    """Validate that a QTL gene can be queried across resources."""
-    data_access = _get_data_access()
-    gene_name_mapping = _get_gene_name_mapping()
-    resources = [
-        df["resource"] for df in config_credible_sets.data_files if "resource" in df
-    ]
-    coords = gene_name_mapping.get_coordinates_by_gene_name("PCSK9")
-
-    async for chunk in await data_access.stream_qtl_gene(
-        coords,
-        resources,
-        "cs",
-        config_common.read_chunk_size,
-        config_common.response_chunk_size,
-        95,
-    ):
-        pass
-
-
-async def _validate_coloc():
-    """Validate that colocalization can be queried."""
-    data_access_coloc = _get_data_access_coloc()
-    stream = await data_access_coloc.stream_coloc_by_variant(
-        Variant("1:55039974:G:T"),
-        config_common.read_chunk_size,
-        config_common.response_chunk_size,
-    )
-    async for chunk in stream:
-        pass
-    stream = await data_access_coloc.stream_coloc_variants_by_variant(
-        Variant("1:55039974:G:T"),
-        config_common.read_chunk_size,
-        config_common.response_chunk_size,
-    )
-    async for chunk in stream:
-        pass
-
-
-def _validate_gene_disease():
-    """Validate that gene-disease data is loaded."""
-    gene_disease_data = _get_gene_disease_data()
-    # check that data is loaded and has records
-    if gene_disease_data.data.is_empty():
-        raise Exception("Gene-disease data is empty")
-
-    # test a lookup
-    _ = gene_disease_data.get_by_gene_symbol("BRCA1")
-
-
-async def _cleanup_services():
-    """Clean up aiohttp sessions from data access objects to avoid 'Unclosed client session' warnings."""
-    for service_name in ["data_access", "data_access_coloc", "data_access_expression", "data_access_chromatin_peaks"]:
-        if container.is_initialized(service_name):
-            service = container.get(service_name)
-            # clean up any cached resource access objects that have aiohttp sessions
-            if hasattr(service, "_resource_access_objects"):
-                for obj in service._resource_access_objects.values():
-                    if hasattr(obj, "cleanup"):
-                        await obj.cleanup()
-
-
-async def _run_async_validations():
-    """Run all async validations and clean up sessions on the same event loop."""
-    await _validate_range()
-    await _validate_qtl_gene()
-    await _validate_coloc()
-    await _cleanup_services()
 
 
 if __name__ == "__main__":
@@ -138,20 +16,19 @@ if __name__ == "__main__":
         for file in glob.glob("/tmp/tbi_cache/**/*.tbi", recursive=True) + glob.glob("/tmp/tbi_cache/**/*.csi", recursive=True):
             os.remove(file)
         # verify every configured tabix/mapping file is reachable before serving;
-        # raises and aborts startup (below) if any are missing or unreadable
+        # raises and aborts startup (below) if any are missing or unreadable.
+        # this is the authoritative fail-fast gate; actual warming and an
+        # end-to-end query smoke test run in app.server's lifespan, on the
+        # serving event loop, so no work is done twice or thrown away.
         from app.services.startup_checks import verify_all_data_files
 
         verify_all_data_files()
-        _validate_metadata_files()
-        asyncio.run(_run_async_validations())
-        _validate_gene_disease()
         # configure JSON logging before uvicorn starts so its loggers propagate to root
         setup_logging()
-        # reload spawns a separate worker subprocess with its own service container,
-        # so all the warming done above (and in app.server's lifespan) happens in a
-        # process that is then thrown away and re-done — slow startup and a lazy,
-        # slow first request. Default to single-process (reload off) so the serving
-        # process reuses this warming; opt in to reload for local dev with RELOAD=1.
+        # reload watches the source tree and serves from a worker subprocess; default
+        # to a plain single process in production. Warming and the smoke query live in
+        # app.server's lifespan, so they run once in whichever process serves either
+        # way. Opt into reload for local dev with RELOAD=1.
         reload = os.environ.get("RELOAD", "").lower() in ("1", "true", "yes")
         # use asyncio event loop instead of uvloop - uvloop uses sockets instead of pipes
         # for subprocess stdin, which can break tabix's -R /dev/stdin option (uvloop issue #532)

@@ -36,6 +36,29 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+async def _smoke_query_range():
+    """Stream a fixed cross-resource range query to confirm the query path works.
+
+    Hits chr23:1M-2M for the "cs" data type across every resource except genebass,
+    the same heterogeneous-file merge that recent schema-alignment work touches.
+    """
+    import app.config.common as config_common
+
+    data_access = container.get("data_access")
+    resources = [r for r in config_util.get_resources() if r != "genebass"]
+    stream = await data_access.stream_range(
+        23,
+        1_000_000,
+        2_000_000,
+        resources,
+        "cs",
+        config_common.read_chunk_size,
+        config_common.response_chunk_size,
+    )
+    async for _chunk in stream:
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app):
     # Warm everything the request path would otherwise load lazily on first use,
@@ -64,6 +87,11 @@ async def lifespan(app):
         container.get("data_access_chromatin_peaks").warm_all(),
     )
     logger.info("Startup warming complete")
+    # end-to-end smoke test of the multi-resource range/merge path on the serving
+    # loop. warm_all only opens headers; this exercises cross-resource schema
+    # alignment and the concurrent range-read path. raises to abort startup if broken.
+    await _smoke_query_range()
+    logger.info("Startup smoke query passed")
     yield
     # close aiohttp sessions in all GCloudTabixBase-derived services
     for name, instance in list(container._instances.items()):
