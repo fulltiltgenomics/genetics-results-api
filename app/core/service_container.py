@@ -3,6 +3,7 @@ Centralized service container for dependency injection.
 """
 
 import logging
+import threading
 from typing import TypeVar, Callable, Any
 
 logger = logging.getLogger(__name__)
@@ -20,19 +21,39 @@ class ServiceContainer:
     def __init__(self):
         self._instances: dict[str, Any] = {}
         self._factories: dict[str, Callable[[], Any]] = {}
+        # per-name locks so startup warming can create independent singletons in
+        # parallel threads without double-constructing any single one. A factory
+        # may resolve other services (e.g. search_index needs gene_name_mapping):
+        # that acquires a DIFFERENT name's lock, so no thread re-enters the same
+        # lock and there is no deadlock.
+        self._locks: dict[str, threading.Lock] = {}
+        self._locks_guard = threading.Lock()
 
     def register(self, name: str, factory: Callable[[], Any]) -> None:
         """Register a factory function for creating a service."""
         self._factories[name] = factory
 
+    def _lock_for(self, name: str) -> threading.Lock:
+        with self._locks_guard:
+            lock = self._locks.get(name)
+            if lock is None:
+                lock = threading.Lock()
+                self._locks[name] = lock
+            return lock
+
     def get(self, name: str) -> Any:
-        """Get a service instance, creating it if necessary."""
-        if name not in self._instances:
-            if name not in self._factories:
-                raise KeyError(f"Service '{name}' not registered")
-            logger.debug(f"Creating service instance: {name}")
-            self._instances[name] = self._factories[name]()
-        return self._instances[name]
+        """Get a service instance, creating it if necessary (thread-safe)."""
+        instance = self._instances.get(name)
+        if instance is not None:
+            return instance
+        if name not in self._factories:
+            raise KeyError(f"Service '{name}' not registered")
+        with self._lock_for(name):
+            # re-check under the lock; another thread may have created it
+            if name not in self._instances:
+                logger.debug(f"Creating service instance: {name}")
+                self._instances[name] = self._factories[name]()
+            return self._instances[name]
 
     def reset(self, name: str | None = None) -> None:
         """Reset service instance(s) for testing."""

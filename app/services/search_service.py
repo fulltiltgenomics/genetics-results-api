@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 from typing import Literal, TYPE_CHECKING
 import polars as pl
@@ -57,13 +58,24 @@ class SearchIndex:
             from app.services.data_access import DataAccess
             self._data_access = DataAccess()
 
-        for resource in get_resources_with_metadata():
-            try:
-                # get harmonized metadata which handles configs internally;
-                # data_type is needed so /search can expose summary_stats availability
-                harmonized_dicts = self._data_access.get_harmonized_metadata(
-                    resource, include_data_type=True
+        # each resource's harmonized metadata is one or more independent GCS reads;
+        # fetch them concurrently, then build the index sequentially (cheap CPU).
+        # a failure in any read propagates (fail-loud), as before.
+        resources = get_resources_with_metadata()
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(8, len(resources)) or 1
+        ) as pool:
+            harmonized_by_resource = list(
+                pool.map(
+                    lambda r: self._data_access.get_harmonized_metadata(
+                        r, include_data_type=True
+                    ),
+                    resources,
                 )
+            )
+
+        for resource, harmonized_dicts in zip(resources, harmonized_by_resource):
+            try:
                 logger.debug(f"Loading {len(harmonized_dicts)} phenotypes from {resource}")
 
                 for item_dict in harmonized_dicts:

@@ -63,24 +63,27 @@ async def _smoke_query_range():
 async def lifespan(app):
     # Warm everything the request path would otherwise load lazily on first use,
     # so no request pays a blocking, network-bound GCS read (which would also wedge
-    # the worker and take down /healthz). Two groups run concurrently and startup
-    # takes the slower of the two, not their sum:
-    #   - sync, GCS-backed singletons (gene-disease, gene name/position maps used by
-    #     every *_by_gene endpoint, and the phenotype/gene search index) load in a
-    #     worker thread so they don't block the event loop;
+    # the worker and take down /healthz). Everything below runs concurrently and
+    # startup takes the slowest branch, not their sum:
+    #   - gene-disease data (independent) loads in its own worker thread;
+    #   - gene name/position maps (needed by every *_by_gene endpoint and by the
+    #     search index) then the phenotype/gene search index load in a second
+    #     worker thread — the index depends on the maps, so they share one chain;
     #   - async tabix header/.tbi warming (warm_all) runs on the loop.
+    # ServiceContainer.get is thread-safe (per-name locks), so these threads can
+    # construct independent singletons in parallel and safely share data_access.
     # This runs in the serving process. Failures abort startup loudly, as intended
     # (per-tabix-file failures are swallowed inside warm_all; verify_all_data_files
     # is the authoritative reachability gate).
     logger.info("Warming services (gene maps, search index, gene-disease, tabix cache)")
 
-    def _preload_sync():
-        container.get("gene_disease_data")
+    def _preload_search_index():
         container.get("gene_name_mapping")
         container.get("search_index")
 
     await asyncio.gather(
-        asyncio.to_thread(_preload_sync),
+        asyncio.to_thread(container.get, "gene_disease_data"),
+        asyncio.to_thread(_preload_search_index),
         container.get("data_access").warm_all(),
         container.get("data_access_coloc").warm_all(),
         container.get("data_access_expression").warm_all(),

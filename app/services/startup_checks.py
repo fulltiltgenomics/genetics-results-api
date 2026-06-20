@@ -25,8 +25,10 @@ from app.services.gcloud_tabix_base import GCloudTabixBase
 
 logger = logging.getLogger(__name__)
 
-# tabix -H opens a network connection per file; bound the fan-out
-_MAX_WORKERS = 16
+# tabix -H opens a network connection (and subprocess) per file; bound the fan-out.
+# 32 lets the ~55 fixed files clear in ~2 waves without spawning one subprocess per
+# file at once (per-call latency, not worker count, is the real floor here).
+_MAX_WORKERS = 32
 
 
 def _collect_tabix_files() -> list[tuple[str, str]]:

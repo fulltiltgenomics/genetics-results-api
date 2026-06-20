@@ -1,3 +1,4 @@
+import concurrent.futures
 from typing import Literal
 from app.config.genes import genes
 from app.core.file_utils import read_file
@@ -11,10 +12,26 @@ logger = logging.getLogger(__name__)
 
 class GeneNameAndPositionMapping:
     def __init__(self) -> None:
-        self._init_gene_name_mapping()
-        self._init_gene_position_mapping()
+        # read the HGNC complete set once and share it with both init phases;
+        # it was previously re-read from GCS 7x (once for names, once per gencode
+        # version for the position joins)
+        hgnc_df = pl.read_csv(
+            genes["hgnc_file"],
+            separator="\t",
+            null_values=[""],
+            infer_schema_length=100000,
+        )
+        # the name-alias map and the per-version position joins are independent and
+        # network-bound; build them concurrently
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [
+                pool.submit(self._init_gene_name_mapping, hgnc_df),
+                pool.submit(self._init_gene_position_mapping, hgnc_df),
+            ]
+            for future in futures:
+                future.result()
 
-    def _init_gene_name_mapping(self) -> None:
+    def _init_gene_name_mapping(self, hgnc_df: pl.DataFrame) -> None:
         # gene_name_mapping: gene name -> gencode version -> set of ENSG IDs
         # gene names can change across gencode versions
         # and a gene name in one version can map to multiple ENSG IDs
@@ -47,16 +64,7 @@ class GeneNameAndPositionMapping:
 
         # add hgnc alias and prev symbols to gene name mapping
         # for each alias and prev symbol whose real symbol is in the gene name mapping, add the alias and prev symbol with the same content
-        hgnc = (
-            pl.read_csv(
-                genes["hgnc_file"],
-                separator="\t",
-                null_values=[""],
-                infer_schema_length=100000,
-            )
-            .select(["symbol", "alias_symbol", "prev_symbol"])
-            .to_dicts()
-        )
+        hgnc = hgnc_df.select(["symbol", "alias_symbol", "prev_symbol"]).to_dicts()
         for gene in hgnc:
             if gene["symbol"] in self.gene_name_mapping:
                 aliases = (
@@ -98,53 +106,56 @@ class GeneNameAndPositionMapping:
             if lower not in self._gene_name_lowercase_to_actual:
                 self._gene_name_lowercase_to_actual[lower] = gene_name
 
-    def _init_gene_position_mapping(self) -> None:
+    def _init_gene_position_mapping(self, hgnc_df: pl.DataFrame) -> None:
         try:
             self.gene_positions = dd(pl.DataFrame)  # gencode version -> dataframe
-            for version in genes["gencode_versions"]:
-                self.gene_positions[version] = (
-                    (
-                        pl.scan_csv(
-                            f"{genes['gene_position_file_template'].format(version=version)}",
-                            separator="\t",
-                            null_values=["NA"],
-                        ).with_columns(
-                            pl.col("gene_id").str.split(".").list.get(0).alias("ensg")
-                        )
+            # the shared HGNC frame is joined into every version's positions; build
+            # the renamed lazy view once and reuse it across the parallel joins
+            hgnc_lazy = (
+                hgnc_df.select(
+                    ["symbol", "name", "ensembl_gene_id", "alias_symbol", "prev_symbol"]
+                )
+                .rename(
+                    {
+                        "symbol": "hgnc_symbol",
+                        "name": "hgnc_name",
+                        "alias_symbol": "hgnc_alias_symbol",
+                        "prev_symbol": "hgnc_prev_symbol",
+                    }
+                )
+                .lazy()
+            )
+
+            def _build(version: int) -> tuple[int, pl.DataFrame]:
+                df = (
+                    pl.scan_csv(
+                        genes["gene_position_file_template"].format(version=version),
+                        separator="\t",
+                        null_values=["NA"],
+                    )
+                    .with_columns(
+                        pl.col("gene_id").str.split(".").list.get(0).alias("ensg")
                     )
                     .join(
-                        pl.scan_csv(
-                            genes["hgnc_file"],
-                            separator="\t",
-                            null_values=[""],
-                        )
-                        .select(
-                            [
-                                "symbol",
-                                "name",
-                                "ensembl_gene_id",
-                                "alias_symbol",
-                                "prev_symbol",
-                            ]
-                        )
-                        .rename(
-                            {
-                                "symbol": "hgnc_symbol",
-                                "name": "hgnc_name",
-                                "alias_symbol": "hgnc_alias_symbol",
-                                "prev_symbol": "hgnc_prev_symbol",
-                            }
-                        ),
+                        hgnc_lazy,
                         left_on="ensg",
                         right_on="ensembl_gene_id",
                         how="left",
                     )
                     .collect()
                 )
+                return version, df
+
+            # the per-version position files are independent GCS reads; collect them
+            # concurrently rather than one network round-trip after another
+            versions = genes["gencode_versions"]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(versions)) as pool:
+                for version, df in pool.map(_build, versions):
+                    self.gene_positions[version] = df
 
         except Exception as e:
             logger.error(f"Error reading gene position file: {e}")
-            raise DataException(f"Error reading gene position file")
+            raise DataException("Error reading gene position file")
 
     def get_coordinates_by_gene_name(
         self, gene_name: str
