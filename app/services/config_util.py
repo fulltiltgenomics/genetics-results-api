@@ -63,6 +63,42 @@ def get_data_file_ids_for_resource(resource: str) -> list[str]:
     return resource_to_data_file_ids.get(resource, [])
 
 
+def get_metadata_dataset_ids_for_resource(
+    resource: str, include_coloc_partners: bool = False
+) -> list[str]:
+    """Dataset IDs whose metadata should populate a resource's harmonized metadata.
+
+    Always includes the datasets backing the resource's products (credible sets,
+    exome, gene-based). When ``include_coloc_partners`` is set, also includes
+    coloc-partner datasets that belong to this resource but ship no product of
+    their own (e.g. ``finngen_kanta_r12``, retained only as the eQTL/caQTL coloc
+    partner). Those partners are referenced in coloc results by their own
+    phenocodes (bare OMOP ids for the R12 Kanta labs), so their names must be
+    resolvable via /resource_metadata and /trait_name_mapping even though the
+    search index (which lists independently queryable phenotypes) leaves them out.
+    """
+    dataset_ids: list[str] = []
+    seen: set[str] = set()
+
+    def _add(ds_id: str | None) -> None:
+        if ds_id and ds_id not in seen:
+            seen.add(ds_id)
+            dataset_ids.append(ds_id)
+
+    for data_file_id in get_data_file_ids_for_resource(resource):
+        df = data_file_by_id.get(data_file_id)
+        if df:
+            _add(df.get("dataset_id"))
+
+    if include_coloc_partners:
+        for ds_id in _coloc_partners:
+            entry = _dataset_registry.get(ds_id)
+            if entry and entry.get("resource") == resource:
+                _add(ds_id)
+
+    return dataset_ids
+
+
 def get_resources(data_type: str | None = None) -> list[str]:
     """Get a list of unique resources from the config, optionally filtered by data type."""
     if data_type is None:

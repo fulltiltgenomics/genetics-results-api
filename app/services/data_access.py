@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 # /metadata and search hot paths don't re-read GCS on every request. keyed
 # module-level so it is shared across the multiple DataAccess instances that
 # get constructed (container, search_service, coloc).
-_harmonized_metadata_cache: dict[tuple[str, bool], list[dict[str, Any]]] = {}
+_harmonized_metadata_cache: dict[tuple[str, bool, bool], list[dict[str, Any]]] = {}
 
 
 def clear_metadata_cache() -> None:
@@ -264,68 +264,67 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
 
     # TODO should this be part of DAO?
     def get_resource_metadata(self, resource: str) -> dict[str, Any]:
-        """Get the metadata for a resource, merging from all data files if multiple."""
-        from app.services.config_util import get_data_file_ids_for_resource
+        """Get the raw metadata for a resource, merging across all datasets that
+        contribute to it (including coloc-partner-only datasets), deduped by file."""
+        from app.services.config_util import get_metadata_dataset_ids_for_resource
 
-        data_file_ids = get_data_file_ids_for_resource(resource)
-        if not data_file_ids:
-            # fallback to treating resource as a data file ID
-            data_file_ids = [resource]
+        dataset_ids = get_metadata_dataset_ids_for_resource(
+            resource, include_coloc_partners=True
+        )
 
         all_meta = []
-        for data_file_id in data_file_ids:
-            if data_file_id not in data_file_by_id:
-                continue
-            df = data_file_by_id[data_file_id]
-
-            # look up metadata_file from the dataset registry
-            dataset_id = df["dataset_id"]
+        seen_files: set[str] = set()
+        for dataset_id in dataset_ids:
             harm_config = build_harmonizer_config(dataset_id)
             if not harm_config:
                 continue
             metadata_file = harm_config["metadata"]["metadata_file"]
+            if metadata_file in seen_files:
+                continue
+            seen_files.add(metadata_file)
 
             all_meta.extend(_read_metadata_file(metadata_file))
 
         return all_meta
 
     def get_harmonized_metadata(
-        self, resource: str, include_data_type: bool = False
+        self,
+        resource: str,
+        include_data_type: bool = False,
+        include_coloc_partners: bool = False,
     ) -> list[dict[str, Any]]:
         """Get harmonized metadata for a resource in unified format.
 
         When ``include_data_type`` is set, each returned dict carries the
         owning dataset's ``data_type`` so callers (e.g. the search index) can
         match phenotypes against summary_stats (resource, data_type) pairs.
+
+        When ``include_coloc_partners`` is set, coloc-partner-only datasets of
+        this resource (e.g. ``finngen_kanta_r12``) are folded in so their
+        phenocodes resolve to names in /resource_metadata; the search index
+        leaves them out (default False) since they aren't independently queryable.
         """
-        cache_key = (resource, include_data_type)
+        cache_key = (resource, include_data_type, include_coloc_partners)
         cached = _harmonized_metadata_cache.get(cache_key)
         if cached is not None:
             return cached
 
-        from app.services.config_util import get_data_file_ids_for_resource
+        from app.services.config_util import get_metadata_dataset_ids_for_resource
 
-        # get all data file IDs for the resource
-        data_file_ids = get_data_file_ids_for_resource(resource)
-        if not data_file_ids:
-            data_file_ids = [resource]
+        dataset_ids = get_metadata_dataset_ids_for_resource(
+            resource, include_coloc_partners=include_coloc_partners
+        )
 
         all_harmonized = []
         harmonizer = MetadataHarmonizer()
 
-        # group data file configs by metadata_file so a file shared by multiple
-        # datasets (e.g. genebass exome + gene_based) is read only once. the
-        # per-phenotype data_type lives on the dataset registry entry, not in the
-        # metadata rows, so we collect the data_types of every dataset sharing a
-        # file and expand each harmonized phenotype across them when requested.
+        # group datasets by metadata_file so a file shared by multiple datasets
+        # (e.g. genebass exome + gene_based) is read only once. the per-phenotype
+        # data_type lives on the dataset registry entry, not in the metadata rows,
+        # so we collect the data_types of every dataset sharing a file and expand
+        # each harmonized phenotype across them when requested.
         metadata_groups: dict[str, dict[str, Any]] = {}
-        for data_file_id in data_file_ids:
-            if data_file_id not in data_file_by_id:
-                continue
-            df_config = data_file_by_id[data_file_id]
-
-            # look up metadata from the dataset registry
-            dataset_id = df_config["dataset_id"]
+        for dataset_id in dataset_ids:
             harm_config = build_harmonizer_config(dataset_id)
             if not harm_config:
                 continue

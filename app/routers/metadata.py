@@ -106,7 +106,9 @@ async def resource_metadata(
     if resource not in get_resources():
         raise HTTPException(status_code=404, detail=f"Resource {resource} not found")
     try:
-        meta = data_access.get_harmonized_metadata(resource)
+        meta = data_access.get_harmonized_metadata(
+            resource, include_coloc_partners=True
+        )
         if not meta:
             raise HTTPException(
                 status_code=404,
