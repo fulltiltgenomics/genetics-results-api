@@ -99,14 +99,20 @@ class SearchIndex:
                             ],
                         }
                         self.phenotypes.append(phenotype)
-                        # add to flat search items list for rapidfuzz
+                        # index code and name as SEPARATE search keys (mirrors how genes are
+                        # indexed below). matching the query against a combined "{code} {name}"
+                        # blob let a long phenotype name dilute the fuzzy score: e.g. WRatio of
+                        # "asthma" vs "J10_ASTHMA_EXMORE Asthma (more control exclusions)" is 50,
+                        # under the 60 cutoff, so the main asthma endpoint was dropped entirely —
+                        # while WRatio vs the name alone is 75. search() dedups by item id, so the
+                        # best-scoring field wins.
                         self.search_items.append(
-                            {
-                                "item": phenotype,
-                                "search_key": f"{code} {name}",
-                                "primary": code,
-                            }
+                            {"item": phenotype, "search_key": code, "primary": code}
                         )
+                        if name.lower() != code.lower():
+                            self.search_items.append(
+                                {"item": phenotype, "search_key": name, "primary": code}
+                            )
 
             except Exception as e:
                 logger.error(f"Error loading phenotypes from {resource}: {e}")
@@ -139,13 +145,14 @@ class SearchIndex:
                         "search_strings": [code.lower(), name.lower()],
                     }
                     self.phenotypes.append(phenotype)
+                    # separate code/name keys, as above (avoid blob-dilution of the fuzzy score)
                     self.search_items.append(
-                        {
-                            "item": phenotype,
-                            "search_key": f"{code} {name}",
-                            "primary": code,
-                        }
+                        {"item": phenotype, "search_key": code, "primary": code}
                     )
+                    if name.lower() != code.lower():
+                        self.search_items.append(
+                            {"item": phenotype, "search_key": name, "primary": code}
+                        )
 
     def _load_genes(self):
         """Load genes from HGNC complete set, enriched with coordinates if available"""

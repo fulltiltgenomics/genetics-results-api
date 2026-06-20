@@ -585,3 +585,88 @@ class TestSearchAutocomplete:
         data = response.json()
         assert len(data) > 0
         assert data[0]["symbol"] == "PCSK9"
+
+
+class TestSearchIndexIndexing:
+    """In-process unit tests for the SearchIndex fuzzy matching (no live server needed)."""
+
+    @staticmethod
+    def _build_index(monkeypatch, phenotypes):
+        """Build a SearchIndex with only the given phenotypes (genes skipped)."""
+        from app.services import search_service as ss
+
+        monkeypatch.setattr(ss, "get_resources_with_metadata", lambda: ["finngen"])
+        monkeypatch.setattr(ss, "get_datasets", lambda: {})
+
+        class FakeDataAccess:
+            def get_harmonized_metadata(self, resource, include_data_type=True):
+                return phenotypes
+
+        idx = ss.SearchIndex.__new__(ss.SearchIndex)
+        idx.phenotypes = []
+        idx.genes = []
+        idx.search_items = []
+        idx.genes_by_hgnc_id = {}
+        idx._symbol_index = None
+        idx._data_access = FakeDataAccess()
+        idx._gene_name_mapping = None
+        idx._load_phenotypes()
+        return idx
+
+    def test_long_named_phenotype_not_diluted_by_code_blob(self, monkeypatch):
+        """Regression: a phenotype with a long name whose code does NOT start with the
+        query must still be found. Previously the matcher scored the query against a
+        combined "{code} {name}" string, so "asthma" vs
+        "J10_ASTHMA_EXMORE Asthma (more control exclusions)" scored WRatio=50 (< the 60
+        cutoff) and J10_ASTHMA_EXMORE — the main FinnGen asthma endpoint — was dropped
+        entirely, while its shorter-named / ASTHMA-prefixed siblings survived. Indexing
+        code and name as separate keys (WRatio vs the name alone is 75) fixes it."""
+        phenos = [
+            {
+                "phenotype_code": "J10_ASTHMA_EXMORE",
+                "phenotype_string": "Asthma (more control exclusions)",
+                "n_samples": 304442, "n_cases": 40000, "n_controls": 264442,
+                "data_type": "gwas",
+            },
+            {
+                "phenotype_code": "ASTHMA_OBESITY",
+                "phenotype_string": "Obesity related asthma",
+                "n_samples": 454479, "n_cases": 1000, "n_controls": 453479,
+                "data_type": "gwas",
+            },
+            {
+                "phenotype_code": "ASTHMA_CHILD_EXMORE",
+                "phenotype_string": "Childhood asthma (age<16) (more control exclusions)",
+                "n_samples": 249870, "n_cases": 5000, "n_controls": 244870,
+                "data_type": "gwas",
+            },
+            {  # unrelated long "(more control exclusions)" noise, must not crowd it out
+                "phenotype_code": "AD_LO_EXMORE",
+                "phenotype_string": "Alzheimer's disease (Late onset) (more control exclusions)",
+                "n_samples": 194010, "n_cases": 9000, "n_controls": 185010,
+                "data_type": "gwas",
+            },
+        ]
+        idx = self._build_index(monkeypatch, phenos)
+
+        results = idx.search("asthma", limit=10, types=["phenotypes"])
+        codes = [r["code"] for r in results]
+        assert "J10_ASTHMA_EXMORE" in codes, (
+            f"main asthma endpoint dropped from results; got {codes}"
+        )
+        # the unrelated Alzheimer phenotype must not appear for an "asthma" query
+        assert "AD_LO_EXMORE" not in codes
+
+    def test_code_search_still_matches(self, monkeypatch):
+        """Searching by code prefix still resolves the phenotype (separate code key)."""
+        phenos = [
+            {
+                "phenotype_code": "J10_ASTHMA_EXMORE",
+                "phenotype_string": "Asthma (more control exclusions)",
+                "n_samples": 304442, "n_cases": 40000, "n_controls": 264442,
+                "data_type": "gwas",
+            },
+        ]
+        idx = self._build_index(monkeypatch, phenos)
+        codes = [r["code"] for r in idx.search("J10_ASTHMA", limit=10, types=["phenotypes"])]
+        assert "J10_ASTHMA_EXMORE" in codes
