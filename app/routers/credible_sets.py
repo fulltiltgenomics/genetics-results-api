@@ -164,6 +164,84 @@ async def credible_sets_by_phenotype(
 
 
 @router.get(
+    "/credible_sets_by_phenotype_leads/{resource}/{phenotype_or_study}",
+    summary="Get credible-set lead variants for a phenotype or study",
+    responses={
+        200: {
+            "description": "One row per credible set: its lead variant (highest pip, ties broken by mlog10p)",
+            "content": {
+                "application/json": {"schema": {"type": "array", "items": {"type": "object"}}},
+                "text/tab-separated-values": {"schema": {"type": "string"}},
+            },
+        },
+        404: {"description": "Resource or phenotype not found"},
+        422: {"description": "Invalid interval or format parameter"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def credible_sets_by_phenotype_leads(
+    request: Request,
+    resource: str = Path(..., description="Data resource", examples=["finngen"]),
+    phenotype_or_study: str = Path(
+        ..., description="Phenotype or study code", examples=["T2D_WIDE"]
+    ),
+    interval: int = Query(
+        default=95, description="Credible set threshold (95 or 99)", ge=95, le=99
+    ),
+    format: Literal["tsv", "json"] = Query(
+        default="json", description="Response format"
+    ),
+    data_access: DataAccess = Depends(get_data_access),
+) -> Response:
+    """
+    Get the lead variant of each of a phenotype's credible sets.
+
+    The per-phenotype credible-set file is streamed once and reduced to one lead variant per cs_id
+    as it is read (no full-file buffering). Lead = the row flagged by an is_lead/lead column if the
+    file has one, otherwise the highest pip with ties broken by the highest mlog10p.
+    """
+    start_time = time.time()
+    if interval not in (95, 99):
+        raise HTTPException(status_code=422, detail="Interval must be 95 or 99")
+    if interval == 99:
+        raise HTTPException(status_code=422, detail="Interval 99 is not supported yet")
+    try:
+        rows = await data_access.lead_variants_phenotype(
+            resource,
+            phenotype_or_study,
+            interval,
+            config_credible_sets.cs_header_schema,
+            config_common.read_chunk_size,
+        )
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(
+            f"Error extracting lead variants for {phenotype_or_study} from {resource}: {e}"
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+    if format == "json":
+        return TimedJSONResponse(rows, request.url, start_time)
+
+    # tsv: re-serialize the accumulated leads (the source file can't be passed through verbatim
+    # since the non-lead rows are dropped). emit the full cs schema header for stable columns.
+    header = list(config_credible_sets.cs_header_schema.keys())
+
+    def _fmt(value) -> str:
+        return "NA" if value is None else str(value)
+
+    async def _gen():
+        yield ("\t".join(header) + "\n").encode()
+        for row in rows:
+            yield ("\t".join(_fmt(row.get(col)) for col in header) + "\n").encode()
+
+    return TimedStreamingResponse(
+        _gen(), request.url, start_time, media_type="text/tab-separated-values"
+    )
+
+
+@router.get(
     "/credible_sets_by_id/{resource}/{phenotype_or_study}/{cs_id:path}",
     summary="Get credible set variants by cs_id",
     responses={

@@ -149,6 +149,17 @@ class DataAccessObject(BaseDataAccessObject):
         pass
 
     @abstractmethod
+    async def lead_variants_phenotype(
+        self,
+        phenotype: str,
+        interval: Literal[95, 99] | None,
+        header_schema: dict[str, type],
+        chunk_size: int,
+    ) -> list[dict[str, Any]]:
+        """Get the lead variant (one per cs_id) for a phenotype, streamed from the data source."""
+        pass
+
+    @abstractmethod
     async def stream_range(
         self,
         chr: list[int],
@@ -466,6 +477,47 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
             )
 
         return all_results
+
+    async def lead_variants_phenotype(
+        self,
+        resource: str,
+        phenotype: str,
+        interval: Literal[95, 99] | None,
+        header_schema: dict[str, type],
+        chunk_size: int = 1024 * 1024,
+    ) -> list[dict[str, Any]]:
+        """Lead variant (one per cs_id) across all data files for the resource that have this phenotype."""
+        from app.services.config_util import get_data_file_ids_for_resource
+
+        data_file_ids = get_data_file_ids_for_resource(resource)
+        if not data_file_ids:
+            # fallback to treating resource as a data file ID
+            data_file_ids = [resource]
+
+        # cs_ids are unique per dataset/trait, so a plain dict merge across files needs no tie-break
+        by_cs_id: dict[str, dict[str, Any]] = {}
+        found = False
+        for data_file_id in data_file_ids:
+            try:
+                access = await self._get_resource_access(data_file_id, "cs")
+                if await access.check_phenotype_exists(phenotype, interval):
+                    found = True
+                    for row in await access.lead_variants_phenotype(
+                        phenotype, interval, header_schema, chunk_size
+                    ):
+                        by_cs_id[row["cs_id"]] = row
+            except ValueError:
+                # data file doesn't support this data type, skip it
+                continue
+            except Exception:
+                continue
+
+        if not found:
+            raise NotFoundException(
+                f"Phenotype {phenotype} not found in resource {resource}"
+            )
+
+        return list(by_cs_id.values())
 
     async def stream_range(
         self,

@@ -2,6 +2,8 @@
 Comprehensive tests for credible set endpoints.
 """
 
+import asyncio
+
 import pytest
 import requests
 from helpers.validators import (
@@ -688,3 +690,118 @@ class TestCredibleSetsByQTLGeneMultiGene:
         )
 
         assert response.status_code == 200
+
+
+def _expected_leads(cs_rows):
+    """Reference lead-per-cs_id: highest pip, ties broken by highest mlog10p."""
+    best = {}
+    for row in cs_rows:
+        cs_id = row["cs_id"]
+        key = (row.get("pip") or float("-inf"), row.get("mlog10p") or float("-inf"))
+        if cs_id not in best or key > best[cs_id][0]:
+            best[cs_id] = (key, row)
+    return {cs_id: row for cs_id, (_, row) in best.items()}
+
+
+class TestCredibleSetsByPhenotypeLeads:
+    """Test /api/v1/credible_sets_by_phenotype_leads/{resource}/{phenotype} endpoint."""
+
+    def test_leads_match_max_pip_per_cs(self, server_url, example_phenotypes):
+        """Each returned lead is the highest-pip (tie: mlog10p) variant of its cs_id."""
+        if not example_phenotypes:
+            pytest.skip("No example phenotypes available")
+
+        resource, phenotype = next(iter(example_phenotypes.items()))
+
+        full = requests.get(
+            f"{server_url}/api/v1/credible_sets_by_phenotype/{resource}/{phenotype}",
+            params={"format": "json", "interval": 95},
+            timeout=30,
+        )
+        assert full.status_code == 200
+        cs_rows = full.json()
+
+        leads = requests.get(
+            f"{server_url}/api/v1/credible_sets_by_phenotype_leads/{resource}/{phenotype}",
+            params={"format": "json", "interval": 95},
+            timeout=30,
+        )
+        assert leads.status_code == 200
+        lead_rows = leads.json()
+
+        expected = _expected_leads(cs_rows)
+        # exactly one lead per credible set
+        assert len(lead_rows) == len(expected)
+        assert {r["cs_id"] for r in lead_rows} == set(expected)
+        # and each lead is the expected max-pip variant
+        for r in lead_rows:
+            exp = expected[r["cs_id"]]
+            assert (r["chr"], r["pos"], r["ref"], r["alt"]) == (
+                exp["chr"], exp["pos"], exp["ref"], exp["alt"]
+            )
+
+    def test_leads_invalid_interval(self, server_url, example_phenotypes):
+        if not example_phenotypes:
+            pytest.skip("No example phenotypes available")
+        resource, phenotype = next(iter(example_phenotypes.items()))
+        response = requests.get(
+            f"{server_url}/api/v1/credible_sets_by_phenotype_leads/{resource}/{phenotype}",
+            params={"format": "json", "interval": 90},
+            timeout=10,
+        )
+        assert response.status_code == 422
+
+    def test_leads_not_found(self, server_url, cs_resources):
+        if not cs_resources:
+            pytest.skip("No resources available")
+        response = requests.get(
+            f"{server_url}/api/v1/credible_sets_by_phenotype_leads/{cs_resources[0]}/NONEXISTENT_PHENO_12345",
+            params={"format": "json", "interval": 95},
+            timeout=10,
+        )
+        assert response.status_code == 404
+
+
+class TestAccumulateCsLeads:
+    """Unit tests for the streaming lead accumulator (no server needed)."""
+
+    HEADER = ["chr", "pos", "ref", "alt", "mlog10p", "beta", "pip", "cs_id"]
+    SCHEMA = {
+        "chr": int, "pos": int, "ref": str, "alt": str,
+        "mlog10p": float, "beta": float, "pip": float, "cs_id": str,
+    }
+
+    def _run(self, rows):
+        from app.core.streams import accumulate_cs_leads
+
+        async def line_stream():
+            yield list(self.HEADER)
+            for r in rows:
+                yield [str(x) for x in r]
+
+        return asyncio.run(accumulate_cs_leads(line_stream(), self.SCHEMA))
+
+    def test_picks_max_pip_across_interleaved_cs_ids(self):
+        rows = [
+            # cs A, cs B rows interleaved; leads are A@pos2 (pip .8) and B@pos5 (pip .6)
+            (1, 1, "A", "T", 5.0, 0.1, 0.3, "csA"),
+            (1, 4, "G", "C", 4.0, 0.2, 0.4, "csB"),
+            (1, 2, "C", "G", 7.0, -0.3, 0.8, "csA"),
+            (1, 5, "T", "A", 9.0, 0.5, 0.6, "csB"),
+            (1, 3, "A", "G", 6.0, 0.2, 0.5, "csA"),
+        ]
+        leads = {r["cs_id"]: r for r in self._run(rows)}
+        assert len(leads) == 2
+        assert (leads["csA"]["pos"], leads["csA"]["pip"]) == (2, 0.8)
+        assert (leads["csB"]["pos"], leads["csB"]["pip"]) == (5, 0.6)
+        # the data beta rides along on the lead row
+        assert leads["csA"]["beta"] == -0.3
+
+    def test_pip_tie_broken_by_mlog10p(self):
+        rows = [
+            (2, 10, "A", "T", 3.0, 0.1, 0.5, "cs1"),
+            (2, 11, "G", "C", 8.0, 0.2, 0.5, "cs1"),  # same pip, higher mlog10p -> lead
+        ]
+        leads = self._run(rows)
+        assert len(leads) == 1
+        assert leads[0]["pos"] == 11

@@ -665,6 +665,83 @@ async def tsv_stream_to_list(
     return rows
 
 
+def _cast_tsv_field(value: str, type_: type) -> Any:
+    """Cast a single TSV field to its schema type, mirroring tsv_stream_to_list's rules."""
+    if value == "NA":
+        return None
+    if type_ is bool:
+        return value.lower() == "true" or value == "1" or value == "1.0"
+    if type_ is float:
+        # normalize infinite to 1e308 for JSON compliance
+        if value.lower().startswith("inf"):
+            return 1e308
+        return float(value)
+    return type_(value)
+
+
+async def accumulate_cs_leads(
+    line_stream: AsyncIterator[list[str]],
+    header_schema: dict[str, type],
+) -> list[dict[str, Any]]:
+    """Stream credible-set rows and keep only the lead variant per cs_id.
+
+    Lead = the row flagged by an ``is_lead``/``lead`` column if one exists, otherwise the highest
+    ``pip``, ties broken by highest ``mlog10p``. Memory is O(number of credible sets): only the
+    current best row per cs_id is held, never the whole file, so a large per-phenotype file is read
+    once as a stream without buffering every variant.
+    """
+    header = [h[1:] if h.startswith("#") else h for h in await anext(line_stream)]
+    for h in header:
+        if h not in header_schema:
+            raise ValueError(f"Header {h} not found in header schema")
+
+    try:
+        cs_id_idx = header.index("cs_id")
+        pip_idx = header.index("pip")
+    except ValueError as e:
+        raise ValueError(f"Required column missing for lead extraction: {e}")
+    mlog10p_idx = header.index("mlog10p") if "mlog10p" in header else None
+    lead_idx = next((header.index(c) for c in ("is_lead", "lead") if c in header), None)
+
+    def _num(value: str) -> float:
+        if value in ("", "NA"):
+            return float("-inf")
+        if value.lower().startswith("inf"):
+            return 1e308
+        try:
+            return float(value)
+        except ValueError:
+            return float("-inf")
+
+    # best key per cs_id: (lead_flag, pip, mlog10p) compared lexicographically, max wins
+    best_key: dict[str, tuple[int, float, float]] = {}
+    best_fields: dict[str, list[str]] = {}
+
+    async for fields in line_stream:
+        if len(fields) <= cs_id_idx or len(fields) <= pip_idx:
+            continue
+        cs_id = fields[cs_id_idx]
+        lead_flag = 0
+        if lead_idx is not None and len(fields) > lead_idx:
+            lead_flag = 1 if fields[lead_idx].strip().lower() in ("true", "1", "1.0", "yes") else 0
+        ml = _num(fields[mlog10p_idx]) if mlog10p_idx is not None and len(fields) > mlog10p_idx else 0.0
+        key = (lead_flag, _num(fields[pip_idx]), ml)
+        if cs_id not in best_key or key > best_key[cs_id]:
+            best_key[cs_id] = key
+            best_fields[cs_id] = fields
+
+    rows: list[dict[str, Any]] = []
+    try:
+        for fields in best_fields.values():
+            rows.append(
+                {header[i]: _cast_tsv_field(field, header_schema[header[i]]) for i, field in enumerate(fields)}
+            )
+    except Exception as e:
+        logger.error(f"Error parsing lead variant data: {e}")
+        raise ValueError("Error parsing data")
+    return rows
+
+
 async def filter_stream_by_cs_id(
     stream: AsyncGenerator[bytes, None],
     target_cs_id: str,

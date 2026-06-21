@@ -1,6 +1,6 @@
 import logging
 from typing import Any, AsyncGenerator, Literal
-from app.core.streams import tsv_line_iterator_str, tsv_stream_to_list
+from app.core.streams import tsv_line_iterator_str, tsv_stream_to_list, accumulate_cs_leads
 from app.services.data_access import DataAccessObject
 from app.services.gcloud_tabix_base import GCloudTabixBase
 from app.config.credible_sets import data_file_by_id as cs_data_file_by_id
@@ -150,6 +150,19 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
         """Stream phenotype data from GCloud Storage."""
         blob_path = self._get_blob_path(phenotype, interval)
         return self._stream_file(blob_path, chunk_size)
+
+    async def lead_variants_phenotype(
+        self,
+        phenotype: str,
+        interval: Literal[95, 99] | None,
+        header_schema: dict[str, type],
+        chunk_size: int,
+    ) -> list[dict[str, Any]]:
+        """Stream a phenotype's credible sets and return only the lead variant per cs_id."""
+        blob_path = self._get_blob_path(phenotype, interval)
+        stream = self._stream_file(blob_path, chunk_size)
+        line_stream = tsv_line_iterator_str(stream)
+        return await accumulate_cs_leads(line_stream, header_schema)
 
     async def json_phenotype(
         self,
