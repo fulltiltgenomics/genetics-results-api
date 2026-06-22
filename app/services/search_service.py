@@ -3,6 +3,7 @@ import logging
 from typing import Literal, TYPE_CHECKING
 import polars as pl
 from rapidfuzz import fuzz, process
+from app.config.credible_sets import get_credible_set_resources_and_types
 from app.config.summary_stats import get_available_resources_and_types
 from app.services.config_util import get_datasets, get_resources_with_metadata
 
@@ -15,6 +16,11 @@ logger = logging.getLogger(__name__)
 # (resource, data_type) pairs that have summary statistics available, used to
 # annotate phenotype search results with has_summary_stats
 _SUMSTATS_PAIRS = set(get_available_resources_and_types())
+
+# (resource, data_type) pairs that have credible sets available, used to annotate phenotype
+# search results with has_credible_sets (the annotation search filters on this, the
+# phenotype-search-with-sumstats view filters on _SUMSTATS_PAIRS)
+_CREDIBLE_SETS_PAIRS = set(get_credible_set_resources_and_types())
 
 
 class SearchIndex:
@@ -104,6 +110,7 @@ class SearchIndex:
                             "n_cases": n_cases,
                             "n_controls": n_controls,
                             "has_summary_stats": (resource, data_type) in _SUMSTATS_PAIRS,
+                            "has_credible_sets": (resource, data_type) in _CREDIBLE_SETS_PAIRS,
                             # store normalized search strings
                             "search_strings": [
                                 code.lower(),
@@ -154,6 +161,7 @@ class SearchIndex:
                         "n_cases": n_cases,
                         "n_controls": n_controls,
                         "has_summary_stats": (resource, data_type) in _SUMSTATS_PAIRS,
+                        "has_credible_sets": (resource, data_type) in _CREDIBLE_SETS_PAIRS,
                         "search_strings": [code.lower(), name.lower()],
                     }
                     self.phenotypes.append(phenotype)

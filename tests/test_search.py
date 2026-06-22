@@ -121,6 +121,39 @@ class TestSearchAutocomplete:
             assert "name" in first_pheno
             assert "resource" in first_pheno
 
+    def test_search_phenotype_carries_capability_flags(self, server_url):
+        """Phenotype results expose both has_summary_stats and has_credible_sets."""
+        response = requests.get(
+            f"{server_url}/api/v1/search",
+            params={"q": "diabetes", "types": "phenotypes", "limit": 5, "format": "json"},
+            timeout=30,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        if len(data) > 0:
+            pheno = data[0]
+            assert "has_summary_stats" in pheno
+            assert "has_credible_sets" in pheno
+            assert isinstance(pheno["has_credible_sets"], bool)
+
+    def test_search_has_credible_sets_filter(self, server_url):
+        """has_credible_sets=true drops phenotypes without credible sets, keeps genes."""
+        response = requests.get(
+            f"{server_url}/api/v1/search",
+            params={
+                "q": "diabetes",
+                "types": "phenotypes",
+                "has_credible_sets": "true",
+                "limit": 50,
+                "format": "json",
+            },
+            timeout=30,
+        )
+        assert response.status_code == 200
+        for item in response.json():
+            if item.get("type") == "phenotype":
+                assert item.get("has_credible_sets") is True
+
     @pytest.mark.parametrize("types_filter", ["genes", "phenotypes"])
     def test_search_with_type_filter(self, server_url, types_filter):
         """Test filtering by type."""
