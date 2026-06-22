@@ -109,3 +109,15 @@ class TestTraitNameMapping:
             assert isinstance(trait_id, str), "Trait IDs should be strings"
             assert isinstance(trait_name, str), "Trait names should be strings"
             assert trait_name, "Trait name should not be empty"
+
+    def test_trait_name_mapping_prefers_nonempty_phenostring(self, server_url):
+        """Regression: an older FinnGen file (R12) lists CURRENT_SMOKER / EVER_SMOKER with an empty
+        phenostring and is merged after R14; a blank must not overwrite R14's good name."""
+        response = requests.get(
+            f"{server_url}/api/v1/trait_name_mapping",
+            timeout=30,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data.get("CURRENT_SMOKER") == "Current smoker"
+        assert data.get("EVER_SMOKER") == "Ever smoker"

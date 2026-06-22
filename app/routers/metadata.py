@@ -164,12 +164,16 @@ async def trait_name_mapping(
     for resource in resources:
         meta = data_access.get_resource_metadata(resource)
         if resource == "finngen":
-            # finngen includes multiple data files (e.g. core, kanta) with different schemas
+            # finngen includes multiple data files (R14 + R12 core, kanta, drugs, ...) with
+            # overlapping phenocodes. the older R12 core file lists some codes (CURRENT_SMOKER,
+            # EVER_SMOKER) with an empty phenostring and is processed AFTER R14, so an unguarded
+            # overwrite let the blank clobber R14's good name. guard it: keep the first non-empty
+            # name per code and never store an empty one.
             for row in meta:
-                if "phenocode" in row:
-                    trait_map[row["phenocode"]] = row["phenostring"]
-                elif "OMOPID" in row:
-                    trait_map[row["OMOPID"]] = row["phenostring"]
+                key = row.get("phenocode") or row.get("OMOPID")
+                name = (row.get("phenostring") or "").strip()
+                if key and name and not trait_map.get(key):
+                    trait_map[key] = name
         elif resource == "open_targets":
             for row in meta:
                 trait_map[row["studyId"]] = row["traitFromSource"]
