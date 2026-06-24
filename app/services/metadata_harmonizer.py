@@ -90,7 +90,12 @@ class MetadataHarmonizer:
                 harmonized.append(
                     HarmonizedMetadata(
                         phenotype_code=item.get("phenocode", ""),
-                        phenotype_string=item.get("phenostring", ""),
+                        # core FinnGen pheweb metadata uses `phenostring`; the meta-analysis
+                        # files (ukbb / mvp_ukbb) carry the trait name under `name` instead.
+                        # fall back so meta-analysis phenotypes get a non-empty name (an empty
+                        # name drops them from the search index entirely).
+                        phenotype_string=item.get("phenostring")
+                        or item.get("name", ""),
                         n_samples=num_cases + num_controls,
                         n_cases=num_cases,
                         n_controls=num_controls,
