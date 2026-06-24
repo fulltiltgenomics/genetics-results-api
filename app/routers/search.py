@@ -129,9 +129,10 @@ async def search_autocomplete(
     Supports comma-separated queries (e.g., 'SLC26A3,CLCA,PCSK9') to search
     for multiple terms in a single request.
 
-    A phenotype may appear once per data_type when it has multiple result types
-    (e.g. genebass exome and gene_based), so the same code can occur in more than
-    one result row.
+    A phenotype may appear once per (resource, data_type): the same FinnGen
+    phenocode exists across the finngen, finngen_ukbb and finngen_mvp_ukbb
+    resources, and a code can have multiple result types (e.g. genebass exome and
+    gene_based), so the same code can occur in more than one result row.
 
     Results are ranked by:
     1. Exact matches first
@@ -166,11 +167,14 @@ async def search_autocomplete(
             term_results = search_index.search(query=term, limit=limit, types=type_list, gencode_version=gencode_version)
             for result in term_results:
                 # use code (phenotype) or symbol (gene) as unique identifier;
-                # include data_type so a phenotype with multiple result types
+                # include resource AND data_type so a phenotype shared across
+                # resources (the same FinnGen phenocode exists in finngen,
+                # finngen_ukbb, finngen_mvp_ukbb) or with multiple result types
                 # (e.g. genebass exome + gene_based) survives as separate rows
                 result_id = (
                     result["type"],
                     result.get("code") or result.get("symbol"),
+                    result.get("resource"),
                     result.get("data_type"),
                 )
                 if result_id not in seen_ids:
