@@ -145,6 +145,15 @@ SORT_CONFIG_CHROMATIN_PEAKS = [
     ("end", int),
 ]
 
+# open_chromatin keeps the "chr1"-style chrom verbatim (see open_chromatin config),
+# so chrom is sorted as bytes; a range/variant/peak query is single-chromosome, so
+# start/end fully order the merged per-resource streams within it.
+SORT_CONFIG_OPEN_CHROMATIN = [
+    ("chrom", bytes),
+    ("start", int),
+    ("end", int),
+]
+
 SORT_CONFIG_EXOME = [
     ("chr", int),
     ("pos", int),

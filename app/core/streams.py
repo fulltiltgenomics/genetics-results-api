@@ -607,6 +607,33 @@ def tsv_line_iterator_chromatin_peaks(
     return tsv_line_iterator_base(stream, filter_fn, transform_fn)
 
 
+def tsv_line_iterator_open_chromatin(
+    stream: AsyncIterator[bytes],
+    resource: str,
+) -> AsyncIterator[list[bytes]]:
+    """
+    Iterate over open_chromatin lines and prepend the resource column.
+
+    tabix has already restricted the stream to records overlapping the queried
+    region/position, so no positional filtering is needed here. Each file is
+    per-resource, so ``resource`` comes from config; the file already carries its
+    own ``version`` column, so only ``resource`` is prepended.
+
+    Args:
+        stream: Async iterator of byte chunks from tabix
+        resource: Resource name to prepend
+    """
+    resource_bytes = resource.encode("utf-8")
+
+    def filter_fn(s: list[bytes]) -> bool:
+        return True
+
+    def transform_fn(s: list[bytes]) -> list[bytes]:
+        return [resource_bytes] + s
+
+    return tsv_line_iterator_base(stream, filter_fn, transform_fn)
+
+
 async def tsv_line_iterator_str(
     stream: AsyncIterator[bytes],
 ) -> AsyncIterator[list[str]]:

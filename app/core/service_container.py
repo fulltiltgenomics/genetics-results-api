@@ -106,6 +106,10 @@ def _register_services():
         from app.services.data_access_chromatin_peaks import DataAccessChromatinPeaks
         return DataAccessChromatinPeaks()
 
+    def create_data_access_open_chromatin():
+        from app.services.data_access_open_chromatin import DataAccessOpenChromatin
+        return DataAccessOpenChromatin()
+
     # gene name mapping
     def create_gene_name_mapping():
         from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
@@ -173,6 +177,7 @@ def _register_services():
     container.register("data_access_coloc", create_data_access_coloc)
     container.register("data_access_expression", create_data_access_expression)
     container.register("data_access_chromatin_peaks", create_data_access_chromatin_peaks)
+    container.register("data_access_open_chromatin", create_data_access_open_chromatin)
     container.register("gene_name_mapping", create_gene_name_mapping)
     container.register("gene_group_service", create_gene_group_service)
     container.register("gene_disease_data", create_gene_disease_data)
