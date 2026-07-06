@@ -154,6 +154,14 @@ SORT_CONFIG_OPEN_CHROMATIN = [
     ("end", int),
 ]
 
+# variant_effect keeps the "chr1"-style chrom verbatim (see variant_effect config),
+# so chrom is sorted as bytes; a variant/region/gene query is single-chromosome, so
+# pos fully orders the merged per-dataset streams within it.
+SORT_CONFIG_VARIANT_EFFECT = [
+    ("chrom", bytes),
+    ("pos", int),
+]
+
 SORT_CONFIG_EXOME = [
     ("chr", int),
     ("pos", int),
