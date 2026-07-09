@@ -26,7 +26,7 @@ from app.config.profile import load_profile_module
 # are nullable (NA in the file), handled by the TSV -> typed parser.
 variant_effect_header_schema = {
     "resource": str,
-    "chrom": str,  # "chr1" format
+    "chrom": str,  # numeric string "1".."22","23"(X),"24"(Y),"25"(M/MT), no "chr" prefix
     "pos": int,
     "ref": str,
     "alt": str,

@@ -76,8 +76,13 @@ class DataAccessObjectOpenChromatin(BaseDataAccessObject):
         """
         Parse a peak_id to extract chromosome, start, and end positions.
 
+        peak_id is "<numchrom>-<start>-<end>" (e.g. "23-817095-817594"), matching
+        the file's numeric chrom convention. A leading "chr" (and the X/Y/M
+        spellings) are still tolerated; the returned chrom is normalized to the
+        file seqname downstream by _to_seqname.
+
         Args:
-            peak_id: Peak ID in format "chr1-817095-817594"
+            peak_id: Peak ID in format "23-817095-817594"
 
         Returns:
             Tuple of (chromosome, start, end)
@@ -85,10 +90,10 @@ class DataAccessObjectOpenChromatin(BaseDataAccessObject):
         Raises:
             ValueError: If peak_id format is invalid
         """
-        match = re.match(r"^(chr[0-9XYM]+)-(\d+)-(\d+)$", peak_id)
+        match = re.match(r"^(?:chr)?([0-9XYM]+)-(\d+)-(\d+)$", peak_id, re.IGNORECASE)
         if not match:
             raise ValueError(
-                f"Invalid peak_id format: '{peak_id}'. Expected format: 'chr1-817095-817594'"
+                f"Invalid peak_id format: '{peak_id}'. Expected format: '23-817095-817594'"
             )
 
         chrom = match.group(1)
@@ -215,7 +220,7 @@ class DataAccessOpenChromatin(BaseDataAccess[DataAccessObjectOpenChromatin]):
         in_chunk_size: int,
         out_chunk_size: int,
     ) -> AsyncGenerator[bytes, None]:
-        """Stream peaks overlapping the region defined by a peak_id ("chr1-817095-817594")."""
+        """Stream peaks overlapping the region defined by a peak_id ("23-817095-817594")."""
         chrom, start, end = DataAccessObjectOpenChromatin.parse_peak_id(peak_id)
         return await self.stream_by_region(
             chrom, start, end, resources, in_chunk_size, out_chunk_size

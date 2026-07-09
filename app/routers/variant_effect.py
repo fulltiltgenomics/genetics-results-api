@@ -17,7 +17,7 @@ router = APIRouter()
 
 _VARIANT_EFFECT_TSV_EXAMPLE = (
     "resource\tchrom\tpos\tref\talt\tvariant\trsid\tdataset\tmodel\tcell_type\ttissue\tlife_stage\tscore\tscore_type\tmlog10p\tpredicted_direction\tquantile_rank\tis_significant\tversion\n"
-    "marderstein\tchr1\t1000500\tA\tG\tchr1_1000500_A_G\trs123\tmarderstein_chrombpnet\tchrombpnet\texcitatory_neuron\tbrain\tadult\t-1.23\tlog2fc\t4.5\tdecrease\t0.98\ttrue\t2026\n..."
+    "marderstein\t1\t1000500\tA\tG\t1_1000500_A_G\trs123\tmarderstein_chrombpnet\tchrombpnet\texcitatory_neuron\tbrain\tadult\t-1.23\tlog2fc\t4.5\tdecrease\t0.98\ttrue\t2026\n..."
 )
 
 

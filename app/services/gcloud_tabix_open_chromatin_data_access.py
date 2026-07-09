@@ -8,17 +8,17 @@ logger = logging.getLogger(__name__)
 
 
 def _to_seqname(chrom: str) -> str:
-    """Normalize a chromosome token to the file's "chr"-prefixed seqname.
+    """Normalize a chromosome token to the file's NUMERIC seqname.
 
-    open_chromatin files use "chr1".."chr22","chrX","chrY". Accepts bare or
-    "chr"-prefixed names and the numeric X/Y/MT spellings (23/24/25) so both the
-    region path param and a parsed variant chromosome resolve to a file seqname.
+    open_chromatin files use numeric seqnames "1".."22","23"(X),"24"(Y),"25"(M/MT)
+    with NO "chr" prefix. Accepts any user-supplied form (1, chr1, X, chrX, 23,
+    chr23, Y, M, MT) and resolves it to that numeric seqname, so both the region
+    path param and a parsed variant chromosome hit the file's index.
     """
     c = str(chrom).strip()
     c = c[3:] if c.lower().startswith("chr") else c
     c = c.upper()
-    c = {"23": "X", "24": "Y", "25": "MT", "26": "MT"}.get(c, c)
-    return "chr" + c
+    return {"X": "23", "Y": "24", "M": "25", "MT": "25"}.get(c, c)
 
 
 class GCloudTabixDataAccessOpenChromatin(

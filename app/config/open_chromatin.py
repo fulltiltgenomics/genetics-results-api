@@ -19,7 +19,7 @@ from app.config.profile import load_profile_module
 # "version" column, so only "resource" is added).
 open_chromatin_header_schema = {
     "resource": str,
-    "chrom": str,  # "chr1" format
+    "chrom": str,  # numeric string "1".."22","23"(X),"24"(Y),"25"(M/MT), no "chr" prefix
     "start": int,
     "end": int,
     "peak_id": str,

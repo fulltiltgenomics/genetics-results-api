@@ -19,7 +19,7 @@ router = APIRouter()
 
 _OPEN_CHROMATIN_TSV_EXAMPLE = (
     "resource\tchrom\tstart\tend\tpeak_id\tdataset\tcell_type\ttissue\tlife_stage\tcondition\tassay\tscore\tscore_type\tn_cells\tcell_ontology_id\tuberon_id\ttarget_gene\ttarget_gene_id\tversion\n"
-    "catlas\tchr1\t1000000\t1000500\tchr1-1000000-1000500\tcatlas_open_chromatin\tastrocyte\tbrain\tadult\tunknown\tsnATAC\t0.87\tsignal\t1234\tCL:0000127\tUBERON:0000955\tNA\tNA\t2021\n..."
+    "catlas\t1\t1000000\t1000500\t1-1000000-1000500\tcatlas_open_chromatin\tastrocyte\tbrain\tadult\tunknown\tsnATAC\t0.87\tsignal\t1234\tCL:0000127\tUBERON:0000955\tNA\tNA\t2021\n..."
 )
 
 
@@ -206,8 +206,8 @@ async def open_chromatin_by_peak(
     request: Request,
     peak_id: str = Path(
         ...,
-        description="Peak ID in format chr-start-end",
-        examples=["chr1-1000000-1000500"],
+        description="Peak ID in format numchrom-start-end (chrX=23,Y=24,M=25)",
+        examples=["1-1000000-1000500", "23-1000000-1000500"],
     ),
     resources: list[str] | None = Query(
         default=None,

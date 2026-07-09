@@ -145,18 +145,18 @@ SORT_CONFIG_CHROMATIN_PEAKS = [
     ("end", int),
 ]
 
-# open_chromatin keeps the "chr1"-style chrom verbatim (see open_chromatin config),
-# so chrom is sorted as bytes; a range/variant/peak query is single-chromosome, so
-# start/end fully order the merged per-resource streams within it.
+# open_chromatin keeps the numeric chrom string verbatim (see open_chromatin config;
+# "1".."25", no "chr" prefix), so chrom is sorted as bytes; a range/variant/peak query
+# is single-chromosome, so start/end fully order the merged per-resource streams within it.
 SORT_CONFIG_OPEN_CHROMATIN = [
     ("chrom", bytes),
     ("start", int),
     ("end", int),
 ]
 
-# variant_effect keeps the "chr1"-style chrom verbatim (see variant_effect config),
-# so chrom is sorted as bytes; a variant/region/gene query is single-chromosome, so
-# pos fully orders the merged per-dataset streams within it.
+# variant_effect keeps the numeric chrom string verbatim (see variant_effect config;
+# "1".."25", no "chr" prefix), so chrom is sorted as bytes; a variant/region/gene query
+# is single-chromosome, so pos fully orders the merged per-dataset streams within it.
 SORT_CONFIG_VARIANT_EFFECT = [
     ("chrom", bytes),
     ("pos", int),
