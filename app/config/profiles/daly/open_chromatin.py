@@ -16,7 +16,7 @@ open_chromatin_data = [
         "data_source": "gcloud",
         "resource": "li_brain_atac",
         "version": "2023",
-        "file": "gs://daly-genetics-results/open_chromatin/li_brain_atac/li_brain_atac_open_chromatin.tsv.gz",
+        "file": "gs://daly-genetics-results/open_chromatin/li_brain_atac/li_brain_open_chromatin.tsv.gz",
     },
     {
         "data_source": "gcloud",
@@ -34,12 +34,12 @@ open_chromatin_data = [
         "data_source": "gcloud",
         "resource": "calderon_immune",
         "version": "2019",
-        "file": "gs://daly-genetics-results/open_chromatin/calderon_immune/calderon_immune_open_chromatin.tsv.gz",
+        "file": "gs://daly-genetics-results/open_chromatin/calderon_immune/calderon_open_chromatin.tsv.gz",
     },
     {
         "data_source": "gcloud",
         "resource": "rosmap_brain",
         "version": "2023",
-        "file": "gs://daly-genetics-results/open_chromatin/rosmap_brain/rosmap_brain_open_chromatin.tsv.gz",
+        "file": "gs://daly-genetics-results/open_chromatin/rosmap_brain/rosmap_open_chromatin.tsv.gz",
     },
 ]
