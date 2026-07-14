@@ -64,12 +64,15 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
         self, phenotype: str, interval: Literal[95, 99] | None = None
     ) -> bool:
         """Check if a phenotype's or study's data exists in the appropriate data source for the resource."""
+        # resources without a combined file (e.g. IBD exome) get no session from warm(),
+        # and this check gates every path that would otherwise lazily create one
+        self._ensure_storage()
         blob_path = self._get_blob_path(phenotype, interval)
         headers = await self.storage._headers()
         url = blob_path.replace("gs://", "https://storage.googleapis.com/")
         try:
-            response = await self.session.get(url, headers=headers)
-            response.raise_for_status()
+            async with self.session.head(url, headers=headers) as response:
+                response.raise_for_status()
         except aiohttp.client_exceptions.ClientResponseError as e:
             if e.status == 404:
                 return False

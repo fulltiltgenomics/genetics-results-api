@@ -1,0 +1,45 @@
+"""FinnGen profile: open-chromatin (Product A) data paths.
+
+One entry per resource that ships an open_chromatin atlas. The files are the
+tabix-indexed bgzipped TSVs produced by the munge step and staged to the
+finngen-commons bucket; versions mirror configs/datasets.yaml.
+"""
+
+open_chromatin_data = [
+    {
+        "data_source": "gcloud",
+        "resource": "marderstein",
+        "version": "2026",
+        "file": "gs://finngen-commons/results_api_data/open_chromatin/marderstein/marderstein_open_chromatin.tsv.gz",
+    },
+    {
+        "data_source": "gcloud",
+        "resource": "li_brain_atac",
+        "version": "2023",
+        "file": "gs://finngen-commons/results_api_data/open_chromatin/li_brain_atac/li_brain_open_chromatin.tsv.gz",
+    },
+    {
+        "data_source": "gcloud",
+        "resource": "catlas",
+        "version": "2021",
+        "file": "gs://finngen-commons/results_api_data/open_chromatin/catlas/catlas_open_chromatin.tsv.gz",
+    },
+    {
+        "data_source": "gcloud",
+        "resource": "epimap",
+        "version": "2021",
+        "file": "gs://finngen-commons/results_api_data/open_chromatin/epimap/epimap_open_chromatin.tsv.gz",
+    },
+    {
+        "data_source": "gcloud",
+        "resource": "calderon_immune",
+        "version": "2019",
+        "file": "gs://finngen-commons/results_api_data/open_chromatin/calderon_immune/calderon_open_chromatin.tsv.gz",
+    },
+    {
+        "data_source": "gcloud",
+        "resource": "rosmap_brain",
+        "version": "2023",
+        "file": "gs://finngen-commons/results_api_data/open_chromatin/rosmap_brain/rosmap_open_chromatin.tsv.gz",
+    },
+]

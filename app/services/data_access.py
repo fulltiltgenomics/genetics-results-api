@@ -265,11 +265,10 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 if await access.check_phenotype_exists(phenotype, interval):
                     return True
             except ValueError:
-                # data file doesn't support this data type, skip it
+                # data file isn't configured or doesn't support this data type, skip it
                 continue
-            except Exception:
-                # file doesn't exist or other error, continue to next
-                continue
+            # a missing file already returns False above; anything else (auth, network, bug)
+            # must surface as a 500 rather than being silently reported as "not found"
 
         return False
 

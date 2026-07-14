@@ -138,7 +138,10 @@ async def exome_results_by_phenotype(
             if not await data_access.check_phenotype_exists(
                 resource, phenotype_or_study, None, "exome"
             ):
-                logger.error(f"File not found: {phenotype_or_study}")
+                # a client asking for a phenotype we don't have is a 404, not a server fault
+                logger.info(
+                    f"File not found for phenotype or study {phenotype_or_study} in resource {resource}"
+                )
                 raise NotFoundException(f"File not found: {phenotype_or_study}")
             stream = await data_access.stream_phenotype(
                 resource,
