@@ -21,6 +21,8 @@ if TYPE_CHECKING:
     from app.services.data_access_coloc import DataAccessColoc
     from app.services.data_access_expression import DataAccessExpression
     from app.services.data_access_chromatin_peaks import DataAccessChromatinPeaks
+    from app.services.data_access_open_chromatin import DataAccessOpenChromatin
+    from app.services.data_access_variant_effect import DataAccessVariantEffect
     from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
     from app.services.gene_group_service import GeneGroupService
     from app.services.gene_disease_data import GeneDiseaseData
@@ -88,6 +90,16 @@ def get_data_access_expression() -> "DataAccessExpression":
 def get_data_access_chromatin_peaks() -> "DataAccessChromatinPeaks":
     """Get DataAccessChromatinPeaks service instance."""
     return container.get("data_access_chromatin_peaks")
+
+
+def get_data_access_open_chromatin() -> "DataAccessOpenChromatin":
+    """Get DataAccessOpenChromatin service instance."""
+    return container.get("data_access_open_chromatin")
+
+
+def get_data_access_variant_effect() -> "DataAccessVariantEffect":
+    """Get DataAccessVariantEffect service instance."""
+    return container.get("data_access_variant_effect")
 
 
 def get_gene_name_mapping() -> "GeneNameAndPositionMapping":
