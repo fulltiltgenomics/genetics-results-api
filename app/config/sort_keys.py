@@ -162,6 +162,14 @@ SORT_CONFIG_VARIANT_EFFECT = [
     ("pos", int),
 ]
 
+# mpra keeps the numeric chrom string verbatim (see mpra config; "1".."25", no "chr"
+# prefix), so chrom is sorted as bytes; a variant/region/gene query is single-chromosome,
+# so pos fully orders the merged per-dataset streams within it.
+SORT_CONFIG_MPRA = [
+    ("chrom", bytes),
+    ("pos", int),
+]
+
 SORT_CONFIG_EXOME = [
     ("chr", int),
     ("pos", int),

@@ -677,6 +677,48 @@ def tsv_line_iterator_variant_effect(
     return tsv_line_iterator_base(stream, filter_fn, transform_fn)
 
 
+def tsv_line_iterator_mpra(
+    stream: AsyncIterator[bytes],
+    resource: str,
+    ref: bytes | None = None,
+    alt: bytes | None = None,
+) -> AsyncIterator[list[bytes]]:
+    """
+    Iterate over mpra lines and prepend the resource column.
+
+    tabix has already restricted the stream to records at the queried position(s),
+    so no positional filtering is needed here. Each file is per-dataset, so
+    ``resource`` comes from config and is prepended to each row.
+
+    When ``ref``/``alt`` are given (variant query with alleles), rows are filtered to
+    the matching allele pair; the point index can return several cell_line rows —
+    and, at a multiallelic position, several alleles — at one pos, so allele filtering
+    happens on the record stream. The canonical LONG column order puts ref at index 3
+    and alt at index 4 in the file row (before the resource prepend).
+
+    Args:
+        stream: Async iterator of byte chunks from tabix
+        resource: Resource name to prepend
+        ref: Optional reference allele to filter to (bytes)
+        alt: Optional alternate allele to filter to (bytes)
+    """
+    resource_bytes = resource.encode("utf-8")
+    ref_col_index = 3
+    alt_col_index = 4
+
+    def filter_fn(s: list[bytes]) -> bool:
+        if ref is not None and (len(s) <= ref_col_index or s[ref_col_index] != ref):
+            return False
+        if alt is not None and (len(s) <= alt_col_index or s[alt_col_index] != alt):
+            return False
+        return True
+
+    def transform_fn(s: list[bytes]) -> list[bytes]:
+        return [resource_bytes] + s
+
+    return tsv_line_iterator_base(stream, filter_fn, transform_fn)
+
+
 async def tsv_line_iterator_str(
     stream: AsyncIterator[bytes],
 ) -> AsyncIterator[list[str]]:

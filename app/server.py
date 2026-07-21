@@ -92,6 +92,7 @@ async def lifespan(app):
         container.get("data_access_chromatin_peaks").warm_all(),
         container.get("data_access_open_chromatin").warm_all(),
         container.get("data_access_variant_effect").warm_all(),
+        container.get("data_access_mpra").warm_all(),
     )
     logger.info("Startup warming complete")
     # end-to-end smoke test of the multi-resource range/merge path on the serving
