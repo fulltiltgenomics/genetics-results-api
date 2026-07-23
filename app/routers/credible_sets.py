@@ -10,7 +10,11 @@ from app.dependencies import (
     get_credible_set_stats_service,
 )
 from app.core.responses import TimedStreamingResponse, TimedJSONResponse, range_response
-from app.core.streams import filter_stream_by_cs_id
+from app.core.streams import (
+    filter_stream_by_cs_id,
+    filter_stream_by_coding,
+    filter_coding_rows,
+)
 from app.core.variant import Variant
 from app.core.exceptions import (
     GeneNotFoundException,
@@ -113,6 +117,10 @@ async def credible_sets_by_phenotype(
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),
+    coding_only: bool = Query(
+        default=False,
+        description="If true, return only coding variants (by inline most_severe consequence)",
+    ),
     data_access: DataAccess = Depends(get_data_access),
 ) -> Response:
     """
@@ -137,6 +145,8 @@ async def credible_sets_by_phenotype(
             stream = await data_access.stream_phenotype(
                 resource, phenotype_or_study, interval, config_common.read_chunk_size
             )
+            if coding_only:
+                stream = filter_stream_by_coding(stream, config_common.coding_set)
             return TimedStreamingResponse(
                 stream, request.url, start_time, media_type="text/tab-separated-values"
             )
@@ -159,6 +169,8 @@ async def credible_sets_by_phenotype(
                 "cs",
                 config_common.read_chunk_size,
             )
+            if coding_only:
+                rows = filter_coding_rows(rows, config_common.coding_set)
             return TimedJSONResponse(rows, request.url, start_time)
         except NotFoundException as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -330,6 +342,10 @@ async def credible_sets_by_id(
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),
+    coding_only: bool = Query(
+        default=False,
+        description="If true, return only coding variants (by inline most_severe consequence)",
+    ),
     data_access: DataAccess = Depends(get_data_access),
 ) -> Response:
     """
@@ -350,6 +366,10 @@ async def credible_sets_by_id(
                 resource, phenotype_or_study, interval, config_common.read_chunk_size
             )
             filtered_stream = filter_stream_by_cs_id(raw_stream, cs_id)
+            if coding_only:
+                filtered_stream = filter_stream_by_coding(
+                    filtered_stream, config_common.coding_set
+                )
             return TimedStreamingResponse(
                 filtered_stream, request.url, start_time, media_type="text/tab-separated-values"
             )
@@ -372,6 +392,8 @@ async def credible_sets_by_id(
             filtered_rows = [r for r in rows if r.get("cs_id") == cs_id]
             if not filtered_rows:
                 raise HTTPException(status_code=404, detail=f"cs_id not found: {cs_id}")
+            if coding_only:
+                filtered_rows = filter_coding_rows(filtered_rows, config_common.coding_set)
             return TimedJSONResponse(filtered_rows, request.url, start_time)
         except NotFoundException as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -473,6 +495,10 @@ async def credible_sets_by_region(
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),
+    coding_only: bool = Query(
+        default=False,
+        description="If true, return only coding variants (by inline most_severe consequence)",
+    ),
     request_util: RequestUtil = Depends(get_request_util),
     data_access: DataAccess = Depends(get_data_access),
 ) -> Response:
@@ -514,6 +540,7 @@ async def credible_sets_by_region(
         config_credible_sets.cs_header_schema,
         format,
         start_time,
+        coding_only,
     )
 
 
@@ -608,6 +635,10 @@ async def credible_sets_by_variant(
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),
+    coding_only: bool = Query(
+        default=False,
+        description="If true, return only coding variants (by inline most_severe consequence)",
+    ),
     request_util: RequestUtil = Depends(get_request_util),
     data_access: DataAccess = Depends(get_data_access),
 ) -> Response:
@@ -650,6 +681,7 @@ async def credible_sets_by_variant(
         config_credible_sets.cs_header_schema,
         format,
         start_time,
+        coding_only,
     )
 
 
@@ -692,6 +724,10 @@ async def credible_sets_by_variant_post(
     ),
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
+    ),
+    coding_only: bool = Query(
+        default=False,
+        description="If true, return only coding variants (by inline most_severe consequence)",
     ),
     request_util: RequestUtil = Depends(get_request_util),
     data_access: DataAccess = Depends(get_data_access),
@@ -739,6 +775,7 @@ async def credible_sets_by_variant_post(
         config_credible_sets.cs_header_schema,
         format,
         start_time,
+        coding_only,
     )
 
 
@@ -837,6 +874,10 @@ async def credible_sets_by_gene(
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),
+    coding_only: bool = Query(
+        default=False,
+        description="If true, return only coding variants (by inline most_severe consequence)",
+    ),
     request_util: RequestUtil = Depends(get_request_util),
     data_access: DataAccess = Depends(get_data_access),
     gene_name_and_position_mapping: GeneNameAndPositionMapping = Depends(get_gene_name_mapping),
@@ -898,6 +939,7 @@ async def credible_sets_by_gene(
         config_credible_sets.cs_header_schema,
         format,
         start_time,
+        coding_only,
     )
 
 
@@ -995,6 +1037,10 @@ async def credible_sets_by_qtl_gene(
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),
+    coding_only: bool = Query(
+        default=False,
+        description="If true, return only coding variants (by inline most_severe consequence)",
+    ),
     request_util: RequestUtil = Depends(get_request_util),
     data_access: DataAccess = Depends(get_data_access),
     gene_name_and_position_mapping: GeneNameAndPositionMapping = Depends(get_gene_name_mapping),
@@ -1048,6 +1094,7 @@ async def credible_sets_by_qtl_gene(
         config_credible_sets.cs_qtl_header_schema,
         format,
         start_time,
+        coding_only,
     )
 
 

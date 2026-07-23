@@ -899,6 +899,77 @@ async def filter_stream_by_cs_id(
             yield buffer + b"\n"
 
 
+async def filter_stream_by_coding(
+    stream: AsyncGenerator[bytes, None],
+    coding_set: set[str],
+) -> AsyncGenerator[bytes, None]:
+    """
+    Filter a TSV byte stream to rows whose ``most_severe`` value is a coding consequence.
+
+    The ``most_severe`` column index is resolved from the header line by name, so this
+    works regardless of how many columns (e.g. resource/version) were prepended upstream.
+    Rows with a missing/NA/short ``most_severe`` value are dropped. If the stream carries
+    no ``most_severe`` column the filter is a pass-through (nothing to filter on).
+
+    Args:
+        stream: Async generator yielding byte chunks (first non-empty line is the header)
+        coding_set: Set of coding consequence category names (see config.common.coding_set)
+    """
+    coding_bytes = {c.encode("utf-8") for c in coding_set}
+    buffer = b""
+    most_severe_col: int | None = None
+    header_seen = False
+
+    def _keep(fields: list[bytes]) -> bool:
+        if most_severe_col is None:
+            return True
+        return (
+            len(fields) > most_severe_col and fields[most_severe_col] in coding_bytes
+        )
+
+    async for chunk in stream:
+        data = buffer + chunk
+        lines = data.split(b"\n")
+
+        for line in lines[:-1]:
+            if line.strip() == b"":
+                continue
+            if not header_seen:
+                header_seen = True
+                header_fields = line.split(b"\t")
+                if b"most_severe" in header_fields:
+                    most_severe_col = header_fields.index(b"most_severe")
+                else:
+                    logger.warning(
+                        "coding_only requested but stream has no most_severe column; "
+                        "returning rows unfiltered"
+                    )
+                yield line + b"\n"
+                continue
+            if _keep(line.split(b"\t")):
+                yield line + b"\n"
+
+        buffer = lines[-1]
+
+    if buffer.strip() != b"":
+        if not header_seen:
+            # header-only stream (no data rows); emit it verbatim
+            yield buffer + b"\n"
+        elif _keep(buffer.split(b"\t")):
+            yield buffer + b"\n"
+
+
+def filter_coding_rows(
+    rows: list[dict[str, Any]],
+    coding_set: set[str],
+) -> list[dict[str, Any]]:
+    """Keep only rows whose ``most_severe`` is a coding consequence.
+
+    Rows with a missing or None ``most_severe`` are excluded (None is never in coding_set).
+    """
+    return [r for r in rows if r.get("most_severe") in coding_set]
+
+
 async def chunk_iterator(
     line_iterator: AsyncIterator[list[bytes]],
     header_line: bytes,

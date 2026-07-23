@@ -4,7 +4,13 @@ from typing import AsyncIterator, Literal
 
 from app.core.logging_config import setup_logging
 from starlette.responses import Response
-from app.core.streams import tsv_line_iterator_str, tsv_stream_to_list
+from app.core.streams import (
+    tsv_line_iterator_str,
+    tsv_stream_to_list,
+    filter_stream_by_coding,
+    filter_coding_rows,
+)
+import app.config.common as config_common
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi import HTTPException
 
@@ -58,9 +64,13 @@ async def range_response(
     header_schema: dict[str, type],
     format: Literal["tsv", "json"],
     start_time: float,
+    coding_only: bool = False,
 ) -> Response:
     """
     Helper function to create a TSV/JSON response from a stream, logging response times.
+
+    When ``coding_only`` is True, rows are restricted to coding variants by their inline
+    ``most_severe`` column (see config.common.coding_set); the default (False) is unchanged.
     """
     if format == "tsv":
         other_time = time.time()
@@ -68,6 +78,8 @@ async def range_response(
             f"{request_url} time to start streaming range: {other_time - start_time:.3f}s"
         )
         try:
+            if coding_only:
+                stream = filter_stream_by_coding(stream, config_common.coding_set)
             return TimedStreamingResponse(
                 stream, request_url, start_time, media_type="text/tab-separated-values"
             )
@@ -81,8 +93,11 @@ async def range_response(
             logger.debug(
                 f"{request_url} time to start creating JSON response: {other_time - start_time:.3f}s"
             )
+            rows = await tsv_stream_to_list(line_stream, header_schema)
+            if coding_only:
+                rows = filter_coding_rows(rows, config_common.coding_set)
             return TimedJSONResponse(
-                await tsv_stream_to_list(line_stream, header_schema),
+                rows,
                 request_url,
                 start_time,
             )
