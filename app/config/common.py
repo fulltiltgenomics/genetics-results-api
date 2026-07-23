@@ -53,6 +53,7 @@ rsid_db = _profile.rsid_db
 gnomad = _profile.gnomad
 dataset_to_resource = _profile.dataset_to_resource
 dataset_mapping_files = _profile.dataset_mapping_files
+dataset_display_names = _profile.dataset_display_names
 variant_set_files = _profile.variant_set_files
 variant_annotation_sources = _profile.variant_annotation_sources
 phenotype_markdown_template = _profile.phenotype_markdown_template

@@ -62,7 +62,7 @@ run_server.py       # server entry point
 | exome-results | Exome sequencing association results |
 | phenotype | Phenotype descriptions |
 | resources | Available resource listing |
-| datasets | Dataset configuration |
+| datasets | Dataset configuration (`GET /datasets`; `GET /dataset_display_names` returns display-name overrides keyed by the raw `dataset` column value) |
 | rsid | rsID to variant mapping |
 | summary-stats | GWAS summary statistics |
 | variant-annotation | Variant annotation data (FinnGen, etc.) |

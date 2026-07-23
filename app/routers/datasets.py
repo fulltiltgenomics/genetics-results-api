@@ -8,6 +8,7 @@ import logging
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
+from app.config import common as common_config
 from app.dependencies import get_data_access
 from app.services.data_access import DataAccess
 from app.services import config_util, dataset_stats
@@ -128,3 +129,30 @@ async def list_datasets(
         results.append(item)
 
     return JSONResponse(content=results)
+
+
+@router.get(
+    "/dataset_display_names",
+    summary="Display-name overrides for raw dataset column values",
+    responses={
+        200: {
+            "description": (
+                "Map from the raw `dataset` column value (as carried in credible-set "
+                "and other result rows) to a preferred display name. Only datasets whose "
+                "default humanized name (underscores replaced with spaces) is wrong or "
+                "incomplete are listed; consumers should fall back to humanizing the raw "
+                "value for datasets absent from this map."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {"UKB_PPP": "UKBB PPP (Olink 3K)"}
+                }
+            },
+        },
+        401: {"description": "Not authenticated"},
+    },
+)
+async def get_dataset_display_names():
+    """Return configured display-name overrides keyed by the raw `dataset` value,
+    so frontends can rename datasets centrally instead of hard-coding overrides."""
+    return JSONResponse(content=dict(common_config.dataset_display_names))
