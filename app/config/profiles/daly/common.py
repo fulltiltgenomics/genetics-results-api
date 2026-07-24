@@ -63,6 +63,16 @@ dataset_mapping_files = [
     ),
 ]
 
+# display-name overrides keyed by the raw `dataset` column value carried in the
+# source data files (same key space as dataset_to_resource). the frontend
+# humanizes unknown datasets by replacing underscores with spaces; entries here
+# override that where the humanized form is wrong or incomplete. UKB_PPP -> "UKB
+# PPP" hides that it is only the Olink 3K (Explore 3072) panel, which is why some
+# proteins have a FinnGen pQTL but no UKBB one (5K vs 3K coverage).
+dataset_display_names = {
+    "UKB_PPP": "UKBB PPP (Olink 3K)",
+}
+
 variant_set_files = {
     "FinnGen_enriched_202505": {
         "file": "gs://daly-genetics-results/variant_sets/FinnGen_enriched_202505",
@@ -77,7 +87,7 @@ variant_set_files = {
 
 variant_annotation_sources = {
     "finngen": {
-        "file": "gs://daly-genetics-results/variant_annotations/R13_annotated_variants_v0.small.gz",
+        "file": "gs://daly-genetics-results/variant_annotations/R14_annotated_variants_v0.small.gz",
     },
     "gnomad": {
         "file": "gs://daly-genetics-results/gnomad/gnomad.genomes.exomes.v4.0.sites.v2.tsv.bgz",

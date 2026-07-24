@@ -114,6 +114,10 @@ def _register_services():
         from app.services.data_access_variant_effect import DataAccessVariantEffect
         return DataAccessVariantEffect()
 
+    def create_data_access_mpra():
+        from app.services.data_access_mpra import DataAccessMpra
+        return DataAccessMpra()
+
     # gene name mapping
     def create_gene_name_mapping():
         from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
@@ -183,6 +187,7 @@ def _register_services():
     container.register("data_access_chromatin_peaks", create_data_access_chromatin_peaks)
     container.register("data_access_open_chromatin", create_data_access_open_chromatin)
     container.register("data_access_variant_effect", create_data_access_variant_effect)
+    container.register("data_access_mpra", create_data_access_mpra)
     container.register("gene_name_mapping", create_gene_name_mapping)
     container.register("gene_group_service", create_gene_group_service)
     container.register("gene_disease_data", create_gene_disease_data)

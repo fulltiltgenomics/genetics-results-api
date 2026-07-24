@@ -20,6 +20,7 @@ from app.config.expression import expression_data as _expression_data
 from app.config.chromatin_peaks import chromatin_peaks_data as _chromatin_peaks_data
 from app.config.open_chromatin import open_chromatin_data as _open_chromatin_data  # noqa: F401 - imported to fail fast if the profile config is missing
 from app.config.variant_effect import variant_effect_data as _variant_effect_data  # noqa: F401 - imported to fail fast if the profile config is missing
+from app.config.mpra import mpra_data as _mpra_data  # noqa: F401 - imported to fail fast if the profile config is missing
 from app.config.gene_disease import gene_disease as _gene_disease_config
 
 # build coloc partner index from explicit pairs
@@ -52,6 +53,8 @@ _open_chromatin_dataset_ids = {
 # variant_effect config is per-dataset (both Marderstein predictors share the
 # resource "marderstein"), so the dataset_ids come straight from the config entries.
 _variant_effect_dataset_ids = {"marderstein_chrombpnet", "marderstein_flare"}
+# mpra config is per-dataset; the single Siraj LONG file is keyed by its dataset_id.
+_mpra_dataset_ids = {d["dataset_id"] for d in _mpra_data}
 _gene_disease_dataset_ids = {k for k in _gene_disease_config if k != "output_columns"}
 
 # merge configurations
@@ -182,6 +185,9 @@ def dataset_products(dataset_id: str) -> dict:
 
     if dataset_id in _variant_effect_dataset_ids:
         products["variant_effect"] = True
+
+    if dataset_id in _mpra_dataset_ids:
+        products["mpra"] = True
 
     if dataset_id in _gene_disease_dataset_ids:
         products["gene_disease"] = True

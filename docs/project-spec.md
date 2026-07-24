@@ -51,7 +51,7 @@ run_server.py       # server entry point
 | authentication | Login/token management |
 | metadata | Dataset and resource metadata |
 | search | Search across phenotypes, genes, variants (includes gene coordinates via GENCODE) |
-| credible-sets | Fine-mapping credible set results |
+| credible-sets | Fine-mapping credible set results. The variant-row endpoints (`credible_sets_by_phenotype`, `_by_id`, `_by_region`, `_by_variant` GET/POST, `_by_gene`, `_by_qtl_gene`) accept an optional `coding_only=true` query param that restricts returned rows to coding variants by their inline `most_severe` consequence, reusing `config.common.coding_set`; rows with a missing/NA `most_severe` are excluded. Default (`false`) is unchanged. Applied via header-aware `filter_stream_by_coding` (TSV) / `filter_coding_rows` (JSON) in `app/core/streams.py`, wired through `range_response` for the range endpoints. |
 | colocalization | Colocalization analysis results |
 | expression | Gene expression data (eQTL, etc.) |
 | genes | Gene information, lookups, and nearest genes with coordinates |
@@ -62,7 +62,7 @@ run_server.py       # server entry point
 | exome-results | Exome sequencing association results |
 | phenotype | Phenotype descriptions |
 | resources | Available resource listing |
-| datasets | Dataset configuration |
+| datasets | Dataset configuration (`GET /datasets`; `GET /dataset_display_names` returns display-name overrides keyed by the raw `dataset` column value) |
 | rsid | rsID to variant mapping |
 | summary-stats | GWAS summary statistics |
 | variant-annotation | Variant annotation data (FinnGen, etc.) |
