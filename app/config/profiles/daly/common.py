@@ -87,7 +87,7 @@ variant_set_files = {
 
 variant_annotation_sources = {
     "finngen": {
-        "file": "gs://daly-genetics-results/variant_annotations/R13_annotated_variants_v0.small.gz",
+        "file": "gs://daly-genetics-results/variant_annotations/R14_annotated_variants_v0.small.gz",
     },
     "gnomad": {
         "file": "gs://daly-genetics-results/gnomad/gnomad.genomes.exomes.v4.0.sites.v2.tsv.bgz",
