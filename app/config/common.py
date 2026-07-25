@@ -45,6 +45,14 @@ allowed_emails = {
     e.strip() for e in os.environ.get("ALLOWED_EMAILS", "").split(",") if e.strip()
 }
 
+# OAuth client id(s) a Google Identity Token must be addressed to (its `aud` claim).
+# id_token.verify_oauth2_token skips audience verification when no audience is passed, so
+# without this ANY Google-signed id_token belonging to an allow-listed email is accepted,
+# including one minted for an unrelated third-party app the user signed into.
+google_token_audience = {
+    a.strip() for a in os.environ.get("GOOGLE_TOKEN_AUDIENCE", "").split(",") if a.strip()
+}
+
 # data paths and profile-specific settings loaded from the active profile
 _profile = load_profile_module("common")
 

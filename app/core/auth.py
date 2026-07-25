@@ -94,6 +94,19 @@ def get_bearer_token_user(request: Request) -> str | None:
             return user
         raise HTTPException(status_code=401, detail="Invalid token")
 
+    # verify_oauth2_token above skips the `aud` claim when no audience is passed, so without
+    # this check any Google-signed id_token with an allow-listed email is accepted, including
+    # one issued to an unrelated application. Inert until GOOGLE_TOKEN_AUDIENCE is set.
+    if config.google_token_audience:
+        if payload.get("aud") not in config.google_token_audience:
+            logger.warning(f"token audience not allowed: {payload.get('aud')}")
+            raise HTTPException(status_code=401, detail="Token audience not allowed")
+    else:
+        logger.warning(
+            "GOOGLE_TOKEN_AUDIENCE is not set: accepting a Google id_token without verifying "
+            "it was issued for this service"
+        )
+
     email = payload.get("email")
     if not email:
         raise HTTPException(status_code=401, detail="Token does not contain email")
