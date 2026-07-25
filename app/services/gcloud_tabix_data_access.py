@@ -2,7 +2,7 @@ import logging
 from typing import Any, AsyncGenerator, Literal
 from app.core.streams import tsv_line_iterator_str, tsv_stream_to_list, accumulate_cs_leads
 from app.services.data_access import DataAccessObject
-from app.services.gcloud_tabix_base import GCloudTabixBase
+from app.services.gcloud_tabix_base import GCloudTabixBase, validate_path_component
 from app.config.credible_sets import data_file_by_id as cs_data_file_by_id
 from app.config.exome_results import exome_data_file_by_id
 from app.config.gene_based_results import gene_based_data_file_by_id
@@ -49,6 +49,9 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
         interval: Literal[95, 99] | None,
     ) -> str:
         """Get the blob path for the requested phenotype."""
+        # phenotype/study code comes from the request path; reject anything that could
+        # traverse out of the configured prefix (see validate_path_component)
+        validate_path_component(phenotype)
         # if no interval specified, use suffix directly (for exome data)
         if interval is None:
             return f"{self.resource_config['prefix']}{phenotype}{self.resource_config['suffix']}"

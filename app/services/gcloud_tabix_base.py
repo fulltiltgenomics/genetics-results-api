@@ -8,7 +8,7 @@ import aiohttp
 import aiohttp.client_exceptions
 from typing import AsyncGenerator
 from asyncio.unix_events import subprocess
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import NotFoundException, ParseException
 from app.services.tabix_query import (
     TabixIndex,
     bgzf_block_size,
@@ -23,6 +23,34 @@ import os
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
+# characters that let a request-supplied path component escape its configured prefix.
+# gs:// paths are rewritten to the path-style https://storage.googleapis.com/<bucket>/<object>,
+# where the bucket is just the first path segment — so a "/" plus ".." in an interpolated
+# component reaches any object in any bucket the workload identity can read (the URL layer
+# resolves dot segments before the request goes out). "%" is rejected too so no encoded
+# separator survives either the aiohttp/yarl path or the tabix/libcurl path.
+_PATH_ESCAPE_CHARS = ("/", "\\", "%")
+
+
+def validate_path_component(value: str, kind: str = "phenotype") -> str:
+    """Reject a request-supplied value that could alter the GCS object path it is interpolated into.
+
+    Deliberately a deny-list of path-affecting characters rather than a character allow-list:
+    real phenotype/study codes contain ':' , '_' , '-' and '.' (e.g. "chr1:6535440-9535440_1"),
+    and an allow-list narrow enough to be safe would reject legitimate codes.
+    """
+    if not value:
+        raise ParseException(f"empty {kind}")
+    for ch in _PATH_ESCAPE_CHARS:
+        if ch in value:
+            raise ParseException(f"invalid {kind} {value!r}: must not contain {ch!r}")
+    if ".." in value:
+        raise ParseException(f"invalid {kind} {value!r}: must not contain '..'")
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in value):
+        raise ParseException(f"invalid {kind} {value!r}: must not contain control characters")
+    return value
+
 
 # module-level GCS token management shared by all GCloudTabixBase instances
 _gcs_credentials = None

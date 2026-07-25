@@ -15,7 +15,7 @@ from app.core.streams import (
     start_iterators,
 )
 from app.core.variant import Variant
-from app.services.gcloud_tabix_base import GCloudTabixBase
+from app.services.gcloud_tabix_base import GCloudTabixBase, validate_path_component
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,9 @@ class SumstatsDataAccess(GCloudTabixBase):
     def _get_file_path(self, data_file_config: dict, phenotype: str) -> str:
         if "file" in data_file_config:
             return data_file_config["file"]
+        # phenotype comes straight from the request; without this it can traverse out of the
+        # configured prefix (and out of the bucket) into any object the workload SA can read
+        validate_path_component(phenotype)
         return f"{data_file_config['prefix']}{phenotype}{data_file_config['suffix']}"
 
     def get_file_header(self, data_file_config: dict, phenotype: str) -> list[bytes]:

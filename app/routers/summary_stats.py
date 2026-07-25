@@ -10,6 +10,7 @@ from app.core.exceptions import NotFoundException, ParseException
 from app.core.responses import range_response
 from app.core.variant import Variant
 from app.dependencies import get_sumstats_data_access
+from app.services.gcloud_tabix_base import validate_path_component
 from app.services.sumstats_data_access import SumstatsDataAccess
 import app.config.common as config_common
 
@@ -104,6 +105,12 @@ async def get_summary_stats(
         raise HTTPException(status_code=422, detail="At least one phenotype is required")
 
     try:
+        for p in phenotype_list:
+            validate_path_component(p)
+    except ParseException as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    try:
         stream = await sumstats_access.stream_sumstats(
             resource,
             data_type,
@@ -163,6 +170,12 @@ async def post_summary_stats(
     phenotype_list = [p.strip() for p in body.phenotypes if p.strip()]
     if not phenotype_list:
         raise HTTPException(status_code=422, detail="At least one phenotype is required")
+
+    try:
+        for p in phenotype_list:
+            validate_path_component(p)
+    except ParseException as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     try:
         stream = await sumstats_access.stream_sumstats(
