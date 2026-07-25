@@ -2,6 +2,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
 from app.dependencies import auth_required, is_public
@@ -109,18 +110,46 @@ async def lifespan(app):
             await instance.cleanup()
 
 
+# FastAPI registers its docs/openapi routes with Starlette's add_route, which does NOT
+# apply the app-level `dependencies` below — so the built-in docs_url/redoc_url/openapi_url
+# were served without auth_required. Combined with the auth-gateway's `Authorization: Bearer`
+# bypass (any bearer header skips oauth2-proxy), that published the full API schema to the
+# unauthenticated internet. Register them ourselves, behind the dependency, instead.
+DOCS_URL = "/api/v1/docs"
+REDOC_URL = "/api/v1/redoc"
+OPENAPI_URL = "/api/v1/openapi.json"
+
 app = FastAPI(
     title="Genetics Results API",
     description="API for accessing genetic association data and annotations. Available resources: "
     + ", ".join(config_util.get_resources()),
     version="0.1.0",
-    docs_url="/api/v1/docs",
-    redoc_url="/api/v1/redoc",
-    openapi_url="/api/v1/openapi.json",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
     swagger_ui_parameters={"defaultModelsExpandDepth": -1},  # hide schemas by default
     dependencies=[Depends(auth_required)],
     lifespan=lifespan,
 )
+
+
+@app.get(OPENAPI_URL, include_in_schema=False)
+async def openapi_schema():
+    return JSONResponse(app.openapi())
+
+
+@app.get(DOCS_URL, include_in_schema=False)
+async def swagger_ui():
+    return get_swagger_ui_html(
+        openapi_url=OPENAPI_URL,
+        title=f"{app.title} - Swagger UI",
+        swagger_ui_parameters=app.swagger_ui_parameters,
+    )
+
+
+@app.get(REDOC_URL, include_in_schema=False)
+async def redoc_ui():
+    return get_redoc_html(openapi_url=OPENAPI_URL, title=f"{app.title} - ReDoc")
 
 setup_middleware(app)
 
