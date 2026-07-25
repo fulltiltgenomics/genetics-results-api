@@ -165,6 +165,10 @@ data_files = [
             "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_atacseq/20251118/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
             "suffix_95": ".SUSIE.munged.tsv",
             "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_atacseq/20251118/FinnGen_ATACseq_202509_credible_sets.tsv.gz",
+            # peaks linked to genes via Open4Gene, so trait is the linked gene symbol here
+            # while trait_original stays the peak id (see genetics-results-munge
+            # scripts/create_caqtl_gene_indexed_qtl_file.py)
+            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_atacseq/20251118/FinnGen_ATACseq_202509_credible_sets.qtl.tsv.gz",
         },
     },
     {
