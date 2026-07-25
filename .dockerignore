@@ -1,0 +1,14 @@
+# the Dockerfile does `COPY . .`, so anything left here is baked into the published image —
+# including a developer's local .env or credentials. Deliberately limited to files that are
+# never needed at runtime, so the image contents are otherwise unchanged.
+.env
+.env.*
+.venv/
+.git/
+.github/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.beads/
+node_modules/
