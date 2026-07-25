@@ -82,6 +82,10 @@ def _collect_tabix_files() -> list[tuple[str, str]]:
 
     for d in chromatin_peaks_data:
         files.append((f"chromatin_peaks:{d['resource']}", d["file"]))
+        if "file_by_gene" in d:
+            files.append(
+                (f"chromatin_peaks_by_gene:{d['resource']}", d["file_by_gene"])
+            )
 
     for source, cfg in common.variant_annotation_sources.items():
         files.append((f"variant_annotation:{source}", cfg["file"]))

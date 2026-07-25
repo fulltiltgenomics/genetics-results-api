@@ -20,13 +20,19 @@ class GCloudTabixDataAccessChromatinPeaks(
             c for c in chromatin_peaks_data if c["resource"] == resource
         ][0]
         self.file = self.resource_config["file"]
+        self.file_by_gene = self.resource_config.get("file_by_gene")
         # header fetched lazily by get_header() and prefetched (non-blocking) by
         # warm() at startup, so construction no longer blocks on tabix -H
         self.header = None
+        self.header_by_gene = None
 
     async def warm(self) -> None:
         """Prefetch the header and .tbi index without blocking the event loop."""
         self.header = await self._cache_header_async("header", self.file)
+        if self.file_by_gene is not None:
+            self.header_by_gene = await self._cache_header_async(
+                "header_by_gene", self.file_by_gene
+            )
 
     def get_header(self) -> list[bytes]:
         """Get the header for the chromatin peaks data file."""
@@ -69,4 +75,31 @@ class GCloudTabixDataAccessChromatinPeaks(
             [start],  # start position
             [end],  # end position
             chunk_size,
+        )
+
+    def has_gene_index(self) -> bool:
+        """Whether this resource has a gene-indexed copy of the peak-to-gene table."""
+        return self.file_by_gene is not None
+
+    async def stream_range_by_gene(
+        self, chrom: list[int], start: list[int], end: list[int], chunk_size: int
+    ) -> AsyncGenerator[bytes, None]:
+        """
+        Stream rows of the gene-indexed file whose linked gene overlaps the given loci.
+
+        Args:
+            chrom: Gene chromosomes in the API's numeric convention (X=23)
+            start: Gene start positions
+            end: Gene end positions
+            chunk_size: Size of chunks to read
+        """
+        if self.file_by_gene is None:
+            raise ValueError(
+                f"Resource '{self.resource}' has no gene-indexed peak-to-gene file"
+            )
+
+        logger.info(f"Querying chromatin peaks by gene loci {chrom}:{start}-{end}")
+
+        return await self._stream_range(
+            self.file_by_gene, chrom, start, end, chunk_size
         )

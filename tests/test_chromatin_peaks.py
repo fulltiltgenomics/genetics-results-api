@@ -20,6 +20,12 @@ def invalid_peak_id():
 
 
 @pytest.fixture(scope="session")
+def test_gene():
+    """A gene that has linked peaks in the peak-to-gene table."""
+    return "IL7R"
+
+
+@pytest.fixture(scope="session")
 def available_chromatin_resources():
     """Get list of available chromatin peaks resources from config."""
     import app.config.chromatin_peaks as config
@@ -174,3 +180,122 @@ class TestPeakToGenes:
             ]
             for col in expected_columns:
                 assert col in header, f"Missing expected column: {col}"
+
+
+class TestGeneToPeaks:
+    """Test /api/v1/gene_to_peaks/{gene} endpoint."""
+
+    @pytest.mark.parametrize("format", ["tsv", "json"])
+    def test_gene_to_peaks_formats(self, server_url, test_gene, format):
+        """Test gene to peaks with both TSV and JSON formats."""
+        response = requests.get(
+            f"{server_url}/api/v1/gene_to_peaks/{test_gene}",
+            params={"format": format},
+            timeout=30,
+        )
+
+        assert response.status_code == 200, (
+            f"Unexpected status code!\n"
+            f"Status: {response.status_code}\n"
+            f"Response: {response.text[:500]}"
+        )
+
+        if format == "tsv":
+            assert "text/tab-separated-values" in response.headers.get(
+                "content-type", ""
+            )
+            validation = validate_tsv_response(response.text)
+            assert validation["valid"], f"TSV validation failed: {validation['errors']}"
+        else:
+            assert "application/json" in response.headers.get("content-type", "")
+            validation = validate_json_response(response.json())
+            assert validation["valid"], f"JSON validation failed: {validation['errors']}"
+
+    def test_gene_to_peaks_returns_only_queried_gene(self, server_url, test_gene):
+        """Rows are filtered to the queried gene, not everything at its locus."""
+        response = requests.get(
+            f"{server_url}/api/v1/gene_to_peaks/{test_gene}",
+            params={"format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) > 0, f"No peaks linked to {test_gene}"
+        assert {row["symbol"] for row in data} == {test_gene}
+        # the point of the endpoint: several peaks, resolved per cell type
+        assert len({row["peak_id"] for row in data}) > 1
+        assert len({row["cell_type"] for row in data}) > 1
+
+    def test_gene_to_peaks_ensg_matches_symbol(self, server_url, test_gene):
+        """Querying by ENSG returns the same rows as querying by symbol."""
+        by_symbol = requests.get(
+            f"{server_url}/api/v1/gene_to_peaks/{test_gene}",
+            params={"format": "json"},
+            timeout=30,
+        ).json()
+        ensg = by_symbol[0]["gene_id"]
+
+        by_ensg = requests.get(
+            f"{server_url}/api/v1/gene_to_peaks/{ensg}",
+            params={"format": "json"},
+            timeout=30,
+        ).json()
+
+        assert by_ensg == by_symbol
+
+    def test_gene_to_peaks_agrees_with_peak_to_genes(self, server_url, test_gene):
+        """The two directions return identical rows for a peak they share."""
+        by_gene = requests.get(
+            f"{server_url}/api/v1/gene_to_peaks/{test_gene}",
+            params={"format": "json"},
+            timeout=30,
+        ).json()
+        peak_id = by_gene[0]["peak_id"]
+
+        by_peak = requests.get(
+            f"{server_url}/api/v1/peak_to_genes/{peak_id}",
+            params={"format": "json"},
+            timeout=30,
+        ).json()
+
+        from_gene = sorted(
+            (row for row in by_gene if row["peak_id"] == peak_id),
+            key=lambda r: (r["cell_type"], r["gene_id"]),
+        )
+        from_peak = sorted(
+            (row for row in by_peak if row["symbol"] == test_gene),
+            key=lambda r: (r["cell_type"], r["gene_id"]),
+        )
+        assert from_gene == from_peak
+
+    def test_gene_to_peaks_unknown_gene(self, server_url):
+        """Test that an unknown gene returns 404."""
+        response = requests.get(
+            f"{server_url}/api/v1/gene_to_peaks/NOTAGENE",
+            params={"format": "json"},
+            timeout=10,
+        )
+
+        assert response.status_code == 404
+
+    def test_gene_to_peaks_gene_without_links(self, server_url):
+        """A known gene with no peak links returns an empty result, not an error."""
+        response = requests.get(
+            f"{server_url}/api/v1/gene_to_peaks/PCSK9",
+            params={"format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_gene_to_peaks_invalid_resource(self, server_url, test_gene):
+        """Test that invalid resource returns 404."""
+        response = requests.get(
+            f"{server_url}/api/v1/gene_to_peaks/{test_gene}",
+            params={"format": "json", "resources": ["nonexistent_resource"]},
+            timeout=10,
+        )
+
+        assert response.status_code == 404

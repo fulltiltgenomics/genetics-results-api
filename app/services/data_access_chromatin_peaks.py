@@ -3,10 +3,12 @@ import asyncio
 import logging
 from app.config.chromatin_peaks import chromatin_peaks_data
 from app.config.sort_keys import create_sort_key, SORT_CONFIG_CHROMATIN_PEAKS
+from app.core.exceptions import NotFoundException
 from app.core.streams import (
     chunk_iterator,
     start_iterators,
     tsv_line_iterator_chromatin_peaks,
+    tsv_line_iterator_chromatin_peaks_by_gene,
 )
 from asyncstdlib.heapq import merge
 from app.services.base_data_access import (
@@ -61,6 +63,33 @@ class DataAccessObjectChromatinPeaks(BaseDataAccessObject):
 
         Returns:
             AsyncGenerator yielding chunks from the region
+        """
+        pass
+
+    @abstractmethod
+    def has_gene_index(self) -> bool:
+        """Whether this resource has a gene-indexed copy of the peak-to-gene table."""
+        pass
+
+    @abstractmethod
+    async def stream_range_by_gene(
+        self,
+        chrom: list[int],
+        start: list[int],
+        end: list[int],
+        chunk_size: int,
+    ) -> AsyncGenerator[bytes, None]:
+        """
+        Stream rows of the gene-indexed file whose linked gene overlaps the given loci.
+
+        Args:
+            chrom: Gene chromosomes in the API's numeric convention (X=23)
+            start: Gene start positions
+            end: Gene end positions
+            chunk_size: Size of chunks to read
+
+        Returns:
+            AsyncGenerator yielding chunks from the gene loci
         """
         pass
 
@@ -177,6 +206,72 @@ class DataAccessChromatinPeaks(BaseDataAccess[DataAccessObjectChromatinPeaks]):
                 peak_id,
                 access.get_resource_name(),
                 access.get_version(),
+                coordinates_lookup=coordinates_lookup,
+            )
+            for access in accesses
+        ]
+
+        header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
+        if coordinates_lookup is not None:
+            header_with_resources += [b"gene_chrom", b"gene_start", b"gene_end"]
+        sort_key_fn = create_sort_key(
+            header_with_resources, SORT_CONFIG_CHROMATIN_PEAKS
+        )
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
+
+        header_line = b"\t".join(header_with_resources) + b"\n"
+
+        return chunk_iterator(merged_iterator, header_line, out_chunk_size)
+
+    async def stream_by_gene(
+        self,
+        gene_ids: set[str],
+        loci: list[tuple[int, int, int]],
+        resources: List[str],
+        in_chunk_size: int,
+        out_chunk_size: int,
+        coordinates_lookup: dict[str, tuple[int, int, int]] | None = None,
+    ) -> AsyncGenerator[bytes, None]:
+        """
+        Stream the peaks linked to a gene from multiple resources.
+
+        Args:
+            gene_ids: ENSG IDs the queried gene resolves to (rows are filtered to these)
+            loci: (chrom, start, end) of the gene, one per GENCODE version it is known in
+            resources: List of resource names to query
+            in_chunk_size: Size of chunks to read from tabix
+            out_chunk_size: Size of chunks to write to response
+            coordinates_lookup: Optional mapping from ENSG ID to (chrom, gene_start, gene_end)
+
+        Returns:
+            AsyncGenerator yielding response chunks, in the same columns as stream_by_peak_id
+        """
+        if not resources:
+            raise ValueError("At least one resource must be specified")
+        if not loci:
+            raise ValueError("At least one gene locus must be specified")
+
+        accesses = []
+        for resource in resources:
+            access = await self._get_resource_access(resource)
+            if access.has_gene_index():
+                accesses.append(access)
+
+        if not accesses:
+            raise NotFoundException(
+                f"No gene-indexed peak-to-gene data for resources: {resources}"
+            )
+
+        gene_id_bytes = {gene_id.encode("utf-8") for gene_id in gene_ids}
+        chrom, start, end = (list(values) for values in zip(*loci))
+
+        line_iterators = [
+            tsv_line_iterator_chromatin_peaks_by_gene(
+                await access.stream_range_by_gene(chrom, start, end, in_chunk_size),
+                gene_id_bytes,
+                access.get_resource_name(),
+                access.get_version(),
+                len(access.get_header()),
                 coordinates_lookup=coordinates_lookup,
             )
             for access in accesses

@@ -157,6 +157,27 @@ class GeneNameAndPositionMapping:
             logger.error(f"Error reading gene position file: {e}")
             raise DataException("Error reading gene position file")
 
+    def _resolve_gene_name(self, gene_name: str) -> str:
+        """Resolve a gene name to the key used in the mappings (exact, then case-insensitive)."""
+        if gene_name in self.gene_name_mapping:
+            return gene_name
+        gene_name_lower = gene_name.lower()
+        if gene_name_lower in self._gene_name_lowercase_to_actual:
+            return self._gene_name_lowercase_to_actual[gene_name_lower]
+        raise GeneNotFoundException(f"Gene {gene_name} not found")
+
+    def get_ensg_ids_by_gene_name(self, gene_name: str) -> set[str]:
+        """
+        Get the ENSG IDs a gene name maps to, across all GENCODE versions (case-insensitive).
+        An ENSG ID is returned as-is, so callers can pass either form.
+        """
+        gene_name_upper = gene_name.upper()
+        if gene_name_upper.startswith("ENSG"):
+            return {gene_name_upper}
+
+        ensg_ids_by_version = self.gene_name_mapping[self._resolve_gene_name(gene_name)]
+        return {ensg for ensg_ids in ensg_ids_by_version.values() for ensg in ensg_ids}
+
     def get_coordinates_by_gene_name(
         self, gene_name: str
     ) -> dict[str, list[dict[str, str | int]]] | None:
@@ -175,14 +196,7 @@ class GeneNameAndPositionMapping:
             }
             return coords
 
-        # try exact match first, then case-insensitive match
-        actual_gene_name = gene_name
-        if gene_name not in self.gene_name_mapping:
-            gene_name_lower = gene_name.lower()
-            if gene_name_lower in self._gene_name_lowercase_to_actual:
-                actual_gene_name = self._gene_name_lowercase_to_actual[gene_name_lower]
-            else:
-                raise GeneNotFoundException(f"Gene {gene_name} not found")
+        actual_gene_name = self._resolve_gene_name(gene_name)
 
         ensg_ids_by_version = self.gene_name_mapping[actual_gene_name]
         coords = {}

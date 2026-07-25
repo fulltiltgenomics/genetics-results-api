@@ -540,6 +540,47 @@ def tsv_line_iterator_coloc_by_trait(
     return tsv_line_iterator_base(stream, filter_fn, transform_fn)
 
 
+_PEAK_ID_COL_INDEX = 3
+_PEAK_CHR_COL_INDEX = 0
+_PEAK_GENE_ID_COL_INDEX = 4
+_PEAK_CELL_TYPE_COL_INDEX = 6
+
+
+def _chromatin_peaks_transform(
+    s: list[bytes],
+    resource_bytes: bytes,
+    version_bytes: bytes,
+    coordinates_lookup: dict[str, tuple[int, int, int]] | None,
+) -> list[bytes]:
+    """Prepend resource and version columns, append gene coordinates."""
+    s[_PEAK_CHR_COL_INDEX] = (
+        s[_PEAK_CHR_COL_INDEX]
+        .replace(b"chr", b"")
+        .replace(b"X", b"23")
+        .replace(b"Y", b"24")
+        .replace(b"MT", b"26")
+    )
+    # TODO this is not very clean
+    s[_PEAK_CELL_TYPE_COL_INDEX] = s[_PEAK_CELL_TYPE_COL_INDEX].replace(
+        b"predicted.celltype.", b""
+    )
+    row = [resource_bytes, version_bytes] + s
+
+    if coordinates_lookup is not None:
+        gene_id = s[_PEAK_GENE_ID_COL_INDEX].decode("utf-8")
+        coords = coordinates_lookup.get(gene_id)
+        if coords:
+            row.extend([
+                f"chr{coords[0]}".encode("utf-8"),
+                str(coords[1]).encode("utf-8"),
+                str(coords[2]).encode("utf-8"),
+            ])
+        else:
+            row.extend([b"NA", b"NA", b"NA"])
+
+    return row
+
+
 def tsv_line_iterator_chromatin_peaks(
     stream: AsyncIterator[bytes],
     peak_id: str,
@@ -566,43 +607,58 @@ def tsv_line_iterator_chromatin_peaks(
     resource_bytes = resource.encode("utf-8")
     version_bytes = version.encode("utf-8")
 
-    peak_id_col_index = 3
-    chr_col_index = 0
-    gene_id_col_index = 4
-    cell_type_col_index = 6
-
     def filter_fn(s: list[bytes]) -> bool:
         """Filter to lines matching the peak_id."""
-        return len(s) > peak_id_col_index and s[peak_id_col_index] == peak_id_bytes
+        return len(s) > _PEAK_ID_COL_INDEX and s[_PEAK_ID_COL_INDEX] == peak_id_bytes
 
     def transform_fn(s: list[bytes]) -> list[bytes]:
-        """Prepend resource and version columns, append gene coordinates."""
-        s[chr_col_index] = (
-            s[chr_col_index]
-            .replace(b"chr", b"")
-            .replace(b"X", b"23")
-            .replace(b"Y", b"24")
-            .replace(b"MT", b"26")
+        return _chromatin_peaks_transform(
+            s, resource_bytes, version_bytes, coordinates_lookup
         )
-        # TODO this is not very clean
-        s[cell_type_col_index] = s[cell_type_col_index].replace(
-            b"predicted.celltype.", b""
+
+    return tsv_line_iterator_base(stream, filter_fn, transform_fn)
+
+
+def tsv_line_iterator_chromatin_peaks_by_gene(
+    stream: AsyncIterator[bytes],
+    gene_ids: set[bytes],
+    resource: str,
+    version: str,
+    n_base_columns: int,
+    coordinates_lookup: dict[str, tuple[int, int, int]] | None = None,
+) -> AsyncIterator[list[bytes]]:
+    """
+    Iterate over lines of the gene-indexed peak-to-gene file.
+
+    The file is the peak-indexed table plus three trailing columns holding the linked gene's
+    locus, which is what it is tabix-indexed on. A locus query returns every row whose gene
+    overlaps the queried one, so rows are filtered by ENSG rather than by coordinate equality
+    (which would break whenever the file's GENCODE version differs from the request's).
+    The trailing locus columns are dropped so the row matches ``tsv_line_iterator_chromatin_peaks``
+    before enrichment, keeping both endpoints on one response schema.
+
+    Args:
+        stream: Async iterator of byte chunks
+        gene_ids: ENSG ids (without version suffix, as bytes) the queried gene resolves to
+        resource: Resource name to prepend
+        version: Version to prepend
+        n_base_columns: Number of columns the peak-indexed file has (trailing ones are dropped)
+        coordinates_lookup: Optional mapping from ENSG ID to (chrom, gene_start, gene_end)
+    """
+    resource_bytes = resource.encode("utf-8")
+    version_bytes = version.encode("utf-8")
+
+    def filter_fn(s: list[bytes]) -> bool:
+        """Filter to lines whose linked gene is one the query resolved to."""
+        return (
+            len(s) > _PEAK_GENE_ID_COL_INDEX
+            and s[_PEAK_GENE_ID_COL_INDEX] in gene_ids
         )
-        row = [resource_bytes, version_bytes] + s
 
-        if coordinates_lookup is not None:
-            gene_id = s[gene_id_col_index].decode("utf-8")
-            coords = coordinates_lookup.get(gene_id)
-            if coords:
-                row.extend([
-                    f"chr{coords[0]}".encode("utf-8"),
-                    str(coords[1]).encode("utf-8"),
-                    str(coords[2]).encode("utf-8"),
-                ])
-            else:
-                row.extend([b"NA", b"NA", b"NA"])
-
-        return row
+    def transform_fn(s: list[bytes]) -> list[bytes]:
+        return _chromatin_peaks_transform(
+            s[:n_base_columns], resource_bytes, version_bytes, coordinates_lookup
+        )
 
     return tsv_line_iterator_base(stream, filter_fn, transform_fn)
 
