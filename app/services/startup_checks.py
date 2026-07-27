@@ -26,7 +26,7 @@ from app.services.gcloud_tabix_base import GCloudTabixBase
 logger = logging.getLogger(__name__)
 
 # tabix -H opens a network connection (and subprocess) per file; bound the fan-out.
-# 32 lets the ~55 fixed files clear in ~2 waves without spawning one subprocess per
+# 32 lets the ~65 fixed files clear in ~2 waves without spawning one subprocess per
 # file at once (per-call latency, not worker count, is the real floor here).
 _MAX_WORKERS = 32
 
@@ -45,7 +45,10 @@ def _collect_tabix_files() -> list[tuple[str, str]]:
     from app.config.exome_results import exome_data_files
     from app.config.expression import expression_data
     from app.config.gene_based_results import gene_based_data_files
+    from app.config.mpra import mpra_data
+    from app.config.open_chromatin import open_chromatin_data
     from app.config.summary_stats import data_files as sumstats_files
+    from app.config.variant_effect import variant_effect_data
 
     files: list[tuple[str, str]] = []
 
@@ -86,6 +89,17 @@ def _collect_tabix_files() -> list[tuple[str, str]]:
             files.append(
                 (f"chromatin_peaks_by_gene:{d['resource']}", d["file_by_gene"])
             )
+
+    for d in open_chromatin_data:
+        files.append((f"open_chromatin:{d['resource']}", d["file"]))
+
+    # variant_effect/mpra config is per-DATASET, not per-resource: the marderstein
+    # resource ships two predictor files (chrombpnet, flare), so key on dataset_id
+    for d in variant_effect_data:
+        files.append((f"variant_effect:{d['dataset_id']}", d["file"]))
+
+    for d in mpra_data:
+        files.append((f"mpra:{d['dataset_id']}", d["file"]))
 
     for source, cfg in common.variant_annotation_sources.items():
         files.append((f"variant_annotation:{source}", cfg["file"]))
