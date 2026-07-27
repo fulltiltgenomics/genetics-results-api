@@ -955,33 +955,41 @@ async def filter_stream_by_cs_id(
             yield buffer + b"\n"
 
 
-async def filter_stream_by_coding(
+async def filter_stream_by_column(
     stream: AsyncGenerator[bytes, None],
-    coding_set: set[str],
+    column: str,
+    allowed: set[str],
+    case_insensitive: bool = False,
 ) -> AsyncGenerator[bytes, None]:
     """
-    Filter a TSV byte stream to rows whose ``most_severe`` value is a coding consequence.
+    Filter a TSV byte stream to rows whose ``column`` value is in ``allowed``.
 
-    The ``most_severe`` column index is resolved from the header line by name, so this
-    works regardless of how many columns (e.g. resource/version) were prepended upstream.
-    Rows with a missing/NA/short ``most_severe`` value are dropped. If the stream carries
-    no ``most_severe`` column the filter is a pass-through (nothing to filter on).
+    The column index is resolved from the header line by name, so this works regardless
+    of how many columns (e.g. resource/version) were prepended upstream. Rows with a
+    missing/NA/short value are dropped. If the stream does not carry the column the
+    filter is a pass-through (nothing to filter on).
 
     Args:
         stream: Async generator yielding byte chunks (first non-empty line is the header)
-        coding_set: Set of coding consequence category names (see config.common.coding_set)
+        column: Header name to filter on (e.g. "most_severe", "data_type")
+        allowed: Values to keep
+        case_insensitive: Compare lowercased, for columns whose casing varies by source
     """
-    coding_bytes = {c.encode("utf-8") for c in coding_set}
+    column_bytes = column.encode("utf-8")
+    allowed_bytes = {
+        (a.lower() if case_insensitive else a).encode("utf-8") for a in allowed
+    }
     buffer = b""
-    most_severe_col: int | None = None
+    col_index: int | None = None
     header_seen = False
 
     def _keep(fields: list[bytes]) -> bool:
-        if most_severe_col is None:
+        if col_index is None:
             return True
-        return (
-            len(fields) > most_severe_col and fields[most_severe_col] in coding_bytes
-        )
+        if len(fields) <= col_index:
+            return False
+        value = fields[col_index]
+        return (value.lower() if case_insensitive else value) in allowed_bytes
 
     async for chunk in stream:
         data = buffer + chunk
@@ -993,11 +1001,11 @@ async def filter_stream_by_coding(
             if not header_seen:
                 header_seen = True
                 header_fields = line.split(b"\t")
-                if b"most_severe" in header_fields:
-                    most_severe_col = header_fields.index(b"most_severe")
+                if column_bytes in header_fields:
+                    col_index = header_fields.index(column_bytes)
                 else:
                     logger.warning(
-                        "coding_only requested but stream has no most_severe column; "
+                        f"filter on {column} requested but stream has no such column; "
                         "returning rows unfiltered"
                     )
                 yield line + b"\n"
@@ -1015,15 +1023,39 @@ async def filter_stream_by_coding(
             yield buffer + b"\n"
 
 
+def filter_stream_by_coding(
+    stream: AsyncGenerator[bytes, None],
+    coding_set: set[str],
+) -> AsyncGenerator[bytes, None]:
+    """Filter a TSV byte stream to rows whose ``most_severe`` is a coding consequence."""
+    return filter_stream_by_column(stream, "most_severe", coding_set)
+
+
+def filter_rows_by_column(
+    rows: list[dict[str, Any]],
+    column: str,
+    allowed: set[str],
+    case_insensitive: bool = False,
+) -> list[dict[str, Any]]:
+    """Keep only rows whose ``column`` value is in ``allowed``.
+
+    Rows with a missing or None value are excluded (None is never in ``allowed``).
+    """
+    if case_insensitive:
+        allowed = {a.lower() for a in allowed}
+        return [
+            r for r in rows
+            if isinstance(r.get(column), str) and r[column].lower() in allowed
+        ]
+    return [r for r in rows if r.get(column) in allowed]
+
+
 def filter_coding_rows(
     rows: list[dict[str, Any]],
     coding_set: set[str],
 ) -> list[dict[str, Any]]:
-    """Keep only rows whose ``most_severe`` is a coding consequence.
-
-    Rows with a missing or None ``most_severe`` are excluded (None is never in coding_set).
-    """
-    return [r for r in rows if r.get("most_severe") in coding_set]
+    """Keep only rows whose ``most_severe`` is a coding consequence."""
+    return filter_rows_by_column(rows, "most_severe", coding_set)
 
 
 async def chunk_iterator(

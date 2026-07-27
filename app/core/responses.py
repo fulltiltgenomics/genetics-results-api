@@ -8,7 +8,9 @@ from app.core.streams import (
     tsv_line_iterator_str,
     tsv_stream_to_list,
     filter_stream_by_coding,
+    filter_stream_by_column,
     filter_coding_rows,
+    filter_rows_by_column,
 )
 import app.config.common as config_common
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -65,12 +67,15 @@ async def range_response(
     format: Literal["tsv", "json"],
     start_time: float,
     coding_only: bool = False,
+    data_types: set[str] | None = None,
 ) -> Response:
     """
     Helper function to create a TSV/JSON response from a stream, logging response times.
 
     When ``coding_only`` is True, rows are restricted to coding variants by their inline
     ``most_severe`` column (see config.common.coding_set); the default (False) is unchanged.
+    When ``data_types`` is given, rows are restricted to those association types by their
+    inline ``data_type`` column, matched case-insensitively.
     """
     if format == "tsv":
         other_time = time.time()
@@ -78,6 +83,10 @@ async def range_response(
             f"{request_url} time to start streaming range: {other_time - start_time:.3f}s"
         )
         try:
+            if data_types:
+                stream = filter_stream_by_column(
+                    stream, "data_type", data_types, case_insensitive=True
+                )
             if coding_only:
                 stream = filter_stream_by_coding(stream, config_common.coding_set)
             return TimedStreamingResponse(
@@ -94,6 +103,10 @@ async def range_response(
                 f"{request_url} time to start creating JSON response: {other_time - start_time:.3f}s"
             )
             rows = await tsv_stream_to_list(line_stream, header_schema)
+            if data_types:
+                rows = filter_rows_by_column(
+                    rows, "data_type", data_types, case_insensitive=True
+                )
             if coding_only:
                 rows = filter_coding_rows(rows, config_common.coding_set)
             return TimedJSONResponse(

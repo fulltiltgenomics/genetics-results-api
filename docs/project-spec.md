@@ -51,7 +51,7 @@ run_server.py       # server entry point
 | authentication | Login/token management |
 | metadata | Dataset and resource metadata |
 | search | Search across phenotypes, genes, variants (includes gene coordinates via GENCODE) |
-| credible-sets | Fine-mapping credible set results. The variant-row endpoints (`credible_sets_by_phenotype`, `_by_id`, `_by_region`, `_by_variant` GET/POST, `_by_gene`, `_by_qtl_gene`) accept an optional `coding_only=true` query param that restricts returned rows to coding variants by their inline `most_severe` consequence, reusing `config.common.coding_set`; rows with a missing/NA `most_severe` are excluded. Default (`false`) is unchanged. Applied via header-aware `filter_stream_by_coding` (TSV) / `filter_coding_rows` (JSON) in `app/core/streams.py`, wired through `range_response` for the range endpoints. |
+| credible-sets | Fine-mapping credible set results. The variant-row endpoints (`credible_sets_by_phenotype`, `_by_id`, `_by_region`, `_by_variant` GET/POST, `_by_gene`, `_by_qtl_gene`) accept an optional `coding_only=true` query param that restricts returned rows to coding variants by their inline `most_severe` consequence, reusing `config.common.coding_set`; rows with a missing/NA `most_severe` are excluded. Default (`false`) is unchanged. Applied via header-aware `filter_stream_by_coding` (TSV) / `filter_coding_rows` (JSON) in `app/core/streams.py`, wired through `range_response` for the range endpoints. `_by_gene`, `_by_variant` (GET) and `_by_qtl_gene` additionally accept `data_types=<comma-separated>` (GWAS, eQTL, pQTL, sQTL, caQTL, metaboQTL), which restricts rows by their inline `data_type` column, matched case-insensitively; it runs on the same `range_response` path via the generic `filter_stream_by_column` / `filter_rows_by_column` that `coding_only` is now built on. An unrecognized type yields an empty result rather than unfiltered rows. These three endpoints are the ones the mcp-server tools expose a QTL-type filter for — the filter previously existed only client-side and was silently dropped by the API (see "Undeclared query parameters" below). |
 | colocalization | Colocalization analysis results |
 | expression | Gene expression data (eQTL, etc.) |
 | genes | Gene information, lookups, and nearest genes with coordinates |
@@ -66,6 +66,10 @@ run_server.py       # server entry point
 | rsid | rsID to variant mapping |
 | summary-stats | GWAS summary statistics |
 | variant-annotation | Variant annotation data (FinnGen, etc.) |
+
+### Undeclared query parameters
+
+`reject_unknown_query_params` (`app/core/query_params.py`) is registered as an app-level dependency next to `auth_required` and returns **422** for any query parameter the matched route does not declare. FastAPI's default is to ignore undeclared parameters, which made client/API drift invisible: the mcp-server tools advertised a `data_types` filter that no endpoint implemented, so a caller asking for one association type kept receiving every type and had no way to notice — the resulting oversized response was then truncated by the LLM tool-result cap, hiding exactly the rows that had been asked for. The dependency reads the declared aliases off `request.scope["route"].dependant` (recursing into sub-dependencies) and caches them on the route object, so the check costs one set difference per request. The error lists both the offending parameters and the accepted ones, which is what lets an agent self-correct.
 
 ### Data Access Pattern
 

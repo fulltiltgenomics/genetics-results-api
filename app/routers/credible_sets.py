@@ -32,6 +32,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+DATA_TYPES_DESCRIPTION = (
+    "Comma-separated list of association types to return (GWAS, eQTL, pQTL, sQTL, caQTL, "
+    "metaboQTL). Case-insensitive; if not given, all types are returned"
+)
+
+
+def _parse_data_types(data_types: str | None) -> set[str] | None:
+    """Split the comma-separated data_types filter, or None when unfiltered."""
+    if not data_types:
+        return None
+    parsed = {t.strip() for t in data_types.split(",") if t.strip()}
+    if not parsed:
+        raise HTTPException(
+            status_code=422, detail="data_types must contain at least one association type"
+        )
+    return parsed
+
 
 @router.get(
     "/credible_sets_by_phenotype/{resource}/{phenotype_or_study}",
@@ -639,6 +656,7 @@ async def credible_sets_by_variant(
         default=False,
         description="If true, return only coding variants (by inline most_severe consequence)",
     ),
+    data_types: str | None = Query(default=None, description=DATA_TYPES_DESCRIPTION),
     request_util: RequestUtil = Depends(get_request_util),
     data_access: DataAccess = Depends(get_data_access),
 ) -> Response:
@@ -646,6 +664,7 @@ async def credible_sets_by_variant(
     Get credible sets across resources for a variant.
     """
     start_time = time.time()
+    data_type_filter = _parse_data_types(data_types)
     if interval not in (95, 99):
         raise HTTPException(status_code=422, detail="Interval must be 95 or 99")
     if interval == 99:
@@ -682,6 +701,7 @@ async def credible_sets_by_variant(
         format,
         start_time,
         coding_only,
+        data_type_filter,
     )
 
 
@@ -878,6 +898,7 @@ async def credible_sets_by_gene(
         default=False,
         description="If true, return only coding variants (by inline most_severe consequence)",
     ),
+    data_types: str | None = Query(default=None, description=DATA_TYPES_DESCRIPTION),
     request_util: RequestUtil = Depends(get_request_util),
     data_access: DataAccess = Depends(get_data_access),
     gene_name_and_position_mapping: GeneNameAndPositionMapping = Depends(get_gene_name_mapping),
@@ -886,6 +907,7 @@ async def credible_sets_by_gene(
     Get credible sets across resources in a region around a gene or comma-separated list of genes.
     """
     start_time = time.time()
+    data_type_filter = _parse_data_types(data_types)
     if interval not in (95, 99):
         raise HTTPException(status_code=422, detail="Interval must be 95 or 99")
     if interval == 99:
@@ -940,6 +962,7 @@ async def credible_sets_by_gene(
         format,
         start_time,
         coding_only,
+        data_type_filter,
     )
 
 
@@ -1041,6 +1064,7 @@ async def credible_sets_by_qtl_gene(
         default=False,
         description="If true, return only coding variants (by inline most_severe consequence)",
     ),
+    data_types: str | None = Query(default=None, description=DATA_TYPES_DESCRIPTION),
     request_util: RequestUtil = Depends(get_request_util),
     data_access: DataAccess = Depends(get_data_access),
     gene_name_and_position_mapping: GeneNameAndPositionMapping = Depends(get_gene_name_mapping),
@@ -1049,6 +1073,7 @@ async def credible_sets_by_qtl_gene(
     Get credible sets across resources for a QTL gene or comma-separated list of genes (returns credible sets anywhere in the genome associated with the genes).
     """
     start_time = time.time()
+    data_type_filter = _parse_data_types(data_types)
     if resources is None:  # use all credible set resources if none given
         resources = config_util.get_resources(data_type="cs")
     if not request_util.check_resources(resources, data_type="cs"):
@@ -1095,6 +1120,7 @@ async def credible_sets_by_qtl_gene(
         format,
         start_time,
         coding_only,
+        data_type_filter,
     )
 
 

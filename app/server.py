@@ -6,6 +6,7 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
 from app.dependencies import auth_required, is_public
+from app.core.query_params import reject_unknown_query_params
 from app.middleware import setup_middleware
 from app.services import config_util
 from app.core.logging_config import setup_logging
@@ -128,7 +129,7 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
     swagger_ui_parameters={"defaultModelsExpandDepth": -1},  # hide schemas by default
-    dependencies=[Depends(auth_required)],
+    dependencies=[Depends(auth_required), Depends(reject_unknown_query_params)],
     lifespan=lifespan,
 )
 
