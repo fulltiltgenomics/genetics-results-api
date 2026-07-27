@@ -28,6 +28,33 @@ QUALITY CODING RULES
 6. This should often be your first step in understanding a task.
 
 
+# Documentation ownership
+
+Changing a path on the left makes the doc on the right wrong until it is updated in
+the same commit. `scripts/check-doc-drift.sh` warns (never blocks) on commits that
+violate this; it runs from the `pre-commit` hook.
+
+| changed path | doc to update | what to check |
+|---|---|---|
+| `app/routers/**` | `docs/project-spec.md` | the API Endpoints table — one row per router registered in `app/server.py` |
+| `app/config/**` (including `profiles/**`) | `docs/project-spec.md` | per-product config, which datasets/resources/files exist, profile config keys |
+| `app/core/auth.py` | `docs/project-spec.md` | the Authentication section: accepted credential order, env vars, the `@is_public` list |
+| `app/services/startup_checks.py` | `docs/project-spec.md` | the enumerated data-file families, what is intentionally excluded, the file counts |
+| `pyproject.toml` | `docs/project-spec.md` | Tech Stack: Python version, dependency claims, why `PyJWT` stays pinned |
+
+A doc is stale the moment it *enumerates* something the code no longer matches.
+Counts and lists rot silently — endpoint tables, dataset lists, verified-file
+families — so re-derive them from the code rather than trusting them.
+
+
+# Cross-repo documentation
+
+`genetics-results-suite` is the spec of record for the suite as a whole; this repo
+documents only itself. Adding or changing an **API route or dataset** here therefore
+also requires updating that repo's `docs/project-spec.md` and `docs/adding-datasets.md`,
+not just the docs here — this repo's own docs cannot detect that class of drift.
+
+
 # Software Development Behavior Guidelines
 
 1. Don't guess and do things which you are not certain about. Ask the user instead.
