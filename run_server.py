@@ -15,6 +15,11 @@ if __name__ == "__main__":
         os.makedirs("/tmp/tbi_cache", exist_ok=True)
         for file in glob.glob("/tmp/tbi_cache/**/*.tbi", recursive=True) + glob.glob("/tmp/tbi_cache/**/*.csi", recursive=True):
             os.remove(file)
+        # configure JSON logging first: everything below it logs, and uvicorn's own
+        # loggers then propagate to root. Only reads config constants, so nothing it
+        # needs is produced by the checks below; it is idempotent (the later calls at
+        # import time in app.server and friends are absorbed by its guard).
+        setup_logging()
         # verify every configured tabix/mapping file is reachable before serving;
         # raises and aborts startup (below) if any are missing or unreadable.
         # this is the authoritative fail-fast gate; actual warming and an
@@ -23,8 +28,6 @@ if __name__ == "__main__":
         from app.services.startup_checks import verify_all_data_files
 
         verify_all_data_files()
-        # configure JSON logging before uvicorn starts so its loggers propagate to root
-        setup_logging()
         # reload watches the source tree and serves from a worker subprocess; default
         # to a plain single process in production. Warming and the smoke query live in
         # app.server's lifespan, so they run once in whichever process serves either
