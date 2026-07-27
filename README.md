@@ -19,7 +19,10 @@ Install requirements
 uv sync
 ```
 
-Update files under [config/](config/) to point to your data files
+Update the data paths in the profile modules under [app/config/](app/config/) and the dataset
+registry in [configs/datasets.yaml](configs/datasets.yaml) to point to your data files. The
+active profile is chosen with `CONFIG_PROFILE` (default `daly`) and the registry path with
+`DATASETS_CONFIG_PATH` (default `./configs/datasets.yaml`)
 
 ## Run the server
 
@@ -41,7 +44,7 @@ Once running, open http://localhost:8081/api/v1/docs to see available endpoints
 ## Run tests against running server
 
 ```bash
-uv pip install --system -r pyproject.toml
+uv pip install --system -r pyproject.toml --extra dev
 SERVER_URL=http://localhost:8081 tests/run_tests.sh
 ```
 
