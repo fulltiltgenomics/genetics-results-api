@@ -258,9 +258,9 @@ data_files = [
         "example_pheno_or_study": "GCST004602",
         "gencode_version": 49,
         "cs": {
-            "prefix": "gs://daly-genetics-results/credible_sets/open_targets/202512/individual/",
+            "prefix": "gs://daly-genetics-results/credible_sets/open_targets/202606/individual/",
             "suffix_95": ".SUSIE.munged.tsv",
-            "all_cs_file": "gs://daly-genetics-results/credible_sets/open_targets/202512/Open_Targets_25.12_credible_sets.tsv.gz",
+            "all_cs_file": "gs://daly-genetics-results/credible_sets/open_targets/202606/Open_Targets_26.06_credible_sets.tsv.gz",
         },
     },
 ]

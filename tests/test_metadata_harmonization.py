@@ -170,7 +170,7 @@ class TestMetadataHarmonization:
             assert item["trait_type"] == "binary"
         else:
             assert item["trait_type"] == "quantitative"
-        assert item["version"] == "25.12"
+        assert item["version"] == "26.06"
         assert item["date"] != ""
 
     def test_metadata_sample_sizes(self, server_url):

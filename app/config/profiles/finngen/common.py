@@ -37,7 +37,7 @@ dataset_to_resource = {
     "INTERVAL": ("interval", "1"),
     "UKB_PPP": ("ukbb", "3k"),
     "UKB_Finucane": ("ukbb", "1"),
-    "Open_Targets_25.12": ("open_targets", "25.12"),
+    "Open_Targets_26.06": ("open_targets", "26.06"),
     "GTEx_v10": ("gtex", "v10"),
     "HPA_24.1": ("hpa", "24.1"),
     "genebass": ("genebass", "v1"),
