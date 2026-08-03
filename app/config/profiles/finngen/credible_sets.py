@@ -212,6 +212,21 @@ data_files = [
         },
     },
     {
+        "id": "pgc_scz_finemap",
+        "dataset_id": "pgc_scz_finemap",
+        "resource": "pgc",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "SCZ",
+        "gencode_version": 49,
+        # published FINEMAP credible sets, served alongside the pgc_scz pseudo ones above
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/pgc_scz_finemap/2022/individual/",
+            "suffix_95": ".FINEMAP.munged.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/pgc_scz_finemap/2022/PGC_SCZ_2022_credible_sets.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/pgc_scz_finemap/2022/credible_set_stats.tsv",
+        },
+    },
+    {
         "id": "pgc_bip",
         "dataset_id": "pgc_bip",
         "resource": "pgc",

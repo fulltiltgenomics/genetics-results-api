@@ -50,6 +50,7 @@ dataset_to_resource = {
     # the resource is what matters for filtering, the version is best-effort metadata.
     "COVID19_HGI": ("covid_hgi", "R7"),
     "PGC": ("pgc", "wave3"),
+    "PGC_SCZ_2022": ("pgc", "2022"),
     "GP2": ("gp2", "2025"),
     "IIBDGC": ("ibd_gwas", "2026"),
 }
