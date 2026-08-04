@@ -78,6 +78,35 @@ def _read_metadata_file(metadata_file: str) -> list[dict[str, Any]]:
     return with_gcs_retry(_read)
 
 
+def _dedup_by_phenotype_path(
+    data_file_ids: list[str], data_type: str
+) -> list[str]:
+    """Drop duplicate data file IDs whose per-phenotype files are the same objects.
+
+    Several data files of one resource can share a per-trait directory: the three IBD
+    gene_based entries differ only in the combined file /gene_based/{gene} reads, and
+    all resolve `prefix + trait + suffix` to the same object. Streaming each of them
+    would return the trait's rows once per entry.
+    """
+    seen: set[tuple] = set()
+    result: list[str] = []
+    for did in data_file_ids:
+        df = data_file_by_id.get(did)
+        key: tuple | None = None
+        if df and data_type in df:
+            cfg = df[data_type]
+            if "prefix" in cfg:
+                # every suffix_* variant counts: credible sets pick one by interval
+                key = (cfg["prefix"],) + tuple(
+                    sorted((k, v) for k, v in cfg.items() if k.startswith("suffix"))
+                )
+        if key is None or key not in seen:
+            if key is not None:
+                seen.add(key)
+            result.append(did)
+    return result
+
+
 def _dedup_by_combined_file(
     data_file_ids: list[str], data_type: str
 ) -> list[str]:
@@ -392,7 +421,9 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         """Stream data from all data files for the resource that have this phenotype."""
         from app.services.config_util import get_data_file_ids_for_resource
 
-        data_file_ids = get_data_file_ids_for_resource(resource)
+        data_file_ids = _dedup_by_phenotype_path(
+            get_data_file_ids_for_resource(resource), data_type
+        )
         if not data_file_ids:
             # fallback to treating resource as a data file ID
             data_file_ids = [resource]
@@ -449,7 +480,9 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         """Get JSON data from all data files for the resource that have this phenotype."""
         from app.services.config_util import get_data_file_ids_for_resource
 
-        data_file_ids = get_data_file_ids_for_resource(resource)
+        data_file_ids = _dedup_by_phenotype_path(
+            get_data_file_ids_for_resource(resource), data_type
+        )
         if not data_file_ids:
             # fallback to treating resource as a data file ID
             data_file_ids = [resource]

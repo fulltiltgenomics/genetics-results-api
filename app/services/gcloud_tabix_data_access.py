@@ -83,11 +83,15 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
         return True
 
     def _combined_file(self) -> str | None:
-        """The combined (all_cs/all_exome) file path for header/range queries, if any."""
+        """The combined (all_cs/all_exome/gene_based) file path for header/range queries, if any."""
         if "all_cs_file" in self.resource_config:
             return self.resource_config["all_cs_file"]
         if "all_exome_file" in self.resource_config:
             return self.resource_config["all_exome_file"]
+        # gene_based entries name their all-traits file plainly, since it is the
+        # only combined file they have
+        if self.data_type == "gene_based" and "file" in self.resource_config:
+            return self.resource_config["file"]
         return None
 
     async def warm(self) -> None:
@@ -108,16 +112,11 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
         if qtl:
             gs_path = self.resource_config["all_cs_qtl_file"]
             return self._cache_header("qtl_header", gs_path)
-        else:
-            # TODO configure this better
-            if "all_cs_file" in self.resource_config:
-                gs_path = self.resource_config["all_cs_file"]
-            elif "all_exome_file" in self.resource_config:
-                gs_path = self.resource_config["all_exome_file"]
-            else:
-                # no combined file available (e.g. IBD exome with per-phenotype files only)
-                return None
-            return self._cache_header("header", gs_path)
+        gs_path = self._combined_file()
+        if gs_path is None:
+            # no combined file available (e.g. IBD exome with per-phenotype files only)
+            return None
+        return self._cache_header("header", gs_path)
 
     async def stream_range(
         self, chr: list[int], start: list[int], end: list[int], chunk_size: int

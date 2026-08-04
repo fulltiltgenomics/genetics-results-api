@@ -3,6 +3,7 @@ import logging
 import multiprocessing
 import threading
 import time
+import zlib
 import asyncio
 import aiohttp
 import aiohttp.client_exceptions
@@ -149,6 +150,30 @@ def ensure_gcs_token() -> None:
         _gcs_credentials.refresh(Request())
         os.environ["GCS_OAUTH_TOKEN"] = _gcs_credentials.token
         logger.info(f"Token refreshed, new expiry: {_gcs_credentials.expiry}")
+
+
+class _MultiMemberGunzip:
+    """Incremental gunzip that spans concatenated gzip members.
+
+    bgzip output is a long run of small gzip members, so a single decompressobj
+    stops at the first one; each time it reports eof the leftover bytes start the
+    next member.
+    """
+
+    _WBITS = 47  # 32 (auto-detect header) + 15 (max window)
+
+    def __init__(self) -> None:
+        self._d = zlib.decompressobj(self._WBITS)
+
+    def feed(self, data: bytes) -> bytes:
+        out: list[bytes] = []
+        while data:
+            out.append(self._d.decompress(data))
+            if not self._d.eof:
+                break
+            data = self._d.unused_data
+            self._d = zlib.decompressobj(self._WBITS)
+        return b"".join(out)
 
 
 class GCloudTabixBase:
@@ -405,14 +430,19 @@ class GCloudTabixBase:
         self, blob_path: str, chunk_size: int
     ) -> AsyncGenerator[bytes, None]:
         """
-        Stream a file from GCloud Storage.
+        Stream a file from GCloud Storage as text.
+
+        Per-phenotype files are historically plain TSV, but the per-trait gene burden
+        files are bgzipped so the same objects can be tabix-queried for one gene.
+        A `.gz`/`.bgz` object is therefore decompressed on the way out — callers
+        (stream_phenotype, json_phenotype) all want text.
 
         Args:
             blob_path: Full gs:// path to the file
             chunk_size: Size of chunks to read
 
         Yields:
-            Chunks of file data as bytes
+            Chunks of decompressed file data as bytes
 
         Raises:
             NotFoundException: If file not found
@@ -422,6 +452,8 @@ class GCloudTabixBase:
         self._ensure_storage()
         headers = await self.storage._headers()
         url = blob_path.replace("gs://", "https://storage.googleapis.com/")
+        gunzip = _MultiMemberGunzip() if blob_path.endswith((".gz", ".bgz")) else None
+        first = True
         try:
             response = await self.session.get(url, headers=headers)
             async with response:
@@ -431,10 +463,16 @@ class GCloudTabixBase:
                 async for chunk in response.content.iter_chunked(chunk_size):
                     if not chunk:
                         break
-                    # remove leading '#' from first chunk if present
-                    yield (
-                        chunk.replace(b"#", b"", 1) if chunk.startswith(b"#") else chunk
-                    )
+                    if gunzip is not None:
+                        chunk = gunzip.feed(chunk)
+                        if not chunk:
+                            continue
+                    # remove the leading '#' of the header line
+                    if first:
+                        first = False
+                        if chunk.startswith(b"#"):
+                            chunk = chunk[1:]
+                    yield chunk
             logger.info(f"Streamed {blob_path} in {time.time() - start_time} seconds")
         except aiohttp.client_exceptions.ClientResponseError as e:
             logger.error(f"Error streaming {blob_path}: {e}")
