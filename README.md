@@ -20,9 +20,14 @@ uv sync
 ```
 
 Update the data paths in the profile modules under [app/config/](app/config/) and the dataset
-registry in [configs/datasets.yaml](configs/datasets.yaml) to point to your data files. The
+registry `configs/datasets.yaml` to point to your data files. The
 active profile is chosen with `CONFIG_PROFILE` (default `daly`) and the registry path with
 `DATASETS_CONFIG_PATH` (default `./configs/datasets.yaml`)
+
+`configs/datasets.yaml` is **not committed to this repo** — it is generated. The canonical
+file lives in the `genetics-results-suite` repo; create the local copy with
+`../genetics-results-suite/scripts/sync-datasets.sh`, or point `DATASETS_CONFIG_PATH` at
+your own. The server and the test suite both fail to start without it.
 
 ## Run the server
 

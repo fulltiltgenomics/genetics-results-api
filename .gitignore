@@ -181,3 +181,6 @@ cython_debug/
 .dolt/
 *.db
 .beads-credential-key
+
+# synced from ../genetics-results-suite (canonical source); run scripts/sync-datasets.sh
+configs/datasets.yaml
