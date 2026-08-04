@@ -21,7 +21,7 @@ exome_data_files = [
         "resource": "ibd_exome_2026",
         "data_source": "gcloud",
         "example_pheno_or_study": "IBD",
-        "gencode_version": 43,
+        "gencode_version": 45,
         "exome": {
             "version": "2026",
             "prefix": "gs://finngen-commons/results_api_data/exome_results/ibd/IBD_exome_",

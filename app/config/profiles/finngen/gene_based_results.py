@@ -53,7 +53,7 @@ gene_based_data_files = [
         "resource": "ibd",
         "data_source": "gcloud",
         "example_pheno_or_study": "inflammatory_bowel_disease",
-        "gencode_version": 43,
+        "gencode_version": 45,
         "gene_based": {
             "file": "gs://finngen-commons/results_api_data/exome_results/ibd/IBD_exome_IBD_gene_results.munged.tsv.gz",
             "prefix": "gs://finngen-commons/results_api_data/exome_results/ibd/gene_burden_per_trait/",
@@ -66,7 +66,7 @@ gene_based_data_files = [
         "resource": "ibd",
         "data_source": "gcloud",
         "example_pheno_or_study": "ulcerative_colitis",
-        "gencode_version": 43,
+        "gencode_version": 45,
         "gene_based": {
             "file": "gs://finngen-commons/results_api_data/exome_results/ibd/IBD_exome_UC_gene_results.munged.tsv.gz",
             "prefix": "gs://finngen-commons/results_api_data/exome_results/ibd/gene_burden_per_trait/",
@@ -79,7 +79,7 @@ gene_based_data_files = [
         "resource": "ibd",
         "data_source": "gcloud",
         "example_pheno_or_study": "crohns_disease",
-        "gencode_version": 43,
+        "gencode_version": 45,
         "gene_based": {
             "file": "gs://finngen-commons/results_api_data/exome_results/ibd/IBD_exome_CD_gene_results.munged.tsv.gz",
             "prefix": "gs://finngen-commons/results_api_data/exome_results/ibd/gene_burden_per_trait/",
