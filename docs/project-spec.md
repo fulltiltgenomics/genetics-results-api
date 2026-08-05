@@ -69,7 +69,7 @@ run_server.py       # server entry point
 | resources | Available resource listing |
 | datasets | Dataset configuration (`GET /datasets`; `GET /dataset_display_names` returns display-name overrides keyed by the raw `dataset` column value) |
 | rsid | rsID to variant mapping |
-| summary-stats | GWAS summary statistics |
+| summary-stats | GWAS summary statistics. `GET\|POST /summary_stats/{resource}/{data_type}` query one or more variants across one or more phenotypes; `GET /summary_stats_by_range/{resource}/{data_type}/{region}` returns every record in a genomic range (`chr:start-end`, X accepted) for the given phenotypes. All three take `phenotypes=<comma-separated>` and `format=tsv\|json`, fan out one tabix query per (phenotype, data file), and heap-merge the results into a single union-of-columns schema prefixed with `resource`/`version`/`phenotype`. `phenotypes` is required on the range endpoint too: summary stats live in per-phenotype files, so unlike `credible_sets_by_region` there is no combined file spanning a region across traits. The range is validated by the shared `RequestUtil.validate_range`, so the same `max_range_size_stream` (10Mb TSV) / `max_range_size_json` (5Mb JSON) caps apply, and every phenotype multiplies the row count within them |
 | variant-annotation | Variant annotation data (FinnGen, etc.) |
 | variant-sets | Named curated variant lists from `variant_set_files` (`GET /variant_sets` lists the names, `GET /variant_sets/{name}` expands one into `chr:pos:ref:alt` ids; unparseable lines are skipped rather than served) |
 

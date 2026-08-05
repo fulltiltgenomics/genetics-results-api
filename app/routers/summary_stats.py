@@ -2,15 +2,16 @@ import time
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel
 
 from app.config.summary_stats import get_available_resources_and_types
 from app.core.exceptions import NotFoundException, ParseException
 from app.core.responses import range_response
 from app.core.variant import Variant
-from app.dependencies import get_sumstats_data_access
+from app.dependencies import get_request_util, get_sumstats_data_access
 from app.services.gcloud_tabix_base import validate_path_component
+from app.services.request_util import RequestUtil
 from app.services.sumstats_data_access import SumstatsDataAccess
 import app.config.common as config_common
 
@@ -116,6 +117,80 @@ async def get_summary_stats(
             data_type,
             phenotype_list,
             variant_list,
+            config_common.read_chunk_size,
+            config_common.response_chunk_size,
+        )
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    header_schema = _build_sumstats_header_schema(resource, data_type)
+    return await range_response(str(request.url), stream, header_schema, format, start_time)
+
+
+@router.get(
+    "/summary_stats_by_range/{resource}/{data_type}/{region}",
+    summary="Get summary statistics for a genomic range and phenotype(s)",
+    responses={
+        200: {"description": "Successful response"},
+        401: {"description": "Not authenticated"},
+        404: {"description": "Resource, data type, or phenotype not found"},
+        422: {"description": "Invalid region or parameters"},
+    },
+)
+async def get_summary_stats_by_range(
+    request: Request,
+    resource: str,
+    data_type: str,
+    region: str = Path(
+        ..., description="Chromosome region", examples=["1:1000000-1000100"]
+    ),
+    phenotypes: str = Query(
+        ..., description="Comma-separated phenotype codes, e.g. T2D,BMI"
+    ),
+    format: Literal["tsv", "json"] = Query(default="tsv", description="Response format"),
+    request_util: RequestUtil = Depends(get_request_util),
+    sumstats_access: SumstatsDataAccess = Depends(get_sumstats_data_access),
+) -> Response:
+    """
+    Get every summary stat record in a genomic range for the given phenotype(s).
+
+    Unlike the credible-set range endpoints, phenotypes are required: summary stats live in
+    per-phenotype files, so there is no single file spanning a region across all traits.
+    Range size is capped by config.common.max_range_size_stream/max_range_size_json.
+    """
+    start_time = time.time()
+
+    available = get_available_resources_and_types()
+    if (resource, data_type) not in available:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No summary stats for resource '{resource}', data type '{data_type}'. "
+            f"Available: {[f'{r}/{dt}' for r, dt in available]}",
+        )
+
+    try:
+        (chr, start, end) = request_util.validate_range(region, format)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    phenotype_list = [p.strip() for p in phenotypes.split(",") if p.strip()]
+    if not phenotype_list:
+        raise HTTPException(status_code=422, detail="At least one phenotype is required")
+
+    try:
+        for p in phenotype_list:
+            validate_path_component(p)
+    except ParseException as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    try:
+        stream = await sumstats_access.stream_sumstats_range(
+            resource,
+            data_type,
+            phenotype_list,
+            chr,
+            start,
+            end,
             config_common.read_chunk_size,
             config_common.response_chunk_size,
         )

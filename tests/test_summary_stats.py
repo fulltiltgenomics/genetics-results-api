@@ -294,6 +294,257 @@ class TestSummaryStatsGet:
             assert item["resource"] == resource
 
 
+class TestSummaryStatsByRange:
+    """Test GET /api/v1/summary_stats_by_range/{resource}/{data_type}/{region} endpoint."""
+
+    @pytest.mark.parametrize("format", ["tsv", "json"])
+    def test_range_formats(
+        self, server_url, test_region, sumstats_example_phenotypes, format
+    ):
+        """Test range query with both TSV and JSON formats."""
+        if not sumstats_example_phenotypes:
+            pytest.skip("No summary stats example phenotypes available")
+
+        resource, data_type, phenotype = sumstats_example_phenotypes[0]
+
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/{test_region}",
+            params={"phenotypes": phenotype, "format": format},
+            timeout=30,
+        )
+
+        assert response.status_code == 200, response.text[:200]
+
+        if format == "tsv":
+            assert "text/tab-separated-values" in response.headers.get("content-type", "")
+            validation = validate_tsv_response(response.text, min_data_lines=1)
+            assert validation["valid"], f"TSV validation failed: {validation['errors']}"
+            header = validation["header"]
+            for col in ("resource", "version", "phenotype", "chr", "pos", "ref", "alt"):
+                assert col in header, f"missing column {col} in TSV header"
+        else:
+            assert "application/json" in response.headers.get("content-type", "")
+            data = response.json()
+            validation = validate_json_response(data, min_items=1)
+            assert validation["valid"], f"JSON validation failed: {validation['errors']}"
+
+    def test_range_rows_within_region(
+        self, server_url, test_region, sumstats_example_phenotypes
+    ):
+        """Every returned row must fall inside the queried region."""
+        if not sumstats_example_phenotypes:
+            pytest.skip("No summary stats example phenotypes available")
+
+        resource, data_type, phenotype = sumstats_example_phenotypes[0]
+        chrom, start_end = test_region.split(":")
+        start, end = (int(x) for x in start_end.split("-"))
+
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/{test_region}",
+            params={"phenotypes": phenotype, "format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) > 0
+        for item in data:
+            assert item["chr"] == int(chrom)
+            assert start <= item["pos"] <= end
+            assert item["resource"] == resource
+            assert item["phenotype"] == phenotype
+
+    def test_range_multiple_phenotypes(
+        self, server_url, test_region, sumstats_example_phenotypes
+    ):
+        """A multi-phenotype range query returns rows for each phenotype."""
+        if not sumstats_example_phenotypes:
+            pytest.skip("No summary stats example phenotypes available")
+
+        resource, data_type, phenotype = sumstats_example_phenotypes[0]
+        # a second phenotype known to exist for the same resource/data_type
+        if resource != "finngen":
+            pytest.skip(f"No known second phenotype for {resource}/{data_type}")
+        second = "T2D" if phenotype != "T2D" else "AUTOIMMUNE"
+
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/{test_region}",
+            params={"phenotypes": f"{phenotype},{second}", "format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert {item["phenotype"] for item in data} == {phenotype, second}
+
+    def test_range_matches_variant_query(
+        self, server_url, test_region, sumstats_example_phenotypes
+    ):
+        """A variant inside the range returns the same row from both endpoints."""
+        if not sumstats_example_phenotypes:
+            pytest.skip("No summary stats example phenotypes available")
+
+        resource, data_type, phenotype = sumstats_example_phenotypes[0]
+
+        range_response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/{test_region}",
+            params={"phenotypes": phenotype, "format": "json"},
+            timeout=30,
+        )
+        assert range_response.status_code == 200
+        rows = range_response.json()
+        if not rows:
+            pytest.skip("No rows in the test region")
+
+        row = rows[0]
+        variant = f"{row['chr']}-{row['pos']}-{row['ref']}-{row['alt']}"
+
+        variant_response = requests.get(
+            f"{server_url}/api/v1/summary_stats/{resource}/{data_type}",
+            params={"variants": variant, "phenotypes": phenotype, "format": "json"},
+            timeout=30,
+        )
+        assert variant_response.status_code == 200
+        assert row in variant_response.json()
+
+    def test_range_single_base_pair(self, server_url, sumstats_example_phenotypes):
+        """A single-base-pair range is a valid query."""
+        if not sumstats_example_phenotypes:
+            pytest.skip("No summary stats example phenotypes available")
+
+        resource, data_type, phenotype = sumstats_example_phenotypes[0]
+
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/1:1000018-1000018",
+            params={"phenotypes": phenotype, "format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        for item in response.json():
+            assert item["pos"] == 1000018
+
+    def test_range_x_chromosome(self, server_url, sumstats_example_phenotypes):
+        """X is accepted as a chromosome (mapped to 23 like the other range endpoints)."""
+        if not sumstats_example_phenotypes:
+            pytest.skip("No summary stats example phenotypes available")
+
+        resource, data_type, phenotype = sumstats_example_phenotypes[0]
+
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/X:5000000-5010000",
+            params={"phenotypes": phenotype, "format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+
+    def test_range_tsv_column_consistency(
+        self, server_url, test_region, sumstats_example_phenotypes
+    ):
+        """All TSV rows have the same number of columns as the header."""
+        if not sumstats_example_phenotypes:
+            pytest.skip("No summary stats example phenotypes available")
+
+        resource, data_type, phenotype = sumstats_example_phenotypes[0]
+
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/{test_region}",
+            params={"phenotypes": phenotype, "format": "tsv"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        validation = validate_tsv_response(response.text, min_data_lines=1)
+        assert validation["consistent_columns"], (
+            f"Column counts are inconsistent: {validation['errors']}"
+        )
+
+
+class TestSummaryStatsByRangeErrorHandling:
+    """Test error handling for the summary stats range endpoint."""
+
+    def test_range_invalid_region(self, server_url, invalid_region):
+        """Test that an invalid region format returns 422."""
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/finngen/gwas/{invalid_region}",
+            params={"phenotypes": "AUTOIMMUNE", "format": "json"},
+            timeout=10,
+        )
+
+        assert response.status_code == 422
+
+    def test_range_start_after_end(self, server_url):
+        """Test that a reversed range returns 422."""
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/finngen/gwas/1:2000000-1000000",
+            params={"phenotypes": "AUTOIMMUNE", "format": "json"},
+            timeout=10,
+        )
+
+        assert response.status_code == 422
+
+    def test_range_too_large(self, server_url):
+        """Test that a range exceeding the JSON size limit returns 422."""
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/finngen/gwas/1:1000000-9000000",
+            params={"phenotypes": "AUTOIMMUNE", "format": "json"},
+            timeout=10,
+        )
+
+        assert response.status_code == 422
+
+    def test_range_invalid_resource(self, server_url, test_region):
+        """Test that an invalid resource returns 404."""
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/nonexistent_resource/gwas/{test_region}",
+            params={"phenotypes": "T2D", "format": "json"},
+            timeout=10,
+        )
+
+        assert response.status_code == 404
+
+    def test_range_invalid_data_type(self, server_url, test_region):
+        """Test that an invalid data type returns 404."""
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/finngen/nonexistent_type/{test_region}",
+            params={"phenotypes": "T2D", "format": "json"},
+            timeout=10,
+        )
+
+        assert response.status_code == 404
+
+    def test_range_missing_phenotypes_param(self, server_url, test_region):
+        """Test that a missing phenotypes parameter returns 422."""
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/finngen/gwas/{test_region}",
+            params={"format": "json"},
+            timeout=10,
+        )
+
+        assert response.status_code == 422
+
+    def test_range_nonexistent_phenotype(self, server_url, test_region):
+        """Test that a non-existent phenotype returns 404."""
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/finngen/gwas/{test_region}",
+            params={"phenotypes": "NONEXISTENT_PHENOTYPE_12345", "format": "json"},
+            timeout=10,
+        )
+
+        assert response.status_code == 404
+
+    def test_range_phenotype_path_traversal(self, server_url, test_region):
+        """Test that a phenotype with path separators is rejected with 422."""
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_range/finngen/gwas/{test_region}",
+            params={"phenotypes": "../../etc/passwd", "format": "json"},
+            timeout=10,
+        )
+
+        assert response.status_code == 422
+
+
 class TestSummaryStatsPqtlMeta:
     """Test the finngen_ukbb pQTL 3-way meta dataset (finngen_ukbb_pqtl)."""
 

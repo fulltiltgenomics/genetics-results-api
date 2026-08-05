@@ -82,6 +82,64 @@ class SumstatsDataAccess(GCloudTabixBase):
         Launches parallel tabix queries across phenotypes and data files,
         then heap-merges all streams in sorted order.
         """
+        variant_set = set(variants) if len(variants) > 1 else None
+        single_variant = variants[0] if len(variants) == 1 else None
+        variant_filter = variant_set if variant_set else single_variant
+
+        positions = [v.pos for v in variants]
+        return await self._stream_regions(
+            resource,
+            data_type,
+            phenotypes,
+            [v.chr for v in variants],
+            positions,
+            positions,
+            variant_filter,
+            in_chunk_size,
+            out_chunk_size,
+        )
+
+    async def stream_sumstats_range(
+        self,
+        resource: str,
+        data_type: str,
+        phenotypes: list[str],
+        chr: int,
+        start: int,
+        end: int,
+        in_chunk_size: int,
+        out_chunk_size: int,
+    ) -> AsyncGenerator[bytes, None]:
+        """Query summary stats for every variant in a genomic range across phenotype(s).
+
+        Same fan-out and merge as stream_sumstats, but the tabix result is returned
+        as-is (no per-variant filtering) since every record in the range qualifies.
+        """
+        return await self._stream_regions(
+            resource,
+            data_type,
+            phenotypes,
+            [chr],
+            [start],
+            [end],
+            None,
+            in_chunk_size,
+            out_chunk_size,
+        )
+
+    async def _stream_regions(
+        self,
+        resource: str,
+        data_type: str,
+        phenotypes: list[str],
+        chrs: list[int],
+        starts: list[int],
+        ends: list[int],
+        variant_filter: "Variant | set[Variant] | None",
+        in_chunk_size: int,
+        out_chunk_size: int,
+    ) -> AsyncGenerator[bytes, None]:
+        """Fan a region query out over every phenotype file and heap-merge the results."""
         self._ensure_initialized()
 
         data_file_configs = get_data_files_by_resource_and_type(resource, data_type)
@@ -89,13 +147,6 @@ class SumstatsDataAccess(GCloudTabixBase):
             raise NotFoundException(
                 f"No summary stats configured for resource '{resource}', data type '{data_type}'"
             )
-
-        variant_set = set(variants) if len(variants) > 1 else None
-        single_variant = variants[0] if len(variants) == 1 else None
-        variant_filter = variant_set if variant_set else single_variant
-
-        chrs = [v.chr for v in variants]
-        positions = [v.pos for v in variants]
 
         # phase 1: find every (config, phenotype) that has a file, fetching each
         # file's header. Headers determine the shared output schema, which must be
@@ -149,7 +200,7 @@ class SumstatsDataAccess(GCloudTabixBase):
         for df_config, phenotype, gs_path, file_header in contributions:
             try:
                 raw_stream = await self._stream_range(
-                    gs_path, chrs, positions, positions, in_chunk_size
+                    gs_path, chrs, starts, ends, in_chunk_size
                 )
             except Exception as e:
                 logger.warning(
