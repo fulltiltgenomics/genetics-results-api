@@ -294,8 +294,8 @@ class TestSummaryStatsGet:
             assert item["resource"] == resource
 
 
-class TestSummaryStatsByRange:
-    """Test GET /api/v1/summary_stats_by_range/{resource}/{data_type}/{region} endpoint."""
+class TestSummaryStatsByRegion:
+    """Test GET /api/v1/summary_stats_by_region/{resource}/{data_type}/{region} endpoint."""
 
     @pytest.mark.parametrize("format", ["tsv", "json"])
     def test_range_formats(
@@ -308,7 +308,7 @@ class TestSummaryStatsByRange:
         resource, data_type, phenotype = sumstats_example_phenotypes[0]
 
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/{test_region}",
+            f"{server_url}/api/v1/summary_stats_by_region/{resource}/{data_type}/{test_region}",
             params={"phenotypes": phenotype, "format": format},
             timeout=30,
         )
@@ -340,7 +340,7 @@ class TestSummaryStatsByRange:
         start, end = (int(x) for x in start_end.split("-"))
 
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/{test_region}",
+            f"{server_url}/api/v1/summary_stats_by_region/{resource}/{data_type}/{test_region}",
             params={"phenotypes": phenotype, "format": "json"},
             timeout=30,
         )
@@ -368,7 +368,7 @@ class TestSummaryStatsByRange:
         second = "T2D" if phenotype != "T2D" else "AUTOIMMUNE"
 
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/{test_region}",
+            f"{server_url}/api/v1/summary_stats_by_region/{resource}/{data_type}/{test_region}",
             params={"phenotypes": f"{phenotype},{second}", "format": "json"},
             timeout=30,
         )
@@ -387,7 +387,7 @@ class TestSummaryStatsByRange:
         resource, data_type, phenotype = sumstats_example_phenotypes[0]
 
         range_response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/{test_region}",
+            f"{server_url}/api/v1/summary_stats_by_region/{resource}/{data_type}/{test_region}",
             params={"phenotypes": phenotype, "format": "json"},
             timeout=30,
         )
@@ -415,7 +415,7 @@ class TestSummaryStatsByRange:
         resource, data_type, phenotype = sumstats_example_phenotypes[0]
 
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/1:1000018-1000018",
+            f"{server_url}/api/v1/summary_stats_by_region/{resource}/{data_type}/1:1000018-1000018",
             params={"phenotypes": phenotype, "format": "json"},
             timeout=30,
         )
@@ -432,7 +432,7 @@ class TestSummaryStatsByRange:
         resource, data_type, phenotype = sumstats_example_phenotypes[0]
 
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/X:5000000-5010000",
+            f"{server_url}/api/v1/summary_stats_by_region/{resource}/{data_type}/X:5000000-5010000",
             params={"phenotypes": phenotype, "format": "json"},
             timeout=30,
         )
@@ -449,7 +449,7 @@ class TestSummaryStatsByRange:
         resource, data_type, phenotype = sumstats_example_phenotypes[0]
 
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/{resource}/{data_type}/{test_region}",
+            f"{server_url}/api/v1/summary_stats_by_region/{resource}/{data_type}/{test_region}",
             params={"phenotypes": phenotype, "format": "tsv"},
             timeout=30,
         )
@@ -461,13 +461,13 @@ class TestSummaryStatsByRange:
         )
 
 
-class TestSummaryStatsByRangeErrorHandling:
+class TestSummaryStatsByRegionErrorHandling:
     """Test error handling for the summary stats range endpoint."""
 
     def test_range_invalid_region(self, server_url, invalid_region):
         """Test that an invalid region format returns 422."""
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/finngen/gwas/{invalid_region}",
+            f"{server_url}/api/v1/summary_stats_by_region/finngen/gwas/{invalid_region}",
             params={"phenotypes": "AUTOIMMUNE", "format": "json"},
             timeout=10,
         )
@@ -477,7 +477,7 @@ class TestSummaryStatsByRangeErrorHandling:
     def test_range_start_after_end(self, server_url):
         """Test that a reversed range returns 422."""
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/finngen/gwas/1:2000000-1000000",
+            f"{server_url}/api/v1/summary_stats_by_region/finngen/gwas/1:2000000-1000000",
             params={"phenotypes": "AUTOIMMUNE", "format": "json"},
             timeout=10,
         )
@@ -487,7 +487,7 @@ class TestSummaryStatsByRangeErrorHandling:
     def test_range_too_large(self, server_url):
         """Test that a range exceeding the JSON size limit returns 422."""
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/finngen/gwas/1:1000000-9000000",
+            f"{server_url}/api/v1/summary_stats_by_region/finngen/gwas/1:1000000-9000000",
             params={"phenotypes": "AUTOIMMUNE", "format": "json"},
             timeout=10,
         )
@@ -497,7 +497,7 @@ class TestSummaryStatsByRangeErrorHandling:
     def test_range_invalid_resource(self, server_url, test_region):
         """Test that an invalid resource returns 404."""
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/nonexistent_resource/gwas/{test_region}",
+            f"{server_url}/api/v1/summary_stats_by_region/nonexistent_resource/gwas/{test_region}",
             params={"phenotypes": "T2D", "format": "json"},
             timeout=10,
         )
@@ -507,7 +507,7 @@ class TestSummaryStatsByRangeErrorHandling:
     def test_range_invalid_data_type(self, server_url, test_region):
         """Test that an invalid data type returns 404."""
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/finngen/nonexistent_type/{test_region}",
+            f"{server_url}/api/v1/summary_stats_by_region/finngen/nonexistent_type/{test_region}",
             params={"phenotypes": "T2D", "format": "json"},
             timeout=10,
         )
@@ -517,7 +517,7 @@ class TestSummaryStatsByRangeErrorHandling:
     def test_range_missing_phenotypes_param(self, server_url, test_region):
         """Test that a missing phenotypes parameter returns 422."""
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/finngen/gwas/{test_region}",
+            f"{server_url}/api/v1/summary_stats_by_region/finngen/gwas/{test_region}",
             params={"format": "json"},
             timeout=10,
         )
@@ -527,7 +527,7 @@ class TestSummaryStatsByRangeErrorHandling:
     def test_range_nonexistent_phenotype(self, server_url, test_region):
         """Test that a non-existent phenotype returns 404."""
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/finngen/gwas/{test_region}",
+            f"{server_url}/api/v1/summary_stats_by_region/finngen/gwas/{test_region}",
             params={"phenotypes": "NONEXISTENT_PHENOTYPE_12345", "format": "json"},
             timeout=10,
         )
@@ -537,7 +537,7 @@ class TestSummaryStatsByRangeErrorHandling:
     def test_range_phenotype_path_traversal(self, server_url, test_region):
         """Test that a phenotype with path separators is rejected with 422."""
         response = requests.get(
-            f"{server_url}/api/v1/summary_stats_by_range/finngen/gwas/{test_region}",
+            f"{server_url}/api/v1/summary_stats_by_region/finngen/gwas/{test_region}",
             params={"phenotypes": "../../etc/passwd", "format": "json"},
             timeout=10,
         )

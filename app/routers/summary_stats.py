@@ -128,8 +128,8 @@ async def get_summary_stats(
 
 
 @router.get(
-    "/summary_stats_by_range/{resource}/{data_type}/{region}",
-    summary="Get summary statistics for a genomic range and phenotype(s)",
+    "/summary_stats_by_region/{resource}/{data_type}/{region}",
+    summary="Get summary statistics for a genomic region and phenotype(s)",
     responses={
         200: {"description": "Successful response"},
         401: {"description": "Not authenticated"},
@@ -137,7 +137,7 @@ async def get_summary_stats(
         422: {"description": "Invalid region or parameters"},
     },
 )
-async def get_summary_stats_by_range(
+async def get_summary_stats_by_region(
     request: Request,
     resource: str,
     data_type: str,
@@ -152,11 +152,11 @@ async def get_summary_stats_by_range(
     sumstats_access: SumstatsDataAccess = Depends(get_sumstats_data_access),
 ) -> Response:
     """
-    Get every summary stat record in a genomic range for the given phenotype(s).
+    Get every summary stat record in a genomic region for the given phenotype(s).
 
-    Unlike the credible-set range endpoints, phenotypes are required: summary stats live in
+    Unlike credible_sets_by_region, phenotypes are required: summary stats live in
     per-phenotype files, so there is no single file spanning a region across all traits.
-    Range size is capped by config.common.max_range_size_stream/max_range_size_json.
+    Region size is capped by config.common.max_range_size_stream/max_range_size_json.
     """
     start_time = time.time()
 
