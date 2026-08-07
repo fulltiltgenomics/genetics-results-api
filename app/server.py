@@ -26,6 +26,7 @@ from app.routers import (
     open_chromatin,
     variant_effect,
     mpra,
+    hla,
     exome_results,
     search,
     phenotype,
@@ -168,6 +169,7 @@ app.include_router(chromatin_peaks.router, prefix="/api/v1", tags=["chromatin-pe
 app.include_router(open_chromatin.router, prefix="/api/v1", tags=["open-chromatin"])
 app.include_router(variant_effect.router, prefix="/api/v1", tags=["variant-effect"])
 app.include_router(mpra.router, prefix="/api/v1", tags=["mpra"])
+app.include_router(hla.router, prefix="/api/v1", tags=["hla"])
 app.include_router(exome_results.router, prefix="/api/v1", tags=["exome-results"])
 app.include_router(phenotype.router, prefix="/api/v1", tags=["phenotype"])
 app.include_router(resources.router, prefix="/api/v1", tags=["resources"])

@@ -6,7 +6,11 @@ import aiohttp.client_exceptions
 from asyncstdlib.heapq import merge
 
 from app.config.summary_stats import get_data_files_by_resource_and_type
-from app.config.sort_keys import create_sort_key, SORT_CONFIG_SUMSTATS
+from app.config.sort_keys import (
+    create_sort_key,
+    SORT_CONFIG_HLA,
+    SORT_CONFIG_SUMSTATS,
+)
 from app.core.exceptions import NotFoundException
 from app.core.streams import (
     tsv_line_iterator_sumstats,
@@ -18,6 +22,11 @@ from app.core.variant import Variant
 from app.services.gcloud_tabix_base import GCloudTabixBase, validate_path_component
 
 logger = logging.getLogger(__name__)
+
+# Data types whose files do not carry the default chr/pos/ref/alt key. Merging streams
+# by a column the files lack would fail at create_sort_key, so the ordering columns are
+# selected per data_type; anything not listed here uses SORT_CONFIG_SUMSTATS.
+_SORT_CONFIG_BY_DATA_TYPE = {"hla": SORT_CONFIG_HLA}
 
 
 class SumstatsDataAccess(GCloudTabixBase):
@@ -127,6 +136,34 @@ class SumstatsDataAccess(GCloudTabixBase):
             out_chunk_size,
         )
 
+    async def stream_sumstats_positions(
+        self,
+        resource: str,
+        data_type: str,
+        phenotypes: list[str],
+        chr: int,
+        positions: list[int],
+        in_chunk_size: int,
+        out_chunk_size: int,
+    ) -> AsyncGenerator[bytes, None]:
+        """Query several exact positions on one chromosome across phenotype(s).
+
+        Used where the rows of interest sit at known discrete anchors rather than in a
+        contiguous interval (HLA gene anchors), so that selecting two of them does not
+        also drag in everything positioned between the two.
+        """
+        return await self._stream_regions(
+            resource,
+            data_type,
+            phenotypes,
+            [chr] * len(positions),
+            positions,
+            positions,
+            None,
+            in_chunk_size,
+            out_chunk_size,
+        )
+
     async def _stream_regions(
         self,
         resource: str,
@@ -226,7 +263,10 @@ class SumstatsDataAccess(GCloudTabixBase):
                 f"phenotypes {phenotypes}"
             )
 
-        sort_key_fn = create_sort_key(output_header, SORT_CONFIG_SUMSTATS)
+        sort_key_fn = create_sort_key(
+            output_header,
+            _SORT_CONFIG_BY_DATA_TYPE.get(data_type, SORT_CONFIG_SUMSTATS),
+        )
         merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
         header_line = b"\t".join(output_header) + b"\n"
 

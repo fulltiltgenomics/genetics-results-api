@@ -184,3 +184,13 @@ SORT_CONFIG_SUMSTATS = [
     ("ref", bytes),
     ("alt", bytes),
 ]
+
+# HLA files are read by the same per-phenotype sumstats machinery but carry no
+# ref/alt: the association unit is a classical allele, and every allele of a gene
+# shares that gene's anchor position, so `allele` is what orders rows within a
+# position when several phenotype streams are merged.
+SORT_CONFIG_HLA = [
+    ("chr", int),
+    ("pos", int),
+    ("allele", bytes),
+]

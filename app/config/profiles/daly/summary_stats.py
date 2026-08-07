@@ -639,4 +639,30 @@ data_files = [
             "vartype": "vartype",
         },
     },
+    {
+        "id": "finngen_hla_sumstats",
+        "dataset_id": "finngen_hla",
+        "resource": "finngen",
+        "data_source": "gcloud",
+        # one file per phenotype, ~187 rows each: every imputed classical HLA allele
+        # tested against that endpoint. Read through the /hla endpoints rather than
+        # /summary_stats — the association unit is an allele, not a chrom_pos_ref_alt
+        # variant, so the by-variant sumstats path can never match a row here.
+        "prefix": "gs://daly-genetics-results/hla/finngen_hla/summary_stats/",
+        "suffix": ".tsv.gz",
+        "column_mapping": {
+            "chrom": "chr",
+            "pos": "pos",
+            "gene": "gene",
+            "allele": "allele",
+            "pval": "pval",
+            "mlogp": "mlog10p",
+            "beta": "beta",
+            "sebeta": "se",
+            "af_alt": "af",
+            "af_alt_cases": "af_cases",
+            "af_alt_controls": "af_controls",
+            "info": "info",
+        },
+    },
 ]
