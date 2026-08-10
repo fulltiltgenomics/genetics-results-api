@@ -16,6 +16,12 @@ EXTRA_LOG_FIELDS = [
     "http_method",
     "status_code",
     "duration_ms",
+    # sandbox execution attribution (app/core/auth.py's "sandbox request authorized" line).
+    # Without these three names the formatter's string-message branch drops the whole `extra=`,
+    # so nothing of that line reaches jsonPayload and the sink cannot answer "which execution".
+    "sub",
+    "sid",
+    "jti",
 ]
 
 

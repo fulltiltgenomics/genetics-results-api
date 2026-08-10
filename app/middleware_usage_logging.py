@@ -96,18 +96,25 @@ class UsageLoggingMiddleware:
             query_string = scope.get("query_string", b"").decode("utf-8", errors="ignore")
             full_path = f"{path}?{query_string}" if query_string else path
 
+            entry = {
+                "message": "endpoint access",
+                "log_type": "endpoint_access",
+                "log_source": config.log_source,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "user_email": user_email,
+                "endpoint_path": endpoint_template,
+                "full_path": full_path,  # included in stdout, stripped for Cloud Logging
+                "http_method": method,
+                "status_code": status_code,
+                "duration_ms": round(duration_ms, 2),
+            }
+
+            # a sandbox execution carries the conversation and the execution id, which is what
+            # makes "what did that script actually read?" answerable across the three services
+            principal = scope.get("state", {}).get("sandbox_principal")
+            if principal is not None:
+                entry["sid"] = principal.session_id
+                entry["jti"] = principal.execution_id
+
             # log as dict for Cloud Logging to parse as jsonPayload
-            logger.info(
-                {
-                    "message": "endpoint access",
-                    "log_type": "endpoint_access",
-                    "log_source": config.log_source,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "user_email": user_email,
-                    "endpoint_path": endpoint_template,
-                    "full_path": full_path,  # included in stdout, stripped for Cloud Logging
-                    "http_method": method,
-                    "status_code": status_code,
-                    "duration_ms": round(duration_ms, 2),
-                }
-            )
+            logger.info(entry)

@@ -37,6 +37,17 @@ internal_api_secret = os.environ.get("INTERNAL_API_SECRET", "")
 # chat backend URL for user token validation (optional, empty = disabled)
 chat_backend_url = os.environ.get("CHAT_BACKEND_URL", "")
 
+# signing key for the per-execution sandbox tokens (docs/code-execution-security.md §4 in
+# genetics-results-suite). Deliberately NOT internal_api_secret: separate key, separate blast
+# radius. Unset means every sandbox-shaped bearer is rejected — never accepted with a warning.
+sandbox_token_signing_key = os.environ.get("SANDBOX_TOKEN_SIGNING_KEY", "")
+
+# true once the sandbox Deployment exists. A separate required input rather than a derivation
+# from the signing key: with neither secret set, a sandbox script that simply omits the
+# Authorization header would be served as an unauthenticated caller. When this is true and
+# either secret is missing, the service refuses to start (app/core/sandbox_token.py).
+sandbox_enabled = os.environ.get("SANDBOX_ENABLED", "").strip().lower() in ("1", "true", "yes")
+
 # bearer token auth: allowed email domains and specific emails
 allowed_email_domains = {
     d.strip() for d in os.environ.get("ALLOWED_EMAIL_DOMAINS", "finngen.fi").split(",") if d.strip()

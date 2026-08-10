@@ -12,6 +12,7 @@ import threading
 from fastapi import HTTPException, Request
 
 import app.config.common as config
+from app.core import sandbox_token
 
 logger = logging.getLogger(__name__)
 
@@ -118,10 +119,33 @@ def _validate_user_api_token(token: str) -> str | None:
     return None
 
 
+def get_sandbox_principal(request: Request) -> sandbox_token.SandboxPrincipal | None:
+    """Resolve a sandbox execution token, or None when the bearer is not sandbox-shaped.
+
+    Sits ahead of every other credential check. A sandbox-shaped bearer (JOSE ``alg: HS256``)
+    is validated *only* as a sandbox token: never compared against the shared secret, never
+    passed to ``verify_oauth2_token`` — where an unset ``GOOGLE_TOKEN_AUDIENCE`` degrades into
+    a warning-and-continue — and never allowed to fall through to the identity header.
+    Discrimination is on ``alg`` rather than on dots because Google Identity Tokens are
+    three-segment JWTs too, and routing those here would 401 every one of them.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header[7:]
+    if not sandbox_token.is_sandbox_shaped(token):
+        return None
+    try:
+        return sandbox_token.verify_sandbox_token(token)
+    except sandbox_token.SandboxTokenError as exc:
+        logger.warning(f"sandbox token rejected: {exc}")
+        raise HTTPException(status_code=401, detail="Invalid or expired token") from None
+
+
 def get_bearer_token_user(request: Request) -> str | None:
     """Validate a bearer token from the Authorization header.
 
-    Checks in order: shared internal secret, then routes by format —
+    Checks in order: sandbox execution token, shared internal secret, then routes by format —
     JWTs (contain dots) go to Google validation, others to user token validation.
     Returns user identity if valid, None if no bearer token present.
     Raises HTTPException(401/403) if token is present but invalid.
@@ -131,6 +155,18 @@ def get_bearer_token_user(request: Request) -> str | None:
         return None
 
     token = auth_header[7:]
+
+    # sandbox execution token — before the shared-secret comparison, so a sandbox-shaped
+    # bearer can never degrade into "is this string equal to INTERNAL_API_SECRET"
+    principal = get_sandbox_principal(request)
+    if principal is not None:
+        request.state.sandbox_principal = principal
+        logger.info(
+            "sandbox request authorized",
+            extra={"sub": principal.user, "sid": principal.session_id,
+                   "jti": principal.execution_id},
+        )
+        return principal.identity
 
     # check shared secret for internal service-to-service auth
     if is_internal_caller(auth_header):
@@ -184,6 +220,11 @@ def get_verified_user(request: Request) -> str | None:
 
     Precedence, in the order decided here:
 
+    0. **sandbox execution token** (JOSE ``alg: HS256``) -> ``sandbox:<user>``, or a hard 401.
+       Ahead of everything else because it must never be compared against the shared secret
+       nor reach the Google validator, and because a sandbox caller holds no other credential:
+       it cannot present the internal marker, so its identity header (if it sets one) is
+       already discarded by case 5. Non-HS256 bearers are untouched by this branch.
     1. **internal marker + allow-listed identity header** -> that email. The marker only says
        "an in-cluster proxy sent this"; when that proxy also asserts *whose* request it is
        relaying, the asserted person is the caller. Checking the bearer first would collapse
@@ -202,6 +243,11 @@ def get_verified_user(request: Request) -> str | None:
        the header is settable by anything with network reach to port 4000.
     """
     auth_header = request.headers.get("Authorization")
+    sandbox = get_sandbox_principal(request)  # case 0, raises 401 on an invalid HS256 bearer
+    if sandbox is not None:
+        request.state.sandbox_principal = sandbox
+        return sandbox.identity
+
     if is_internal_caller(auth_header):
         # cases 1, 2 and 3 — an asserted identity, once present, decides the outcome either way
         if request.headers.get("X-Goog-Authenticated-User-Email"):

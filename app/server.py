@@ -10,6 +10,7 @@ from app.core.query_params import reject_unknown_query_params
 from app.middleware import setup_middleware
 from app.services import config_util
 from app.core.logging_config import setup_logging
+from app.core.sandbox_token import require_sandbox_config
 from app.core.service_container import container
 from app.routers import (
     auth,
@@ -40,6 +41,9 @@ from app.routers import (
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+# refuses to start rather than warn when the sandbox is deployed and either secret is missing
+require_sandbox_config()
 
 
 async def _smoke_query_range():
