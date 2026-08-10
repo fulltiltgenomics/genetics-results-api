@@ -23,13 +23,26 @@ def _should_log_path(path: str) -> bool:
 
 
 def _extract_user_from_header(scope: Scope) -> Optional[str]:
-    """Extract user email from the X-Goog-Authenticated-User-Email header (set by IAP or oauth2-proxy)."""
+    """Extract user email from the X-Goog-Authenticated-User-Email header (set by IAP or oauth2-proxy).
+
+    Identical rule to app.core.auth.get_authenticated_user: the header is believed only when the
+    caller presented the internal secret *and* the asserted address is allow-listed. Otherwise
+    any pod that can reach this service could pick whose name lands in the endpoint_access log,
+    and an identity the auth path refused would still be attributed a request here.
+    """
+    from app.core.auth import _email_allowed, is_internal_caller
+
     headers = dict(scope.get("headers", []))
     iap_email = headers.get(b"x-goog-authenticated-user-email", b"").decode("utf-8", errors="ignore")
     if not iap_email:
         return None
+    auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
+    if not is_internal_caller(auth_header):
+        return None
     # header format: "accounts.google.com:user@domain.com"
-    return iap_email.split(":")[-1] if ":" in iap_email else iap_email
+    email = iap_email.split(":")[-1] if ":" in iap_email else iap_email
+    # normalized exactly as get_authenticated_user does, so one person is one identity in the log
+    return email.strip().lower() if _email_allowed(email) else None
 
 
 class UsageLoggingMiddleware:
