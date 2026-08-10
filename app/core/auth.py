@@ -243,7 +243,11 @@ def get_verified_user(request: Request) -> str | None:
        the header is settable by anything with network reach to port 4000.
     """
     auth_header = request.headers.get("Authorization")
-    sandbox = get_sandbox_principal(request)  # case 0, raises 401 on an invalid HS256 bearer
+    # `auth_required` resolves the sandbox principal before it calls this, so reuse its result:
+    # decoding and verifying the HS256 signature twice per request buys nothing
+    sandbox = getattr(request.state, "sandbox_principal", None)
+    if sandbox is None:
+        sandbox = get_sandbox_principal(request)  # case 0, raises 401 on an invalid HS256 bearer
     if sandbox is not None:
         request.state.sandbox_principal = sandbox
         return sandbox.identity

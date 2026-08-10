@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from fastapi import HTTPException, Request
 
 import app.config.common as config
-from app.core.auth import get_verified_user
+from app.core.auth import get_sandbox_principal, get_verified_user
 from app.core.service_container import container
 from app.services.gcloud_tabix_base import ensure_gcs_token  # noqa: F401 - re-exported for router dependencies
 
@@ -45,6 +45,15 @@ def is_public_endpoint(request: Request) -> bool:
 
 
 async def auth_required(request: Request) -> str | None:
+    # Resolved ahead of both short circuits below, because the response caps in
+    # app/core/limits.py key on it: a script must not be able to shed the tight limits by
+    # picking a route that needs no credential, or by running against a REQUIRE_AUTH=false
+    # deployment. A sandbox-shaped bearer that does not validate still raises 401 here, which
+    # is the same answer it already gets on every authenticated route.
+    sandbox = get_sandbox_principal(request)
+    if sandbox is not None:
+        request.state.sandbox_principal = sandbox
+
     if not config.require_auth:
         return None
     if is_public_endpoint(request):
