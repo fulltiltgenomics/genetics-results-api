@@ -72,7 +72,7 @@ not just the docs here — this repo's own docs cannot detect that class of drif
    - `app/services/` - Data access and business logic
    - `app/core/` - Shared utilities (auth, caching, logging, etc.)
    - `app/config/` - Resource configuration files
-   - `tests/` - Integration tests (run against a live server)
+   - `tests/` - Two lanes, assigned automatically by fixture: `integration` (takes `server_url`, hits real data over HTTP against the in-process app or a `--server-url` deployment) and `offline` (no server, no network, no credentials)
    - `scripts/` - Utility scripts
    - `docs/` - Project documentation
 2. Code should be self-descriptive
@@ -89,7 +89,7 @@ not just the docs here — this repo's own docs cannot detect that class of drif
 2. Data access uses tabix-indexed files on Google Cloud Storage via htslib
 3. Configuration-driven: resources/datasets defined in `app/config/` modules
 4. Authentication via JWT tokens with public endpoint decorator `@is_public`
-5. Tests are integration tests run against a live server (`pytest --server-url <url>`)
+5. Most tests are integration tests driven over HTTP; `pytest` boots the app in-process on a free port, `pytest --server-url <url>` targets a running deployment instead
 
 
 # Running
@@ -97,7 +97,7 @@ not just the docs here — this repo's own docs cannot detect that class of drif
 1. Python 3.13 with `uv` for dependency management
 2. `uv pip install -r pyproject.toml` for dependencies, `uv pip install -e ".[dev]"` for dev
 3. Server: `python run_server.py [port]` (default port 4000)
-4. Tests: `pytest` or `pytest --server-url http://host:port`
+4. Tests: `pytest` (boots the app in-process; needs GCS credentials), `pytest -m offline` (no network), `pytest --server-url http://host:port` (against a deployment)
 5. Lint: `ruff check`
 
 

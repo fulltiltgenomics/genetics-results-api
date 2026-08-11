@@ -165,6 +165,8 @@ def test_tampered_payload_is_rejected():
         auth.get_verified_user(_bearer(f"{header}.{forged}.{signature}"))
 
 
+# fetches Google's OAuth signing certs, so this one needs the network
+@pytest.mark.integration
 def test_alg_none_is_not_accepted():
     unsigned = jwt.encode({"iss": "chat-backend"}, key="", algorithm="none")
     with pytest.raises(HTTPException):

@@ -32,12 +32,18 @@ def _hla_column_mapping(profile: str) -> dict[str, str]:
     return entries[0]["column_mapping"]
 
 
+# The three tests below reach `app.routers.hla`, whose import chain builds
+# `app.core.streams`'s module-level `DatasetMapping()` and so reads a mapping file off
+# GCS. They therefore need credentials, unlike the `column_mapping` tests, which only
+# read config. Drop the marker once that construction is lazy.
+@pytest.mark.integration
 def test_header_schema_emits_the_house_names():
     from app.routers.hla import _HLA_HEADER_SCHEMA
 
     assert HLA_STAT_COLUMNS <= set(_HLA_HEADER_SCHEMA)
 
 
+@pytest.mark.integration
 def test_header_schema_emits_no_legacy_names():
     from app.routers.hla import _HLA_HEADER_SCHEMA
 
@@ -55,6 +61,7 @@ def test_column_mapping_never_serves_a_legacy_name(profile):
     assert HLA_LEGACY_STAT_COLUMNS.isdisjoint(_hla_column_mapping(profile).values())
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("profile", PROFILES)
 def test_column_mapping_agrees_with_the_header_schema(profile):
     """A mapped target the router cannot emit is silently dropped from the response."""

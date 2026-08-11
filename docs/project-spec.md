@@ -39,7 +39,7 @@ app/
 ├── middleware.py    # CORS and other middleware setup
 ├── middleware_usage_logging.py
 └── server.py       # FastAPI app creation and router registration
-tests/              # integration tests (against live server)
+tests/              # two lanes: `integration` (real HTTP) and `offline` (no network)
 scripts/            # utility scripts
 docs/               # project documentation
 Dockerfile          # container build with htslib, gcloud SDK
@@ -103,11 +103,16 @@ run_server.py       # server entry point
 
 ### Testing
 
-- Integration tests in `tests/` that run against a live server instance
-- Configurable server URL via `--server-url` pytest option (default: `http://localhost:4000`)
-- Tests use `requests` library to make HTTP calls to the running server
-- Run with: `pytest` or `pytest --server-url http://host:port`
-- A few self-contained unit tests also live in `tests/` (e.g. `test_gene_group_service.py`, which writes small CSV fixtures and exercises `GeneGroupService` directly, and `test_auth_header_trust.py`, which builds Starlette `Request` objects and asserts the identity-header trust rule); these need neither a live server nor GCS access and run under plain `pytest`
+- Most tests in `tests/` are integration tests: they take the `server_url` fixture and make real HTTP calls with `requests`
+- **`server_url` boots the app in-process when no `--server-url` is given.** The session fixture picks a free ephemeral port, runs the real `app.server:app` under uvicorn in a daemon thread (`loop="asyncio"`, matching `run_server.py`), waits for `Server.started`, and yields `http://127.0.0.1:<port>`. Startup runs the full `lifespan` — tabix header warming, gene maps, search index, gene-disease load, and the cross-resource smoke query — so it needs working Google credentials and GCS access, and takes ~25 s once per session. Passing `--server-url` skips all of this and tests the given deployment exactly as before. This existed because the previous default was a bare `http://localhost:4000`: with nothing listening the whole suite failed, and with the *wrong* service listening (the Genetics Chat API also defaults to 4000) it "ran" against a stranger — either way the assertions inside those tests pinned nothing (`genetics-results-suite-w09`)
+- **Two lanes, assigned automatically** (`pytest_collection_modifyitems` in `tests/conftest.py`, markers registered in `pyproject.toml`):
+  - `integration` — every test taking `server_url`, plus a handful marked explicitly because they need the network for another reason
+  - `offline` — everything else. Classification is by fixture, not by memory, so a newly added test defaults to `offline` and runs in the credential-free lane rather than joining a pile that silently never executes
+  - `pytest` runs both (booting the app); `pytest -m offline` runs the no-network subset; `pytest -m integration` runs only the live ones
+  - **The classification is fail-open for new GCS-touching tests.** It keys on the `server_url` fixture, which is the only signal available at collection time — so a new test that takes no fixture but constructs `DatasetMapping()` (or otherwise reaches GCS) is filed as `offline` and breaks the credential-free run for everyone. It breaks loudly, not silently-green, but the fix is to mark such a test `@pytest.mark.integration` by hand, not to expect the auto-classifier to notice
+  - The offline lane's collection exclusion below is keyed on the mark expression being **exactly** `offline` (`_offline_only` in `tests/conftest.py`). Anything else — `-m "not offline"`, `-m "not integration"`, `-m "offline and x"` — collects the full 563 and needs credentials. A substring test here previously made `-m "not offline"` silently drop 26 tests while the report header claimed the opposite
+- **`app/core/streams.py` builds a `DatasetMapping()` at module import**, which reads a mapping file off GCS. Any test whose import chain reaches it therefore needs credentials even though it needs no server. Four modules are excluded from collection in the offline lane for this reason (`_NEEDS_GCS_AT_IMPORT` in `tests/conftest.py`, echoed in the run header), and seven individual tests carry an explicit `@pytest.mark.integration` — the `app.routers.hla` pins in `test_hla_column_names.py`, `TestAccumulateCsLeads` in `test_credible_sets.py`, and `test_sandbox_token_auth.py::test_alg_none_is_not_accepted`. Making that construction lazy would let the four modules and six of those seven tests move back to `offline`. The exception is `test_alg_none_is_not_accepted`: it is `integration` because verifying an `alg: none` token makes PyJWT fetch Google's OAuth signing certificates over the network, which has nothing to do with `app/core/streams.py` and would not change
+- Self-contained unit tests also live in `tests/` (e.g. `test_gene_group_service.py`, which writes small CSV fixtures and exercises `GeneGroupService` directly, and `test_auth_header_trust.py`, which builds Starlette `Request` objects and asserts the identity-header trust rule); these need neither a live server nor GCS access
 
 ### Deployment
 

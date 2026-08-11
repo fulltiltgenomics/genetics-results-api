@@ -32,3 +32,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short -rw"
+markers = [
+    "integration: reaches real data (GCS/tabix) over the network. Applied automatically to every test taking the `server_url` fixture; with no --server-url the app is booted in-process for these.",
+    "offline: needs neither a server nor network. Applied automatically to every test that does not take `server_url`, so a new unmarked test lands here.",
+]

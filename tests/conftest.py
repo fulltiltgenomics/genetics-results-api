@@ -4,6 +4,7 @@ import requests
 # Add the project root to Python path so we can import app modules
 import sys
 import os
+import socket
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -18,15 +19,148 @@ def pytest_addoption(parser):
     parser.addoption(
         "--server-url",
         action="store",
-        default="http://localhost:4000",
-        help="Base URL of the server to test against (default: http://localhost:4000)",
+        default=None,
+        help=(
+            "Base URL of an already-running server to test against. "
+            "When omitted, the app is started in-process on a free port."
+        ),
     )
+
+
+# These modules import `app.core.streams` / `app.core.responses`, and
+# app/core/streams.py builds a module-level `DatasetMapping()` whose constructor reads a
+# mapping file off GCS. So importing them — which collection does even for a run that
+# would deselect them — needs credentials, and `-m offline` dies at collection instead of
+# running. Skipping them keeps the offline lane genuinely network-free; they still run in
+# a default (integration) run. Delete this list once that construction is made lazy.
+_NEEDS_GCS_AT_IMPORT = frozenset(
+    {
+        "test_coding_filter.py",
+        "test_data_types_filter.py",
+        "test_dataset_display_names.py",
+        "test_sumstats_column_alignment.py",
+    }
+)
+
+
+_OFFLINE_MARK_EXPRESSION = "offline"
+
+
+def _offline_only(config) -> bool:
+    """True only when the user explicitly asked for the offline lane.
+
+    Deliberately an exact match on the mark expression, not a substring test: `"offline" in
+    markexpr` also fires for `-m "not offline"`, which would drop the modules below from the
+    very run that asked for them while the report header claimed the opposite. Any other
+    expression (`-m "not integration"`, `-m "offline and something"`) collects everything and
+    fails loudly on missing credentials rather than quietly running a different suite.
+    """
+    return (config.getoption("-m") or "").strip() == _OFFLINE_MARK_EXPRESSION
+
+
+def pytest_ignore_collect(collection_path, config):
+    if _offline_only(config) and collection_path.name in _NEEDS_GCS_AT_IMPORT:
+        return True
+    return None
+
+
+def pytest_report_header(config):
+    if _offline_only(config):
+        return (
+            "offline lane: not collecting "
+            + ", ".join(sorted(_NEEDS_GCS_AT_IMPORT))
+            + " (they need GCS at import time; see app/core/streams.py)"
+        )
+    return None
+
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-classify every test as `integration` or `offline`.
+
+    The distinction is the fixture a test asks for, not a marker someone remembers to
+    write: anything that takes `server_url` reaches real data over the network, and
+    everything else does not. Applying it here means a newly added test lands in the
+    `offline` set by default — the set that runs with no credentials and no network —
+    rather than silently joining a pile that never executes.
+    """
+    for item in items:
+        declared = {m.name for m in item.iter_markers()}
+        if "server_url" in getattr(item, "fixturenames", ()):
+            if "integration" not in declared:
+                item.add_marker(pytest.mark.integration)
+        elif not declared & {"integration", "offline"}:
+            item.add_marker(pytest.mark.offline)
+
+
+# app startup warms every configured tabix header, the gene maps, the search index and
+# the gene-disease tables off GCS, then runs a cross-resource smoke query; ~25s observed
+_STARTUP_TIMEOUT_SECONDS = 300
+
+
+def _free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 @pytest.fixture(scope="session")
 def server_url(request):
-    """Get the server URL from command line or use default."""
-    return request.config.getoption("--server-url")
+    """Base URL of the server under test.
+
+    With `--server-url`, yields it untouched — the deployed-server workflow is unchanged.
+    Without it, boots the real ASGI app in this process on an ephemeral port and yields
+    that, so a bare `pytest` exercises the routers instead of failing to connect (or, worse,
+    hitting whatever unrelated service happens to hold the old default port 4000).
+    """
+    explicit = request.config.getoption("--server-url")
+    if explicit:
+        yield explicit
+        return
+
+    import threading
+    import time
+    import uvicorn
+
+    # the tabix services cache fetched .tbi/.csi here; run_server.py creates it too
+    os.makedirs("/tmp/tbi_cache", exist_ok=True)
+
+    from app.server import app
+
+    port = _free_port()
+    config = uvicorn.Config(
+        app,
+        host="127.0.0.1",
+        port=port,
+        # asyncio, not uvloop: uvloop gives subprocesses a socket for stdin, which breaks
+        # tabix's -R /dev/stdin (uvloop #532). Same reason run_server.py pins it.
+        loop="asyncio",
+        log_config=None,
+        log_level="warning",
+    )
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, name="in-process-results-api", daemon=True)
+    thread.start()
+
+    deadline = time.monotonic() + _STARTUP_TIMEOUT_SECONDS
+    while not server.started:
+        if not thread.is_alive():
+            pytest.fail(
+                "in-process server failed to start (the lifespan warming or smoke query "
+                "raised); it needs working Google credentials and GCS access. Run "
+                "`pytest -m offline` for the subset that needs neither, or pass "
+                "--server-url to test against a running server."
+            )
+        if time.monotonic() > deadline:
+            server.should_exit = True
+            thread.join(timeout=30)
+            pytest.fail(f"in-process server did not start within {_STARTUP_TIMEOUT_SECONDS}s")
+        time.sleep(0.25)
+
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        thread.join(timeout=30)
 
 
 @pytest.fixture(scope="session")
