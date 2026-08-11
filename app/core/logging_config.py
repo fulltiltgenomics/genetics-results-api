@@ -118,14 +118,25 @@ def setup_logging():
     global _logging_initialized
     if _logging_initialized:
         return
-    _logging_initialized = True
 
     # clear any existing handlers to avoid duplicates
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
 
+    cloud_logging_failure = None
     if config.use_cloud_logging_api:
-        _setup_cloud_logging_api()
+        import google.auth.exceptions
+
+        try:
+            _setup_cloud_logging_api()
+        except (google.auth.exceptions.GoogleAuthError, OSError) as e:
+            # Cloud Logging needs ADC and a project. Without either (tests, a laptop, any
+            # credential-free import) the client constructor raises and, since setup_logging()
+            # runs at module scope in app.core.streams, takes the whole import down with it.
+            # google-cloud-core raises a bare OSError for the missing project, hence the pair.
+            cloud_logging_failure = e
+            root_logger.handlers.clear()  # drop the stdout handler added before the client failed
+            _setup_stdout_logging()
     else:
         _setup_stdout_logging()
 
@@ -136,3 +147,13 @@ def setup_logging():
     logging.getLogger("google").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
+
+    _logging_initialized = True
+
+    # after the handlers exist, so a real production auth failure is visible instead of swallowed
+    if cloud_logging_failure is not None:
+        logging.getLogger(__name__).warning(
+            "cloud logging API unavailable (%s: %s), falling back to stdout logging",
+            type(cloud_logging_failure).__name__,
+            cloud_logging_failure,
+        )

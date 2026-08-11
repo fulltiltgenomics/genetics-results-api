@@ -10,7 +10,21 @@ from app.services.dataset_mapping import DatasetMapping
 setup_logging()
 logger = logging.getLogger(__name__)
 
-dataset_mapping = DatasetMapping()
+_dataset_mapping: DatasetMapping | None = None
+
+
+def get_dataset_mapping() -> DatasetMapping:
+    """The dataset->resource mapping, built on first use and cached.
+
+    Constructed lazily because `DatasetMapping.__init__` reads its mapping files off
+    GCS: building it at import time would make merely importing this module — which
+    pytest collection does — require credentials. Callers bind it once per stream
+    rather than per row, so the per-row cost is unchanged.
+    """
+    global _dataset_mapping
+    if _dataset_mapping is None:
+        _dataset_mapping = DatasetMapping()
+    return _dataset_mapping
 
 
 async def _prepend(iterator: AsyncIterator[Any], kind: str, value: Any) -> AsyncIterator[Any]:
@@ -117,6 +131,7 @@ def tsv_line_iterator_simple(
     """
     # derive column index from header
     dataset_col = header.index(columns["dataset"])
+    dataset_mapping = get_dataset_mapping()
 
     def filter_fn(s: list[bytes]) -> bool:
         return True
@@ -267,6 +282,7 @@ def tsv_line_iterator(
     ref_col = header.index(columns["ref"])
     alt_col = header.index(columns["alt"])
     dataset_col = header.index(columns["dataset"])
+    dataset_mapping = get_dataset_mapping()
 
     if isinstance(variant, set):
         variant_keys = {
@@ -325,6 +341,7 @@ def tsv_line_iterator_qtl(
     trait_start_col = header.index(columns["trait_start"])
     trait_end_col = header.index(columns["trait_end"])
     dataset_col = header.index(columns["dataset"])
+    dataset_mapping = get_dataset_mapping()
 
     # pre-compute position pairs as bytes for efficient comparison
     start_end_positions_bytes = [
@@ -395,6 +412,7 @@ def tsv_line_iterator_coloc(
     trait2_index = header.index(b"trait2")
     cs1_id_index = header.index(b"cs1_id")
     cs2_id_index = header.index(b"cs2_id")
+    dataset_mapping = get_dataset_mapping()
 
     def filter_fn(s: list[bytes]) -> bool:
         """Filter to lines where either cs1 or cs2 is in the target set."""
@@ -439,6 +457,7 @@ def tsv_line_iterator_coloc_by_trait(
     trait2_index = header.index(b"trait2")
     cs1_id_index = header.index(b"cs1_id")
     cs2_id_index = header.index(b"cs2_id")
+    dataset_mapping = get_dataset_mapping()
 
     def _get_index_optional(column_name: bytes) -> int | None:
         try:

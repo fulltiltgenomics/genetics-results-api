@@ -97,7 +97,7 @@ not just the docs here — this repo's own docs cannot detect that class of drif
 1. Python 3.13 with `uv` for dependency management
 2. `uv pip install -r pyproject.toml` for dependencies, `uv pip install -e ".[dev]"` for dev
 3. Server: `python run_server.py [port]` (default port 4000)
-4. Tests: `pytest` (boots the app in-process; needs GCS credentials), `pytest -m offline` (no network), `pytest --server-url http://host:port` (against a deployment)
+4. Tests: `pytest` (boots the app in-process; needs GCS credentials), `pytest -m offline` (no network, no credentials — collection included, so no `app` module may reach the network *or* construct a client needing Application Default Credentials at import time; that is any Google client, not just GCS — `google.cloud.logging.Client()` was the second offender after `DatasetMapping`), `pytest --server-url http://host:port` (against a deployment)
 5. Lint: `ruff check`
 
 

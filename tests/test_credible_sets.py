@@ -762,14 +762,8 @@ class TestCredibleSetsByPhenotypeLeads:
         assert response.status_code == 404
 
 
-@pytest.mark.integration
 class TestAccumulateCsLeads:
-    """Unit tests for the streaming lead accumulator (no server needed).
-
-    Marked `integration` despite needing no server: importing `app.core.streams` builds a
-    module-level `DatasetMapping()`, which reads a mapping file off GCS, so these cannot
-    run without credentials.
-    """
+    """Unit tests for the streaming lead accumulator (no server, no credentials needed)."""
 
     HEADER = ["chr", "pos", "ref", "alt", "mlog10p", "beta", "pip", "cs_id"]
     SCHEMA = {

@@ -27,53 +27,6 @@ def pytest_addoption(parser):
     )
 
 
-# These modules import `app.core.streams` / `app.core.responses`, and
-# app/core/streams.py builds a module-level `DatasetMapping()` whose constructor reads a
-# mapping file off GCS. So importing them — which collection does even for a run that
-# would deselect them — needs credentials, and `-m offline` dies at collection instead of
-# running. Skipping them keeps the offline lane genuinely network-free; they still run in
-# a default (integration) run. Delete this list once that construction is made lazy.
-_NEEDS_GCS_AT_IMPORT = frozenset(
-    {
-        "test_coding_filter.py",
-        "test_data_types_filter.py",
-        "test_dataset_display_names.py",
-        "test_sumstats_column_alignment.py",
-    }
-)
-
-
-_OFFLINE_MARK_EXPRESSION = "offline"
-
-
-def _offline_only(config) -> bool:
-    """True only when the user explicitly asked for the offline lane.
-
-    Deliberately an exact match on the mark expression, not a substring test: `"offline" in
-    markexpr` also fires for `-m "not offline"`, which would drop the modules below from the
-    very run that asked for them while the report header claimed the opposite. Any other
-    expression (`-m "not integration"`, `-m "offline and something"`) collects everything and
-    fails loudly on missing credentials rather than quietly running a different suite.
-    """
-    return (config.getoption("-m") or "").strip() == _OFFLINE_MARK_EXPRESSION
-
-
-def pytest_ignore_collect(collection_path, config):
-    if _offline_only(config) and collection_path.name in _NEEDS_GCS_AT_IMPORT:
-        return True
-    return None
-
-
-def pytest_report_header(config):
-    if _offline_only(config):
-        return (
-            "offline lane: not collecting "
-            + ", ".join(sorted(_NEEDS_GCS_AT_IMPORT))
-            + " (they need GCS at import time; see app/core/streams.py)"
-        )
-    return None
-
-
 def pytest_collection_modifyitems(config, items):
     """Auto-classify every test as `integration` or `offline`.
 
@@ -82,6 +35,16 @@ def pytest_collection_modifyitems(config, items):
     everything else does not. Applying it here means a newly added test lands in the
     `offline` set by default — the set that runs with no credentials and no network —
     rather than silently joining a pile that never executes.
+
+    The lane only holds as long as importing an `app` module stays credential-free:
+    collection imports every test module regardless of the mark expression, so anything
+    that reaches the network — or merely constructs a Google client that resolves
+    Application Default Credentials — at import time breaks `-m offline` for everyone. It
+    breaks loudly, at collection, not silently-green, and it need not be a data client:
+    `google.cloud.logging.Client()` behind `setup_logging()` took the lane down the same
+    way `DatasetMapping()` did. The fix belongs in the app module (build it lazily, as
+    `app.core.streams.get_dataset_mapping` does, or degrade, as `setup_logging` now does),
+    not in a list of exclusions here.
     """
     for item in items:
         declared = {m.name for m in item.iter_markers()}

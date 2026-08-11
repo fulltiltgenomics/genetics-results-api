@@ -2,8 +2,8 @@
 
 The filter restricts credible-set rows to coding variants using the inline
 ``most_severe`` consequence column, reusing the shared ``coding_set`` definition
-in ``app.config.common``. These are self-contained (no live server): they drive
-the stream/list helpers and ``range_response`` directly.
+in ``app.config.common``. These are self-contained — no live server and no
+credentials: they drive the stream/list helpers and ``range_response`` directly.
 """
 
 import asyncio
