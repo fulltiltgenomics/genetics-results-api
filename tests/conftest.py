@@ -5,8 +5,47 @@ import requests
 import sys
 import os
 import socket
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+
+def pytest_configure(config):
+    """Abort if `app` resolves to anything outside the tree pytest is testing.
+
+    genetics-results-suite-6o3 in this repo's shape. There is no install here — `app` is
+    a namespace package (no `app/__init__.py`) found on sys.path, and the insert above
+    puts THIS tree first, so the mcp-server failure (a foreign interpreter importing a
+    foreign copy) cannot happen. What can happen is subtler: a namespace package MERGES
+    every matching directory on sys.path, so `PYTHONPATH=<other checkout>` — the variable
+    a bare `python scripts/…` run needs, easily left pointing at the main checkout — adds
+    that tree's `app/` to `app.__path__`. Modules present there but not here then import
+    silently from the other checkout, and a deletion made here is invisible.
+
+    Checked in pytest_configure so it aborts before collection rather than surfacing as a
+    confusing test failure. Importing `app` here runs no code: the namespace package has
+    no `__init__.py`.
+    """
+    import app
+
+    rootdir = Path(config.rootpath).resolve()
+    outside = [p for p in app.__path__ if not Path(p).resolve().is_relative_to(rootdir)]
+    if outside:
+        raise pytest.UsageError(
+            "the `app` namespace package spans directories OUTSIDE the tree pytest is "
+            "testing, so this run can import another checkout's source and report green.\n"
+            "    outside this tree : " + ", ".join(outside) + "\n"
+            f"    pytest rootdir    : {rootdir}\n"
+            f"    interpreter       : {sys.executable}\n"
+            f"    PYTHONPATH        : {os.environ.get('PYTHONPATH', '(unset)')}\n"
+            "Almost always PYTHONPATH points at another checkout. Fix, from "
+            f"{rootdir}:\n"
+            "    unset PYTHONPATH   # or set it to this tree, which bare scripts need\n"
+            "    uv sync --extra dev\n"
+            '    uv run python -c "import app, sys; print(list(app.__path__)); '
+            'print(sys.executable)"\n'
+            f"Every printed path must be under {rootdir}."
+        )
 
 
 # ============================================================================

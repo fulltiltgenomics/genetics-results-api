@@ -99,6 +99,12 @@ not just the docs here — this repo's own docs cannot detect that class of drif
 3. Server: `python run_server.py [port]` (default port 4000)
 4. Tests: `pytest` (boots the app in-process; needs GCS credentials), `pytest -m offline` (no network, no credentials — collection included, so no `app` module may reach the network *or* construct a client needing Application Default Credentials at import time; that is any Google client, not just GCS — `google.cloud.logging.Client()` was the second offender after `DatasetMapping`), `pytest --server-url http://host:port` (against a deployment)
 5. Lint: `ruff check`
+6. `app` is a **namespace package** and is not installed — `tests/conftest.py` puts the repo
+   root on `sys.path`, and a bare `python scripts/…` needs `PYTHONPATH=<this checkout>`.
+   Because namespace packages merge every matching directory on `sys.path`, a `PYTHONPATH`
+   left pointing at another checkout silently adds that tree's `app/` to `app.__path__`.
+   `pytest_configure` aborts the run when any `app.__path__` entry falls outside the pytest
+   rootdir (genetics-results-suite-6o3, this repo's variant of it)
 
 
 ====
