@@ -81,6 +81,44 @@ run_server.py       # server entry point
 
 `reject_unknown_query_params` (`app/core/query_params.py`) is registered as an app-level dependency next to `auth_required` and returns **422** for any query parameter the matched route does not declare. FastAPI's default is to ignore undeclared parameters, which made client/API drift invisible: the mcp-server tools advertised a `data_types` filter that no endpoint implemented, so a caller asking for one association type kept receiving every type and had no way to notice — the resulting oversized response was then truncated by the LLM tool-result cap, hiding exactly the rows that had been asked for. The dependency reads the declared aliases off `request.scope["route"].dependant` (recursing into sub-dependencies) and caches them on the route object, so the check costs one set difference per request. The error lists both the offending parameters and the accepted ones, which is what lets an agent self-correct.
 
+### JSON range responses advertise their columns (`X-Columns`)
+
+A JSON range response is a **bare array** of row objects, so an empty one is `[]` and carries
+no schema whatsoever — a consumer building a dataframe from it cannot tell "no rows matched"
+from "no such column", and the genetics SDK raised `ColumnNotFoundError` on an ordinary
+no-hit query (`genetics-results-suite-6uk`). `range_response`'s JSON branch therefore sets an
+**`X-Columns` response header** holding the served file's own header line, comma-separated.
+One change in `app/core/responses.py` covers every JSON range endpoint — all 23 call sites
+across the 11 routers that use `range_response`.
+
+**Not covered**: endpoints that compute JSON directly instead of streaming a TSV through
+`range_response` — `search`, gene annotations (`genes.py`), gene groups (`gene_groups.py`),
+rsID lookup (`rsid.py`), gene-disease (`gene_disease.py`), and gene-based/gene-burden results
+(`gene_based.py`, `TimedJSONResponse`/`StreamingResponse` directly). These have no header line
+to advertise and degrade to the pre-existing behaviour.
+
+- **The names come from the FILE header, not from `header_schema`.**
+  `tsv_stream_to_list_with_header` returns the header it already reads and keys the rows by;
+  `header_schema` is a validating superset used for type coercion (see
+  `genetics-results-suite-7yg`) and would over-claim on a file carrying fewer columns.
+  The header line is read even when there are zero data rows, which is what makes the empty
+  case work at all.
+- **Additive, deliberately.** The body is byte-identical, so the browser and the MCP server —
+  both of which parse the array — cannot observe the change. Wrapping the array in an
+  envelope would have broken both.
+- **JSON only.** On the TSV path the header line is already the first line of the body, and
+  `genetics-results-suite-7yg` established that path must not buffer the stream to inspect it.
+- **Row filters do not change it.** `coding_only` and `data_types` drop rows, never columns,
+  including down to zero rows.
+- **Fail-open.** Header values are latin-1 encoded by Starlette and the value is
+  comma-delimited, so `columns_header` omits the header rather than 500ing if a column name
+  ever cannot survive that round trip. Nothing today has such a name.
+- **Not exposed via CORS.** It is not in the `CORSMiddleware` allow/expose lists, so browser
+  JavaScript cannot read it; the consumer that needs it (mcp-server's `ToolExecutor`) is
+  server-side. Add it to `expose_headers` if a browser consumer ever needs it.
+
+Pinned by `tests/test_columns_header.py` (offline lane).
+
 ### Data Access Pattern
 
 1. **Configuration-driven**: Each data resource is defined in `app/config/` with paths to GCS-hosted tabix files and column mappings. Dataset metadata (author, version, description, metadata_file, harmonizer type) is loaded from a shared `configs/datasets.yaml` file via `app/config/yaml_loader.py`, which selects the active profile from the `CONFIG_PROFILE` env var and reads the YAML path from `DATASETS_CONFIG_PATH` (default: `./configs/datasets.yaml`). The canonical YAML lives in the suite repo and is synced to each service repo for local dev. Product configs (credible_sets, exome_results, gene_based_results, summary_stats) reference the registry via `dataset_id` and contain only file paths and product-specific settings.

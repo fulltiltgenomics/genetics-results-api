@@ -6,7 +6,7 @@ from app.core.logging_config import setup_logging
 from starlette.responses import Response
 from app.core.streams import (
     tsv_line_iterator_str,
-    tsv_stream_to_list,
+    tsv_stream_to_list_with_header,
     filter_stream_by_coding,
     filter_stream_by_column,
     filter_coding_rows,
@@ -60,6 +60,43 @@ class TimedJSONResponse(JSONResponse):
             )
 
 
+COLUMNS_HEADER = "X-Columns"
+
+
+def columns_header(columns: list[str]) -> dict[str, str]:
+    """Advertise a JSON result's column names out of band, as a response header.
+
+    A JSON range response is a bare array, so an empty result carries no schema at all and
+    a client cannot tell "no rows" from "no such columns". Consumers that build a dataframe
+    from it (the SDK behind the sandboxed code-execution agent) then raise ColumnNotFound
+    on a perfectly ordinary no-hit query.
+
+    This goes in a header rather than in the body ON PURPOSE: the browser and the MCP
+    server both parse the body as an array, so wrapping it in an envelope would be a
+    breaking change for them, while an added response header cannot be observed by a
+    consumer that does not ask for it.
+
+    JSON only. On the TSV path the header line is already the first line of the body, and
+    genetics-results-suite-7yg established that path must not buffer the stream to inspect
+    it.
+
+    Fail-open by design: header values are latin-1 encoded by Starlette and the value is
+    comma-delimited, so a name that cannot survive the round trip drops the header rather
+    than turning a working request into a 500. Nothing today has such a name.
+
+    This guard is defence in depth, not the primary control: every column here has already
+    passed `header_schema` validation (app/core/streams.py), which only allows
+    `[A-Za-z0-9_.-]+`. If that validation is ever loosened, the guard below is what stops a
+    non-ASCII, comma-bearing, or control-character (e.g. CR/LF response-splitting) name from
+    reaching the header.
+    """
+    if not columns or any(
+        "," in c or not c.isascii() or not c.isprintable() for c in columns
+    ):
+        return {}
+    return {COLUMNS_HEADER: ",".join(columns)}
+
+
 async def range_response(
     request_url: str,
     stream: AsyncIterator[bytes],
@@ -102,7 +139,9 @@ async def range_response(
             logger.debug(
                 f"{request_url} time to start creating JSON response: {other_time - start_time:.3f}s"
             )
-            rows = await tsv_stream_to_list(line_stream, header_schema)
+            header, rows = await tsv_stream_to_list_with_header(
+                line_stream, header_schema
+            )
             if data_types:
                 rows = filter_rows_by_column(
                     rows, "data_type", data_types, case_insensitive=True
@@ -113,6 +152,7 @@ async def range_response(
                 rows,
                 request_url,
                 start_time,
+                headers=columns_header(header),
             )
         except Exception as e:
             logger.error(f"{request_url} error streaming or parsing data: {e}")

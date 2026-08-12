@@ -817,6 +817,22 @@ async def tsv_stream_to_list(
     header_schema: dict[str, type],
 ) -> list[dict[str, Any]]:
     """Convert a stream of TSV lines to a list of dictionaries."""
+    _, rows = await tsv_stream_to_list_with_header(line_stream, header_schema)
+    return rows
+
+
+async def tsv_stream_to_list_with_header(
+    line_stream: AsyncIterator[list[str]],
+    header_schema: dict[str, type],
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Same conversion, but also returns the column names the rows were keyed by.
+
+    The names come from the file's own header line, not from ``header_schema`` — the
+    schema is a superset used for validation and type coercion, so it is not a reliable
+    stand-in for what a given file actually carries. The header line is read even when the
+    file has no data rows, which is the whole point: it is the only place an empty JSON
+    result's schema still exists before the bare ``[]`` is serialized.
+    """
     header = [h[1:] if h.startswith("#") else h for h in await anext(line_stream)]
 
     # validate header against schema
@@ -849,7 +865,7 @@ async def tsv_stream_to_list(
     except Exception as e:
         logger.error(f"Error parsing data: {e}")
         raise ValueError("Error parsing data")
-    return rows
+    return header, rows
 
 
 def _cast_tsv_field(value: str, type_: type) -> Any:
