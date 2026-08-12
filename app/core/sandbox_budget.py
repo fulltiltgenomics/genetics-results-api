@@ -46,21 +46,34 @@ script narrow its request or back off while it still has clock left.
 these bound per replica, not per execution. `k8s/deployments/results-api.yaml` carries a comment
 on `replicas: 1` saying so.
 
-**Two limitations an operator must know, because as shipped these bound less than the rest of
-this docstring implies:**
+**Two limitations an operator must know, because these bound less than the rest of this
+docstring implies:**
 
-1. **They only bind a request that volunteers a token.** `_sandbox_principal` in
-   `app/middleware.py` reads the `Authorization` header; with no header it returns `None` and
-   `admit` is never called, so the request is not counted at all. results-api has seven
-   `@is_public` routes (re-derive with `grep -rn "@is_public" app/`) that answer 200 with no
-   credential, and the sandbox's NetworkPolicy egress reaches `results-api:4000` **directly**,
-   bypassing auth-gateway. Measured: 20 of 20 header-less requests were served 200 with
-   `_executions == {}`. So these are limits on an *honest* execution's consumption — which is
-   what they were written for — and not yet a complete bound on what a script can extract.
+1. **They only bind a request that volunteers a token, and what makes that sufficient lives
+   elsewhere.** `_sandbox_principal` in `app/middleware.py` reads the `Authorization` header;
+   with no header it returns `None` and `admit` is never called, so the request is not counted
+   at all. That was an exploitable hole (genetics-results-suite-0lf): seven `@is_public` routes
+   answered 200 with no credential — measured, 20 of 20 header-less requests served with
+   `_executions == {}` — and the sandbox's NetworkPolicy egress reaches `results-api:4000`
+   **directly**, bypassing auth-gateway, so a script could shed all four counters by not sending
+   the header.
+   The **no-credential** half is closed in `app.dependencies.is_public_endpoint`, not here: once
+   `SANDBOX_ENABLED` is true the anonymous surface is `/healthz` alone, so every route touching a
+   data path answers 401 to a request carrying nothing. Nothing in this module changed for it,
+   and nothing here may be relaxed on the assumption that an anonymous request is harmless —
+   `tests/test_anonymous_surface.py` is what keeps that assumption true.
+   **The other half is still open.** `_sandbox_principal` accepts an HS256 sandbox token and
+   nothing else, so presenting *a* credential is not the same as calling `admit`: a caller
+   presenting `INTERNAL_API_SECRET` satisfies `is_internal_caller`, resolves as `mcp-tool`, and
+   reaches the handler with none of these four counters touched — measured, 200 on
+   `/api/v1/rsid/variants` and `/api/v1/variant_sets` with `_executions == {}`. The sandbox holds
+   that secret today and the SDK sends it on every request, so as shipped this converts "omit the
+   header" into "send the other header". It closes when genetics-results-suite-4h6.7 stops giving
+   the sandbox `INTERNAL_API_SECRET` and genetics-results-suite-4h6.14 makes the SDK send the
+   per-execution token.
    `app/core/limits.py`'s argument that omitting the header cannot buy a *looser* limit holds
-   for the per-response byte cap only; for the four counters here, omitting it buys **no**
-   limit. Closing that needs a way to identify sandbox traffic without a token, which is a
-   design decision tracked separately — do not paper over it with a rate limiter here.
+   for the per-response byte cap only; for the four counters here, omitting it would buy **no**
+   limit, which is why the anonymous surface has to be empty rather than merely capped.
 2. **`sandbox_execution_tracker_full` and `SANDBOX_MAX_CONCURRENT_REQUESTS_TOTAL` are
    cross-tenant.** Both are pod-wide, so a caller that fills the map or holds the pod-wide slots
    locks *other* executions out — a denial surface, not merely a self-limit. The "23 chat

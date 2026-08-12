@@ -28,12 +28,17 @@ handler are the sandbox and the verified non-sandbox principals — which is the
 exactly. Two cases reach a handler with no principal resolved, and each is handled on its own
 terms rather than by defaulting:
 
-* an ``@is_public`` route. Re-derive the list with ``grep -rn "@is_public" app/``; today it is
-  seven: ``/api/v1`` and ``/healthz`` (`app/server.py`), ``/api/v1/auth``,
-  ``/api/v1/variant_sets``, ``/api/v1/variant_sets/{name}``, and ``/api/v1/rsid/variants`` GET
-  and POST. `auth_required` returns before `get_verified_user`, so no principal exists to relax
-  on. These are relaxed. Measured, tight caps there would truncate nothing today — the largest
-  public response the code can produce is 888 rows / 18.6 KB.
+* an ``@is_public`` route **while ``SANDBOX_ENABLED`` is false**. Re-derive the list with
+  ``grep -rn "@is_public" app/``, or read it off the live route table with
+  `app.dependencies.public_route_paths`; today it is seven: ``/api/v1`` and ``/healthz``
+  (`app/server.py`), ``/api/v1/auth``, ``/api/v1/variant_sets``, ``/api/v1/variant_sets/{name}``,
+  and ``/api/v1/rsid/variants`` GET and POST. `auth_required` returns before `get_verified_user`,
+  so no principal exists to relax on. These are relaxed. Measured, tight caps there would
+  truncate nothing today — the largest public response the code can produce is 888 rows /
+  18.6 KB.
+
+  With ``SANDBOX_ENABLED`` true this case shrinks to ``/healthz`` alone — see
+  `app.dependencies.is_public_endpoint` and the note on the per-execution counters below.
 
   The reason relaxing them carries **zero security delta** is that every one of these routes is
   bounded in its own handler for *every* caller, so the byte cap is not what stands between a
@@ -59,15 +64,33 @@ per-execution counters.** `app/core/sandbox_budget.py` adds four counters keyed 
 `jti`, admitted in `SandboxResponseCapMiddleware` from the `Authorization` header. Omitting the
 header there does not merely leave the caps relaxed — it means `admit` is never called, so the
 request is counted against **nothing**: no aggregate byte budget, no request count, no
-concurrency slot. On the seven `@is_public` routes, which answer 200 with no credential and
-which the sandbox reaches directly on `results-api:4000` (its NetworkPolicy egress bypasses
-auth-gateway), omitting the header therefore *does* buy a looser limit than presenting it —
-measured, 20 of 20 such requests were served with no accounting at all. The per-request bound
-above still applies uniformly, and each of those routes is bounded in its own handler for every
-caller, so nothing here is unbounded per response; what is missing is a per-execution *total*
-for a caller that declines to identify itself. Closing that needs a way to identify sandbox
-traffic without a token and is tracked as its own design decision — it is deliberately not
-patched over here with a rate limiter or an anonymous bucket.
+concurrency slot. That was an open hole (genetics-results-suite-0lf): the seven `@is_public`
+routes answered 200 with no credential — measured, 20 of 20 such requests served with no
+accounting at all — and the sandbox reaches `results-api:4000` directly, its NetworkPolicy
+egress bypassing auth-gateway, so a script could shed every per-execution bound by simply not
+sending the header.
+
+**The no-credential half of that is closed, and not here.**
+`app.dependencies.is_public_endpoint` shrinks the anonymous surface to `/healthz` alone once
+`SANDBOX_ENABLED` is true, so with the sandbox deployed every route that touches a data path
+answers 401 to a request carrying *nothing*. Pinned by `tests/test_anonymous_surface.py`, which
+reads the live route table so a new `@is_public` decorator cannot reopen it in silence.
+
+**What is not closed:** it would be wrong to say the only way into a handler is to present a
+credential whose presentation calls `admit`. `admit` is reached only from `_sandbox_principal`,
+which accepts an HS256 sandbox token and nothing else; `INTERNAL_API_SECRET` satisfies
+`is_internal_caller`, so a caller presenting it resolves as `mcp-tool` and enters the handler with
+**no accounting at all** — measured, 200 on `/api/v1/rsid/variants` and `/api/v1/variant_sets`
+with `sandbox_budget._executions` still `{}`. The sandbox is handed that secret today and the SDK
+attaches it to every request, so as things stand this turns "omit the header" into "send the other
+header". That path closes when genetics-results-suite-4h6.7 stops giving the sandbox
+`INTERNAL_API_SECRET` and genetics-results-suite-4h6.14 makes the SDK send the per-execution
+token — the Deployment and the transport, neither of them this module.
+
+Also deliberately remaining: `/healthz` is anonymous by necessity (the kubelet holds no credential
+and its probes bypass NetworkPolicy), and nothing bounds the *rate* of anonymous requests to it.
+Its handler is a constant document on no data path, so that is a request-rate concern for
+genetics-results-suite-8zk, not a per-execution budget this module or `sandbox_budget` can hold.
 """
 
 import os
