@@ -53,6 +53,21 @@ terms rather than by defaulting:
 Neither case lets a caller widen its limits by presenting a *weaker* credential: presenting a
 sandbox token never yields more than presenting the shared secret, and dropping a verified
 credential on a route that requires one yields a 401, not a wider cap.
+
+**That invariant is about this module's byte cap only, and it does not extend to the
+per-execution counters.** `app/core/sandbox_budget.py` adds four counters keyed on the token's
+`jti`, admitted in `SandboxResponseCapMiddleware` from the `Authorization` header. Omitting the
+header there does not merely leave the caps relaxed — it means `admit` is never called, so the
+request is counted against **nothing**: no aggregate byte budget, no request count, no
+concurrency slot. On the seven `@is_public` routes, which answer 200 with no credential and
+which the sandbox reaches directly on `results-api:4000` (its NetworkPolicy egress bypasses
+auth-gateway), omitting the header therefore *does* buy a looser limit than presenting it —
+measured, 20 of 20 such requests were served with no accounting at all. The per-request bound
+above still applies uniformly, and each of those routes is bounded in its own handler for every
+caller, so nothing here is unbounded per response; what is missing is a per-execution *total*
+for a caller that declines to identify itself. Closing that needs a way to identify sandbox
+traffic without a token and is tracked as its own design decision — it is deliberately not
+patched over here with a rate limiter or an anonymous bucket.
 """
 
 import os
