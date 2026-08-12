@@ -16,6 +16,8 @@ import app.config.common as config
 
 logger = logging.getLogger(__name__)
 
+SERVICE = "results-api"
+
 
 def _should_log_path(path: str) -> bool:
     """check if path should be logged based on config"""
@@ -99,6 +101,12 @@ class UsageLoggingMiddleware:
             entry = {
                 "message": "endpoint access",
                 "log_type": "endpoint_access",
+                # the service discriminator in the shared sink, where db-api's endpoint_access
+                # rows sit beside these. Constant and not env-derived on purpose: log_source
+                # below is built from DEPLOY_ENV, carries no service name and has already been
+                # renamed once in production (genetics-results-api-prod -> finngenie_prod), so a
+                # query keyed on it silently returns nothing after a deploy renames it.
+                "service": SERVICE,
                 "log_source": config.log_source,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "user_email": user_email,
