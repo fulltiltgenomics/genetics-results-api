@@ -331,6 +331,81 @@ def test_non_ascii_bearer_does_not_raise():
     assert auth.is_internal_caller("Bearer pässwörd") is False
     scope = _scope({USER_HEADER: "user@finngen.fi", "Authorization": "Bearer pässwörd"})
     assert _extract_user_from_header(scope) is None
+    # outside latin-1 entirely: the byte-exact re-encode must fail closed, not raise
+    assert auth.is_internal_caller("Bearer пароль") is False
+
+
+def test_non_ascii_secret_compares_the_bytes_actually_sent(monkeypatch):
+    """Starlette decodes raw header bytes as latin-1, so re-encoding the presented credential
+    with utf-8 compared mojibake against the secret. latin-1 undoes that decode exactly — for a
+    caller that put utf-8 on the wire, which is what `_request` builds and what aiohttp sends;
+    see `test_which_wire_bytes_authenticate_a_non_ascii_secret` for the callers that do not
+    agree. The point asserted here is that the usage-logging middleware, which decodes the same
+    bytes itself, reaches the same verdict as the auth path."""
+    secret = "sécret"
+    monkeypatch.setattr(config, "internal_api_secret", secret)
+    req = _request({"Authorization": f"Bearer {secret}"})
+    assert auth.is_internal_caller(req.headers.get("Authorization")) is True
+
+    scope = _scope(
+        {
+            USER_HEADER: "accounts.google.com:user@finngen.fi",
+            "Authorization": f"Bearer {secret}",
+        }
+    )
+    assert _extract_user_from_header(scope) == "user@finngen.fi"
+
+
+def test_ascii_secret_is_unaffected():
+    """The codecs agree on ASCII, so the deployed shape behaves exactly as before."""
+    req = _request({"Authorization": f"Bearer {INTERNAL_SECRET}"})
+    assert auth.is_internal_caller(req.headers.get("Authorization")) is True
+    assert auth.is_internal_caller(f"Bearer {INTERNAL_SECRET}") is True
+
+
+def test_which_wire_bytes_authenticate_a_non_ascii_secret(monkeypatch):
+    """Pin the accept/reject map over RAW wire bytes, which is what genetics-results-suite-ctq
+    actually changed.
+
+    This cannot be written with TestClient: `starlette/testclient.py` does `value.encode()`
+    (utf-8) on httpx's already-decoded header str, so latin-1 wire bytes are silently rewritten
+    to utf-8 before the app ever sees them and every case below would look like the utf-8 one.
+    Hence a hand-built ASGI scope, whose header values go through unmodified.
+
+    The clients disagree about which of these two a non-ASCII secret becomes on the wire —
+    node/undici and requests emit the latin-1 form, aiohttp the utf-8 form, httpx neither
+    (it refuses outright) — which is why `config.require_ascii_internal_secret` refuses a
+    non-ASCII secret at startup and makes this map unreachable in a real deployment. The
+    comparison function is still reachable, so the map is pinned here rather than through
+    the app.
+    """
+    monkeypatch.setattr(config, "internal_api_secret", "sécret")
+
+    def _bearer(raw: bytes) -> str:
+        req = Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/api/v1/gene/GPT",
+                "headers": [(b"authorization", raw)],
+            }
+        )
+        return req.headers["Authorization"]
+
+    # utf-8 on the wire (aiohttp-shaped): accepted now, rejected before ctq
+    assert auth.is_internal_caller(_bearer(b"Bearer s\xc3\xa9cret")) is True
+    # latin-1 on the wire (node/undici- and requests-shaped, i.e. the BFF): rejected now,
+    # accepted before ctq — this is the flip, stated plainly rather than hidden
+    assert auth.is_internal_caller(_bearer(b"Bearer s\xe9cret")) is False
+
+
+def test_the_ascii_guard_fires_only_on_a_non_ascii_secret():
+    """genetics-results-suite-ctq: the invariant the comparison relies on is enforced, not
+    merely documented. Absent and empty are the dev/test configuration and must stay silent."""
+    with pytest.raises(RuntimeError, match="INTERNAL_API_SECRET"):
+        config.require_ascii_internal_secret("sécret")
+    config.require_ascii_internal_secret(INTERNAL_SECRET)
+    config.require_ascii_internal_secret("")
 
 
 # ---------------------------------------------------------------------------

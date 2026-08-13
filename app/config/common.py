@@ -35,6 +35,36 @@ require_auth = os.environ.get("REQUIRE_AUTH", "false").lower() in ("1", "true", 
 # shared secret for internal service-to-service auth
 internal_api_secret = os.environ.get("INTERNAL_API_SECRET", "")
 
+
+def require_ascii_internal_secret(secret: str) -> None:
+    """Refuse a non-ASCII INTERNAL_API_SECRET (`genetics-results-suite-ctq`).
+
+    Measured off a real socket, HTTP clients do not agree on how to put a non-ASCII header
+    value on the wire: node fetch/undici (the browser BFF) and python-requests send latin-1,
+    aiohttp sends utf-8, and httpx 0.28 refuses to send one at all (UnicodeEncodeError in the
+    client). No server-side codec is therefore correct for every caller, so byte-exactness is
+    unachievable in general and the only well-defined rule is that the secret is ASCII, where
+    every client agrees and every codec coincides.
+
+    Failing at startup is the good failure mode: the new pod never passes readiness, the
+    rollout stalls with the old pods still serving, and the message names the variable —
+    versus every internal call 401ing at request time with nothing local saying why.
+
+    Silent when the secret is absent or empty: that is the dev/test configuration, and
+    `is_internal_caller` already fails closed there.
+    """
+    if secret and not secret.isascii():
+        raise RuntimeError(
+            "INTERNAL_API_SECRET contains non-ASCII characters. HTTP clients disagree on how "
+            "to encode a non-ASCII header value (node/undici and python-requests send latin-1, "
+            "aiohttp sends utf-8, httpx refuses to send one at all), so no server-side decoding "
+            "recovers the same secret from every caller. Set INTERNAL_API_SECRET to an ASCII "
+            "value — scripts/create-secrets.sh generates one with `openssl rand -base64 32`."
+        )
+
+
+require_ascii_internal_secret(internal_api_secret)
+
 # chat backend URL for user token validation (optional, empty = disabled)
 chat_backend_url = os.environ.get("CHAT_BACKEND_URL", "")
 

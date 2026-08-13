@@ -38,7 +38,15 @@ def _extract_user_from_header(scope: Scope) -> Optional[str]:
     iap_email = headers.get(b"x-goog-authenticated-user-email", b"").decode("utf-8", errors="ignore")
     if not iap_email:
         return None
-    auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
+    # latin-1, like starlette's own header decoding and app.middleware's sandbox peek. This is
+    # a tightening, and the reason is agreement, not a crash: the two producers of the str
+    # is_internal_caller receives (starlette, and this line) must decode the same bytes the
+    # same way or the usage log and the auth path disagree about who called. `errors="ignore"`
+    # made them disagree in the dangerous direction — it silently dropped undecodable bytes, so
+    # b"Bearer <secret>\xff" was attributed to a user here while starlette's latin-1 path
+    # rejected the identical request. latin-1 is total over arbitrary bytes, so no errors= is
+    # needed, and it round-trips byte-exactly through is_internal_caller's latin-1 re-encode.
+    auth_header = headers.get(b"authorization", b"").decode("latin-1")
     if not is_internal_caller(auth_header):
         return None
     # header format: "accounts.google.com:user@domain.com"

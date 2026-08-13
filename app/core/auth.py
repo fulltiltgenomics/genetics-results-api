@@ -62,10 +62,32 @@ def is_internal_caller(auth_header: str | None) -> bool:
     if not auth_header or not auth_header.startswith("Bearer "):
         return False
     # compare as bytes: compare_digest on str raises TypeError for non-ASCII, and this runs in
-    # ASGI middleware before routing, so a non-ASCII bearer would 500 instead of failing closed
-    return hmac.compare_digest(
-        auth_header[7:].encode("utf-8"), config.internal_api_secret.encode("utf-8")
-    )
+    # ASGI middleware before routing, so a non-ASCII bearer would 500 instead of failing closed.
+    #
+    # The two codecs differ on purpose — do not "fix" the latin-1 one to utf-8. Both producers
+    # of `auth_header` decode the raw header bytes as latin-1 (starlette itself, and
+    # middleware_usage_logging), so re-encoding with latin-1 undoes that decode exactly.
+    #
+    # What it does NOT do is recover "the bytes the client sent" in general: measured off a
+    # real socket, the clients disagree with each other. node fetch/undici (the browser BFF)
+    # and python-requests put latin-1 on the wire, aiohttp puts utf-8, and httpx 0.28
+    # (mcp-server, chat-backend) refuses to send a non-ASCII header value at all. No codec is
+    # right for all of them, so under a hypothetical non-ASCII secret this pairing would
+    # favour the aiohttp-shaped caller and 401 the BFF-shaped one — the reverse of the old
+    # utf-8/utf-8 pairing. What makes the comparison well defined is not the codec but
+    # `config.require_ascii_internal_secret`, which refuses a non-ASCII secret at startup;
+    # every codec coincides on ASCII, which is what every deployment has.
+    try:
+        presented = auth_header[7:].encode("latin-1")
+    except UnicodeEncodeError:
+        # unreachable from a latin-1-decoded header; guards a direct caller passing a str
+        # outside latin-1, which must fail closed rather than raise out of the middleware.
+        # db-api and chat-backend deliberately omit this guard: their is_internal_caller takes
+        # a starlette Request, so the only str it can see came from starlette's latin-1 decode
+        # and re-encodes by construction. This one takes a str, so it needs it — keep the guard
+        # if a str-taking entry point is ever added there too.
+        return False
+    return hmac.compare_digest(presented, config.internal_api_secret.encode("utf-8"))
 
 
 def get_authenticated_user(request: Request) -> str | None:
