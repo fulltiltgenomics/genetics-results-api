@@ -22,6 +22,9 @@ makes the SDK send the per-execution token instead.
 """
 
 import asyncio
+import importlib
+import logging
+import os
 
 import pytest
 from fastapi import Request
@@ -109,22 +112,69 @@ def test_every_always_anonymous_path_is_a_real_public_route():
     assert ALWAYS_ANONYMOUS_PATHS <= public_route_paths()
 
 
-def test_without_the_sandbox_every_public_route_stays_anonymous(monkeypatch):
+def _anonymous_surface() -> set[str]:
+    return {route.path for route in _public_routes() if is_public_endpoint(_request_for(route))}
+
+
+def test_the_minimal_surface_is_the_default(monkeypatch):
+    # the shipped default, read from the environment the way the process reads it. An empty
+    # environment must produce the narrow surface, so forgetting the variable is safe.
+    monkeypatch.delenv("ANONYMOUS_SURFACE_MINIMAL", raising=False)
+    assert config._parse_anonymous_surface_minimal() is True
+    # and only an explicit false-y value turns it off; a typo does not
+    for value, expected in (
+        ("false", False),
+        ("FALSE", False),
+        ("0", False),
+        ("no", False),
+        ("true", True),
+        ("flase", True),
+        ("", True),
+    ):
+        monkeypatch.setenv("ANONYMOUS_SURFACE_MINIMAL", value)
+        assert config._parse_anonymous_surface_minimal() is expected, value
+
+
+def test_with_the_surface_widened_every_public_route_is_anonymous(monkeypatch):
     monkeypatch.setattr(config, "sandbox_enabled", False)
+    monkeypatch.setattr(config, "anonymous_surface_minimal", False)
     for route in _public_routes():
         assert is_public_endpoint(_request_for(route)), route.path
 
 
-def test_with_the_sandbox_the_anonymous_surface_is_exactly_healthz(monkeypatch):
+def test_the_minimal_anonymous_surface_is_exactly_healthz(monkeypatch):
     # pinned against the literal path, NOT against ALWAYS_ANONYMOUS_PATHS: comparing the computed
     # surface to the constant that produced it is tautological and passes unchanged for any
     # widening of that constant, which is the direction that matters here.
     assert set(ALWAYS_ANONYMOUS_PATHS) == {"/healthz"}
+    monkeypatch.setattr(config, "sandbox_enabled", False)
+    monkeypatch.setattr(config, "anonymous_surface_minimal", True)
+    assert _anonymous_surface() == {"/healthz"}
+
+
+def test_the_sandbox_forces_the_minimal_surface_even_if_the_flag_is_off(monkeypatch):
+    """genetics-results-suite-rhh: the two levers are independent in ONE direction only.
+
+    `ANONYMOUS_SURFACE_MINIMAL=false` is an escape hatch for the no-sandbox deployment. It must
+    not be a way to hand a running sandbox six routes it can call with no header, so
+    `SANDBOX_ENABLED` overrides it.
+    """
     monkeypatch.setattr(config, "sandbox_enabled", True)
-    anonymous = {
-        route.path for route in _public_routes() if is_public_endpoint(_request_for(route))
-    }
-    assert anonymous == {"/healthz"}
+    monkeypatch.setattr(config, "anonymous_surface_minimal", False)
+    assert _anonymous_surface() == {"/healthz"}
+
+
+def test_disabling_the_sandbox_does_not_re_open_the_surface(monkeypatch):
+    """The defect this bead is: `SANDBOX_ENABLED=false` is an INCIDENT action, and it used to be
+    a security widening as well. With the sandbox off and the flag at its default, the surface
+    must stay minimal — otherwise killing the sandbox under pressure re-opens six routes."""
+    monkeypatch.setattr(config, "sandbox_enabled", True)
+    monkeypatch.setattr(config, "anonymous_surface_minimal", config._parse_anonymous_surface_minimal())
+    assert _anonymous_surface() == {"/healthz"}
+    monkeypatch.setattr(config, "sandbox_enabled", False)
+    assert _anonymous_surface() == {"/healthz"}, (
+        "disabling the sandbox re-opened the anonymous surface"
+    )
 
 
 def test_an_internal_secret_caller_is_served_but_not_accounted(monkeypatch):
@@ -187,3 +237,92 @@ def test_a_route_with_no_route_object_is_not_anonymous(monkeypatch):
     # an unmatched path 404s out of the router with no `route` in scope
     monkeypatch.setattr(config, "sandbox_enabled", True)
     assert not is_public_endpoint(Request({"type": "http", "method": "GET", "headers": []}))
+
+
+def _reload_config_with(value: str | None):
+    """Re-execute app/config/common.py with ANONYMOUS_SURFACE_MINIMAL set (or not) as given."""
+    saved = os.environ.get("ANONYMOUS_SURFACE_MINIMAL")
+    if value is None:
+        os.environ.pop("ANONYMOUS_SURFACE_MINIMAL", None)
+    else:
+        os.environ["ANONYMOUS_SURFACE_MINIMAL"] = value
+    try:
+        importlib.reload(config)
+        return config.anonymous_surface_minimal
+    finally:
+        if saved is None:
+            os.environ.pop("ANONYMOUS_SURFACE_MINIMAL", None)
+        else:
+            os.environ["ANONYMOUS_SURFACE_MINIMAL"] = saved
+        importlib.reload(config)
+
+
+def test_the_shipped_default_is_the_attribute_the_code_actually_reads():
+    """Pins the module ATTRIBUTE, not the parse function.
+
+    `test_the_minimal_surface_is_the_default` exercises `_parse_anonymous_surface_minimal()` in
+    isolation and every other test here monkeypatches `config.anonymous_surface_minimal`
+    explicitly, so nothing tied the function to the attribute `is_public_endpoint` reads:
+    mutating the module line to `anonymous_surface_minimal = False` left the whole offline lane
+    green. This re-executes the config module with the variable absent — the shipped
+    deployment's state — and asserts both the attribute and its effect on a real public route.
+    """
+    assert _reload_config_with(None) is True
+
+    # and it is load-bearing: with the module in that state, a data-path public route is not
+    # anonymous. sandbox_enabled is forced off so the assertion can only be satisfied by the
+    # attribute above.
+    saved = os.environ.get("ANONYMOUS_SURFACE_MINIMAL")
+    os.environ.pop("ANONYMOUS_SURFACE_MINIMAL", None)
+    try:
+        importlib.reload(config)
+        config.sandbox_enabled = False
+        data_path = [r for r in _public_routes() if r.path not in ALWAYS_ANONYMOUS_PATHS]
+        assert data_path
+        for route in data_path:
+            assert not is_public_endpoint(_request_for(route)), route.path
+    finally:
+        if saved is not None:
+            os.environ["ANONYMOUS_SURFACE_MINIMAL"] = saved
+        importlib.reload(config)
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        # the ordinary falsey spellings an operator reaches for. `off` is the one that matters:
+        # the manifest calls this a break-glass, and `ANONYMOUS_SURFACE_MINIMAL=off` used to
+        # leave the surface narrow while looking like it had been widened.
+        ("off", False),
+        ("OFF", False),
+        ("disabled", False),
+        ("n", False),
+        ("F", False),
+        ("0", False),
+        ("false", False),
+        ("no", False),
+        # whitespace is what the .strip() exists for
+        (" false ", False),
+        ("0 ", False),
+        ("\ttrue\n", True),
+        # truthy and unrecognised both keep the fail-safe default
+        ("on", True),
+        ("enabled", True),
+        ("flase", True),
+        ("None", True),
+        ("", True),
+    ],
+)
+def test_the_break_glass_accepts_the_spellings_an_operator_types(monkeypatch, value, expected):
+    monkeypatch.setenv("ANONYMOUS_SURFACE_MINIMAL", value)
+    assert config._parse_anonymous_surface_minimal() is expected, value
+
+
+def test_an_unrecognised_value_is_logged_rather_than_silently_assumed(monkeypatch, caplog):
+    monkeypatch.setenv("ANONYMOUS_SURFACE_MINIMAL", "flase")
+    with caplog.at_level(logging.WARNING, logger="app.config.common"):
+        assert config._parse_anonymous_surface_minimal() is True
+    assert any(
+        "flase" in r.getMessage() and "ANONYMOUS_SURFACE_MINIMAL" in r.getMessage()
+        for r in caplog.records
+    ), "an unrecognised value must name itself and what was assumed"

@@ -1,8 +1,12 @@
 """Pins GET /api/v1/auth against being an unauthenticated identity oracle.
 
-The route is `@is_public`, so `auth_required` returns before any credential check and the
-handler runs for a caller with no credential at all — by design, it is how the browser asks
-"am I signed in?". The danger is the shape genetics-results-suite-th2 found on chat-backend's
+The route is `@is_public`. In the **shipped default** configuration that no longer makes it
+anonymous: `ANONYMOUS_SURFACE_MINIMAL` defaults on, so `app.dependencies.is_public_endpoint`
+admits only `/healthz` with no principal and a credential-less caller gets 401 here
+(genetics-results-suite-rhh). The handler runs for a credential-less caller only with the
+surface explicitly widened — which is the configuration these tests set up, because that is
+where the oracle risk lives. The danger is the shape genetics-results-suite-th2 found on
+chat-backend's
 `GET /chat/v1/auth`: reflecting back whatever `X-Goog-Authenticated-User-Email` the caller
 sent, turning a public route into an oracle for anything with pod-network reach.
 
@@ -36,6 +40,12 @@ def allowlist(monkeypatch):
     monkeypatch.setattr(config, "allowed_email_domains", {"finngen.fi"})
     monkeypatch.setattr(config, "allowed_emails", set())
     monkeypatch.setattr(config, "sandbox_token_signing_key", "")
+    # the WIDE anonymous surface, which is no longer the default (genetics-results-suite-rhh).
+    # These cases are about what the HANDLER reflects to a caller that reaches it with no
+    # credential, so they need the route to be reachable that way at all; the default surface
+    # 401s such a caller before the handler runs, which is strictly stronger and is pinned by
+    # test_the_default_surface_never_reaches_the_handler_at_all below.
+    monkeypatch.setattr(config, "anonymous_surface_minimal", False)
 
 
 @pytest.fixture
@@ -96,6 +106,21 @@ def test_no_credential_is_unauthenticated(call):
     status, body = call({})
     assert status == 200
     assert body == {"authenticated": False, "user": None}
+
+
+@pytest.mark.parametrize("headers", [{}, {USER_HEADER: "accounts.google.com:attacker@finngen.fi"}])
+def test_the_default_surface_never_reaches_the_handler_at_all(call, monkeypatch, headers):
+    """Defence in depth on top of the oracle property above.
+
+    With `ANONYMOUS_SURFACE_MINIMAL` at its default, `/api/v1/auth` is not anonymous, so a
+    credential-less caller — forged identity header or not — is refused by `auth_required`
+    before the handler can reflect anything. The browser is unaffected: auth-gateway sends
+    `/api/` through `auth_request /oauth2/auth` and the BFF authenticates its upstream call.
+    """
+    monkeypatch.setattr(config, "anonymous_surface_minimal", True)
+    status, body = call(headers)
+    assert status == 401
+    assert "attacker" not in json.dumps(body)
 
 
 def test_forged_identity_header_alone_is_not_reflected(call):

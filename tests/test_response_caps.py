@@ -294,6 +294,10 @@ def test_a_public_route_with_no_credential_is_not_capped(client, monkeypatch):
     """Pinned deliberately. What makes this safe is not the cap but that every public route
     bounds its own response for every caller — including POST /rsid/variants, which is where
     the invariant used to break. See app/core/limits.py."""
+    # the wide anonymous surface, so that a credential-less request reaches the handler at all.
+    # It is not the default any more (genetics-results-suite-rhh); this test is about what the
+    # CAP does once the request is in, not about who may get in.
+    monkeypatch.setattr(config, "anonymous_surface_minimal", False)
     monkeypatch.setattr(limits, "SANDBOX_MAX_RESPONSE_BYTES", 100)
     resp = _get(client, "/public/rows", n=5000)
 

@@ -57,9 +57,10 @@ docstring implies:**
    `_executions == {}` — and the sandbox's NetworkPolicy egress reaches `results-api:4000`
    **directly**, bypassing auth-gateway, so a script could shed all four counters by not sending
    the header.
-   The **no-credential** half is closed in `app.dependencies.is_public_endpoint`, not here: once
-   `SANDBOX_ENABLED` is true the anonymous surface is `/healthz` alone, so every route touching a
-   data path answers 401 to a request carrying nothing. Nothing in this module changed for it,
+   The **no-credential** half is closed in `app.dependencies.is_public_endpoint`, not here: with
+   `ANONYMOUS_SURFACE_MINIMAL` on (the default, and forced by `SANDBOX_ENABLED`) the anonymous
+   surface is `/healthz` alone, so every route touching a data path answers 401 to a request
+   carrying nothing. Nothing in this module changed for it,
    and nothing here may be relaxed on the assumption that an anonymous request is harmless —
    `tests/test_anonymous_surface.py` is what keeps that assumption true.
    **The other half is still open.** `_sandbox_principal` accepts an HS256 sandbox token and

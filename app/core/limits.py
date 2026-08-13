@@ -28,7 +28,9 @@ handler are the sandbox and the verified non-sandbox principals — which is the
 exactly. Two cases reach a handler with no principal resolved, and each is handled on its own
 terms rather than by defaulting:
 
-* an ``@is_public`` route **while ``SANDBOX_ENABLED`` is false**. Re-derive the list with
+* an ``@is_public`` route **while the anonymous surface is the wide one** — that is, with
+  ``ANONYMOUS_SURFACE_MINIMAL`` explicitly false *and* ``SANDBOX_ENABLED`` false, since either
+  one being set narrows it. Re-derive the list with
   ``grep -rn "@is_public" app/``, or read it off the live route table with
   `app.dependencies.public_route_paths`; today it is seven: ``/api/v1`` and ``/healthz``
   (`app/server.py`), ``/api/v1/auth``, ``/api/v1/variant_sets``, ``/api/v1/variant_sets/{name}``,
@@ -37,8 +39,10 @@ terms rather than by defaulting:
   truncate nothing today — the largest public response the code can produce is 888 rows /
   18.6 KB.
 
-  With ``SANDBOX_ENABLED`` true this case shrinks to ``/healthz`` alone — see
-  `app.dependencies.is_public_endpoint` and the note on the per-execution counters below.
+  In the **shipped default** configuration this case shrinks to ``/healthz`` alone:
+  ``ANONYMOUS_SURFACE_MINIMAL`` defaults to on, and ``SANDBOX_ENABLED=true`` forces it on
+  regardless — see `app.dependencies.is_public_endpoint` and the note on the per-execution
+  counters below.
 
   The reason relaxing them carries **zero security delta** is that every one of these routes is
   bounded in its own handler for *every* caller, so the byte cap is not what stands between a
@@ -71,9 +75,11 @@ egress bypassing auth-gateway, so a script could shed every per-execution bound 
 sending the header.
 
 **The no-credential half of that is closed, and not here.**
-`app.dependencies.is_public_endpoint` shrinks the anonymous surface to `/healthz` alone once
-`SANDBOX_ENABLED` is true, so with the sandbox deployed every route that touches a data path
-answers 401 to a request carrying *nothing*. Pinned by `tests/test_anonymous_surface.py`, which
+`app.dependencies.is_public_endpoint` shrinks the anonymous surface to `/healthz` alone whenever
+`ANONYMOUS_SURFACE_MINIMAL` is on — which is the default, and which `SANDBOX_ENABLED` forces —
+so every route that touches a data path answers 401 to a request carrying *nothing*. The two
+were one switch until genetics-results-suite-rhh, which meant disabling the sandbox re-opened
+the surface. Pinned by `tests/test_anonymous_surface.py`, which
 reads the live route table so a new `@is_public` decorator cannot reopen it in silence.
 
 **What is not closed:** it would be wrong to say the only way into a handler is to present a

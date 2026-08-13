@@ -5,6 +5,7 @@ This module contains general settings like authentication, database paths,
 chunk sizes, and other common constants.
 """
 
+import logging
 import os
 
 from app.config.profile import load_profile_module
@@ -47,6 +48,47 @@ sandbox_token_signing_key = os.environ.get("SANDBOX_TOKEN_SIGNING_KEY", "")
 # Authorization header would be served as an unauthenticated caller. When this is true and
 # either secret is missing, the service refuses to start (app/core/sandbox_token.py).
 sandbox_enabled = os.environ.get("SANDBOX_ENABLED", "").strip().lower() in ("1", "true", "yes")
+
+# whether the anonymous surface is the minimal one (`/healthz` alone) rather than the full
+# `@is_public` set. Separate from `sandbox_enabled` because that variable is an INCIDENT lever —
+# "turn the sandbox off" — and this one is a SECURITY lever; keying the second on the first made
+# a routine `SANDBOX_ENABLED=false` re-open six routes to anonymous callers, which is failing
+# open on the action an operator takes under pressure (genetics-results-suite-rhh).
+# `sandbox_enabled` still FORCES it in `app.dependencies.is_public_endpoint`, so the sandbox can
+# never run with the wide surface; this only lets the surface be narrow WITHOUT the sandbox.
+# The parse is inverted relative to every other boolean here: unset means true, and only an
+# explicit false-y value turns it off, so a typo (`ANONYMOUS_SURFACE_MINIMAL=flase`) fails safe
+# instead of silently widening the surface. A function rather than an inline expression so the
+# default and the typo case can be tested without re-importing this module.
+#
+# The falsey spellings are deliberately wider than `sandbox_enabled`'s truthy set eighteen lines
+# up. This variable is documented in `k8s/deployments/results-api.yaml` as a break-glass, and
+# `off` is what an operator types under pressure — with only `0/false/no` accepted, `off`,
+# `disabled` and `n` all left the surface narrow while looking like they had widened it. That is
+# the same silent-failure shape genetics-results-suite-rhh was filed to fix, one layer down. An
+# unrecognised value keeps the fail-safe default AND logs, so a typo is visible rather than mute.
+_SURFACE_MINIMAL_OFF = frozenset({"0", "false", "no", "off", "disabled", "n", "f"})
+_SURFACE_MINIMAL_ON = frozenset({"1", "true", "yes", "on", "enabled", "y", "t"})
+
+
+def _parse_anonymous_surface_minimal() -> bool:
+    value = os.environ.get("ANONYMOUS_SURFACE_MINIMAL", "").strip().lower()
+    if not value:
+        return True
+    if value in _SURFACE_MINIMAL_OFF:
+        return False
+    if value in _SURFACE_MINIMAL_ON:
+        return True
+    logging.getLogger(__name__).warning(
+        "ANONYMOUS_SURFACE_MINIMAL is set to %r, which is not a recognised boolean; assuming ON "
+        "(the anonymous surface stays minimal: /healthz only). To widen it, set one of %s.",
+        value,
+        ", ".join(sorted(_SURFACE_MINIMAL_OFF)),
+    )
+    return True
+
+
+anonymous_surface_minimal = _parse_anonymous_surface_minimal()
 
 # bearer token auth: allowed email domains and specific emails
 allowed_email_domains = {
