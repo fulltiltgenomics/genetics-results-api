@@ -9,11 +9,29 @@ from app.dependencies import get_rsid_db, is_public
 
 RSID_PATTERN = re.compile(r"^rs\d+$", re.IGNORECASE)
 
+# Applied to GET and POST alike and to every caller, with no sandbox special case — the
+# uniformity is the point. This route is `@is_public`, so it is relaxed by `app.core.limits`;
+# with nothing bounding the id count, a script that *omitted* its sandbox token got an
+# unbounded response where the same script presenting the token got 16 MiB, i.e. the weaker
+# credential bought the looser limit. `k8s/network-policies/sandbox-policy.yaml` lets the
+# sandbox reach results-api:4000 directly, so auth-gateway's client_max_body_size never sees
+# the POST body either.
+#
+# 5000 comes from what the GET already tolerates: uvicorn's h11 caps the request line plus
+# headers at 16 KiB, and the shortest possible id costs 4 bytes in the query string ("rs1,"),
+# so no GET that works today can carry more than 4096 ids — 5000 regresses nothing that
+# currently succeeds. It is a generous bound on the response too (a few hundred KB, well under
+# the 16 MiB sandbox cap), and no bulk POST caller exists today.
+MAX_RSIDS = 5000
+# an id and its separator cost at most 32 bytes, so this bounds the body the pod materializes
+# without bounding anything a legitimate caller sends
+MAX_RSID_BODY_BYTES = MAX_RSIDS * 32
+
 router = APIRouter()
 
 
 def parse_and_validate_rsids(rsids_input: str) -> list[str]:
-    """Parse comma-separated rsids and validate format.
+    """Parse comma-separated rsids, and validate their count and format.
 
     Args:
         rsids_input: Comma-separated string of rsids
@@ -22,7 +40,7 @@ def parse_and_validate_rsids(rsids_input: str) -> list[str]:
         List of validated rsids (original case preserved)
 
     Raises:
-        HTTPException: If input is empty or any rsid is invalid
+        HTTPException: If input is empty, over `MAX_RSIDS`, or any rsid is invalid
     """
     if not rsids_input or not rsids_input.strip():
         raise HTTPException(
@@ -36,6 +54,17 @@ def parse_and_validate_rsids(rsids_input: str) -> list[str]:
         raise HTTPException(
             status_code=422,
             detail="rsids parameter is required and cannot be empty",
+        )
+
+    # checked before the format scan, so an oversized request is not walked and does not
+    # produce an error message listing every id in it
+    if len(rsids) > MAX_RSIDS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Too many rsids: {len(rsids)} requested, at most {MAX_RSIDS} per request. "
+                "Split the list across several requests."
+            ),
         )
 
     invalid = [r for r in rsids if not RSID_PATTERN.match(r)]
@@ -89,7 +118,16 @@ async def post_rsid_variants(
     Returns a list of objects containing the rsid and its corresponding variants.
     If an rsid is not found, it is included with an empty variants array.
     """
-    body = await request.body()
+    # read incrementally rather than with request.body(): the count check below can only run
+    # once the whole body is in memory, which is too late if the body itself is the payload
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > MAX_RSID_BODY_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Request body too large: at most {MAX_RSID_BODY_BYTES} bytes.",
+            )
     rsids_input = body.decode("utf-8")
 
     validated_rsids = parse_and_validate_rsids(rsids_input)

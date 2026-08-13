@@ -10,7 +10,21 @@ from app.services.dataset_mapping import DatasetMapping
 setup_logging()
 logger = logging.getLogger(__name__)
 
-dataset_mapping = DatasetMapping()
+_dataset_mapping: DatasetMapping | None = None
+
+
+def get_dataset_mapping() -> DatasetMapping:
+    """The dataset->resource mapping, built on first use and cached.
+
+    Constructed lazily because `DatasetMapping.__init__` reads its mapping files off
+    GCS: building it at import time would make merely importing this module — which
+    pytest collection does — require credentials. Callers bind it once per stream
+    rather than per row, so the per-row cost is unchanged.
+    """
+    global _dataset_mapping
+    if _dataset_mapping is None:
+        _dataset_mapping = DatasetMapping()
+    return _dataset_mapping
 
 
 async def _prepend(iterator: AsyncIterator[Any], kind: str, value: Any) -> AsyncIterator[Any]:
@@ -117,6 +131,7 @@ def tsv_line_iterator_simple(
     """
     # derive column index from header
     dataset_col = header.index(columns["dataset"])
+    dataset_mapping = get_dataset_mapping()
 
     def filter_fn(s: list[bytes]) -> bool:
         return True
@@ -267,6 +282,7 @@ def tsv_line_iterator(
     ref_col = header.index(columns["ref"])
     alt_col = header.index(columns["alt"])
     dataset_col = header.index(columns["dataset"])
+    dataset_mapping = get_dataset_mapping()
 
     if isinstance(variant, set):
         variant_keys = {
@@ -325,6 +341,7 @@ def tsv_line_iterator_qtl(
     trait_start_col = header.index(columns["trait_start"])
     trait_end_col = header.index(columns["trait_end"])
     dataset_col = header.index(columns["dataset"])
+    dataset_mapping = get_dataset_mapping()
 
     # pre-compute position pairs as bytes for efficient comparison
     start_end_positions_bytes = [
@@ -395,6 +412,7 @@ def tsv_line_iterator_coloc(
     trait2_index = header.index(b"trait2")
     cs1_id_index = header.index(b"cs1_id")
     cs2_id_index = header.index(b"cs2_id")
+    dataset_mapping = get_dataset_mapping()
 
     def filter_fn(s: list[bytes]) -> bool:
         """Filter to lines where either cs1 or cs2 is in the target set."""
@@ -439,6 +457,7 @@ def tsv_line_iterator_coloc_by_trait(
     trait2_index = header.index(b"trait2")
     cs1_id_index = header.index(b"cs1_id")
     cs2_id_index = header.index(b"cs2_id")
+    dataset_mapping = get_dataset_mapping()
 
     def _get_index_optional(column_name: bytes) -> int | None:
         try:
@@ -798,6 +817,22 @@ async def tsv_stream_to_list(
     header_schema: dict[str, type],
 ) -> list[dict[str, Any]]:
     """Convert a stream of TSV lines to a list of dictionaries."""
+    _, rows = await tsv_stream_to_list_with_header(line_stream, header_schema)
+    return rows
+
+
+async def tsv_stream_to_list_with_header(
+    line_stream: AsyncIterator[list[str]],
+    header_schema: dict[str, type],
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Same conversion, but also returns the column names the rows were keyed by.
+
+    The names come from the file's own header line, not from ``header_schema`` — the
+    schema is a superset used for validation and type coercion, so it is not a reliable
+    stand-in for what a given file actually carries. The header line is read even when the
+    file has no data rows, which is the whole point: it is the only place an empty JSON
+    result's schema still exists before the bare ``[]`` is serialized.
+    """
     header = [h[1:] if h.startswith("#") else h for h in await anext(line_stream)]
 
     # validate header against schema
@@ -830,7 +865,7 @@ async def tsv_stream_to_list(
     except Exception as e:
         logger.error(f"Error parsing data: {e}")
         raise ValueError("Error parsing data")
-    return rows
+    return header, rows
 
 
 def _cast_tsv_field(value: str, type_: type) -> Any:

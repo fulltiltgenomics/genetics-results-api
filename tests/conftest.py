@@ -4,8 +4,48 @@ import requests
 # Add the project root to Python path so we can import app modules
 import sys
 import os
+import socket
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+
+def pytest_configure(config):
+    """Abort if `app` resolves to anything outside the tree pytest is testing.
+
+    genetics-results-suite-6o3 in this repo's shape. There is no install here — `app` is
+    a namespace package (no `app/__init__.py`) found on sys.path, and the insert above
+    puts THIS tree first, so the mcp-server failure (a foreign interpreter importing a
+    foreign copy) cannot happen. What can happen is subtler: a namespace package MERGES
+    every matching directory on sys.path, so `PYTHONPATH=<other checkout>` — the variable
+    a bare `python scripts/…` run needs, easily left pointing at the main checkout — adds
+    that tree's `app/` to `app.__path__`. Modules present there but not here then import
+    silently from the other checkout, and a deletion made here is invisible.
+
+    Checked in pytest_configure so it aborts before collection rather than surfacing as a
+    confusing test failure. Importing `app` here runs no code: the namespace package has
+    no `__init__.py`.
+    """
+    import app
+
+    rootdir = Path(config.rootpath).resolve()
+    outside = [p for p in app.__path__ if not Path(p).resolve().is_relative_to(rootdir)]
+    if outside:
+        raise pytest.UsageError(
+            "the `app` namespace package spans directories OUTSIDE the tree pytest is "
+            "testing, so this run can import another checkout's source and report green.\n"
+            "    outside this tree : " + ", ".join(outside) + "\n"
+            f"    pytest rootdir    : {rootdir}\n"
+            f"    interpreter       : {sys.executable}\n"
+            f"    PYTHONPATH        : {os.environ.get('PYTHONPATH', '(unset)')}\n"
+            "Almost always PYTHONPATH points at another checkout. Fix, from "
+            f"{rootdir}:\n"
+            "    unset PYTHONPATH   # or set it to this tree, which bare scripts need\n"
+            "    uv sync --extra dev\n"
+            '    uv run python -c "import app, sys; print(list(app.__path__)); '
+            'print(sys.executable)"\n'
+            f"Every printed path must be under {rootdir}."
+        )
 
 
 # ============================================================================
@@ -18,15 +58,111 @@ def pytest_addoption(parser):
     parser.addoption(
         "--server-url",
         action="store",
-        default="http://localhost:4000",
-        help="Base URL of the server to test against (default: http://localhost:4000)",
+        default=None,
+        help=(
+            "Base URL of an already-running server to test against. "
+            "When omitted, the app is started in-process on a free port."
+        ),
     )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-classify every test as `integration` or `offline`.
+
+    The distinction is the fixture a test asks for, not a marker someone remembers to
+    write: anything that takes `server_url` reaches real data over the network, and
+    everything else does not. Applying it here means a newly added test lands in the
+    `offline` set by default — the set that runs with no credentials and no network —
+    rather than silently joining a pile that never executes.
+
+    The lane only holds as long as importing an `app` module stays credential-free:
+    collection imports every test module regardless of the mark expression, so anything
+    that reaches the network — or merely constructs a Google client that resolves
+    Application Default Credentials — at import time breaks `-m offline` for everyone. It
+    breaks loudly, at collection, not silently-green, and it need not be a data client:
+    `google.cloud.logging.Client()` behind `setup_logging()` took the lane down the same
+    way `DatasetMapping()` did. The fix belongs in the app module (build it lazily, as
+    `app.core.streams.get_dataset_mapping` does, or degrade, as `setup_logging` now does),
+    not in a list of exclusions here.
+    """
+    for item in items:
+        declared = {m.name for m in item.iter_markers()}
+        if "server_url" in getattr(item, "fixturenames", ()):
+            if "integration" not in declared:
+                item.add_marker(pytest.mark.integration)
+        elif not declared & {"integration", "offline"}:
+            item.add_marker(pytest.mark.offline)
+
+
+# app startup warms every configured tabix header, the gene maps, the search index and
+# the gene-disease tables off GCS, then runs a cross-resource smoke query; ~25s observed
+_STARTUP_TIMEOUT_SECONDS = 300
+
+
+def _free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 @pytest.fixture(scope="session")
 def server_url(request):
-    """Get the server URL from command line or use default."""
-    return request.config.getoption("--server-url")
+    """Base URL of the server under test.
+
+    With `--server-url`, yields it untouched — the deployed-server workflow is unchanged.
+    Without it, boots the real ASGI app in this process on an ephemeral port and yields
+    that, so a bare `pytest` exercises the routers instead of failing to connect (or, worse,
+    hitting whatever unrelated service happens to hold the old default port 4000).
+    """
+    explicit = request.config.getoption("--server-url")
+    if explicit:
+        yield explicit
+        return
+
+    import threading
+    import time
+    import uvicorn
+
+    # the tabix services cache fetched .tbi/.csi here; run_server.py creates it too
+    os.makedirs("/tmp/tbi_cache", exist_ok=True)
+
+    from app.server import app
+
+    port = _free_port()
+    config = uvicorn.Config(
+        app,
+        host="127.0.0.1",
+        port=port,
+        # asyncio, not uvloop: uvloop gives subprocesses a socket for stdin, which breaks
+        # tabix's -R /dev/stdin (uvloop #532). Same reason run_server.py pins it.
+        loop="asyncio",
+        log_config=None,
+        log_level="warning",
+    )
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, name="in-process-results-api", daemon=True)
+    thread.start()
+
+    deadline = time.monotonic() + _STARTUP_TIMEOUT_SECONDS
+    while not server.started:
+        if not thread.is_alive():
+            pytest.fail(
+                "in-process server failed to start (the lifespan warming or smoke query "
+                "raised); it needs working Google credentials and GCS access. Run "
+                "`pytest -m offline` for the subset that needs neither, or pass "
+                "--server-url to test against a running server."
+            )
+        if time.monotonic() > deadline:
+            server.should_exit = True
+            thread.join(timeout=30)
+            pytest.fail(f"in-process server did not start within {_STARTUP_TIMEOUT_SECONDS}s")
+        time.sleep(0.25)
+
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        thread.join(timeout=30)
 
 
 @pytest.fixture(scope="session")

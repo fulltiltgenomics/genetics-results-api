@@ -78,6 +78,27 @@ class TestHlaAssociations:
         for col in ("ref", "alt"):
             assert col not in header
 
+    def test_tsv_header_matches_the_header_schema(self, server_url, hla_resource):
+        """The two response formats must agree on the columns they serve.
+
+        Only the JSON path consults `_HLA_HEADER_SCHEMA` (it types the rows through it and
+        500s on a mismatch); the TSV path streams the underlying columns through untouched.
+        So a change reaching one and not the other — the download-header failure mode from
+        genetics-results-suite-5wm — is caught by nothing unless something pins the emitted
+        TSV header against the schema, in order and in full.
+        """
+        from app.routers.hla import _HLA_HEADER_SCHEMA
+
+        response = requests.get(
+            f"{server_url}/api/v1/hla/{hla_resource}",
+            params={"phenotypes": HLA_PHENOTYPE, "format": "tsv"},
+        )
+        assert response.status_code == 200
+
+        result = validate_tsv_response(response.text, min_data_lines=1)
+        assert result["valid"], result["errors"]
+        assert result["header"] == list(_HLA_HEADER_SCHEMA)
+
     def test_returns_the_whole_hla_profile(self, server_url, hla_resource):
         """One read covers every typed allele, which is what makes a by-variant form unnecessary."""
         rows = requests.get(

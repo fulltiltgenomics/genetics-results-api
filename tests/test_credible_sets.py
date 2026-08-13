@@ -763,7 +763,7 @@ class TestCredibleSetsByPhenotypeLeads:
 
 
 class TestAccumulateCsLeads:
-    """Unit tests for the streaming lead accumulator (no server needed)."""
+    """Unit tests for the streaming lead accumulator (no server, no credentials needed)."""
 
     HEADER = ["chr", "pos", "ref", "alt", "mlog10p", "beta", "pip", "cs_id"]
     SCHEMA = {
