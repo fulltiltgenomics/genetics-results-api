@@ -14,23 +14,27 @@ SDK genuinely needs it.
 
 **What this closes is the no-credential path only.** A caller presenting `INTERNAL_API_SECRET`
 still reaches every handler with no accounting whatsoever — `_sandbox_principal` accepts an HS256
-sandbox token and nothing else, so `admit` is not called for it. The sandbox is handed that secret
-today and the SDK attaches it to every request, so the residual hole closes only when
-genetics-results-suite-4h6.7 stops giving the sandbox the secret and genetics-results-suite-4h6.14
-makes the SDK send the per-execution token instead.
-`test_an_internal_secret_caller_is_served_but_not_accounted` pins that residue.
+sandbox token and nothing else, so `admit` is not called for it. What changed with
+genetics-results-suite-4h6.44 is who can reach that path: the SDK no longer attaches the shared
+secret at all. It reads the supervisor's per-execution token file and sends the token bound to
+this destination (`aud: results-api`), which is the credential `admit` is keyed on.
+`test_the_sdk_s_per_execution_token_is_accounted` measures that a request carrying it lands in the
+execution map, and `test_the_internal_secret_path_survives_but_the_sdk_no_longer_takes_it` keeps
+the residue pinned as what it now is — a property of this service, not a route out of the sandbox.
 """
 
 import asyncio
 import importlib
 import logging
 import os
+import time
 
+import jwt
 import pytest
 from fastapi import Request
 
 import app.config.common as config
-from app.core import sandbox_budget
+from app.core import sandbox_budget, sandbox_token
 from app.dependencies import (
     ALWAYS_ANONYMOUS_PATHS,
     is_public_endpoint,
@@ -177,20 +181,110 @@ def test_disabling_the_sandbox_does_not_re_open_the_surface(monkeypatch):
     )
 
 
-def test_an_internal_secret_caller_is_served_but_not_accounted(monkeypatch):
-    """The residual hole, pinned as it actually behaves rather than as the docs once claimed.
+def _sandbox_bearer(key: str, jti: str = "exec-4h6-44", ttl: int = 300) -> str:
+    """A token shaped exactly as chat-backend mints it (genetics-mcp-server sandbox_token.py).
 
-    Shrinking the anonymous surface closes the NO-CREDENTIAL path. It does not close the
-    INTERNAL_API_SECRET path: that secret satisfies `is_internal_caller`, so `get_verified_user`
-    resolves `mcp-tool` and the request enters the handler, while `_sandbox_principal` accepts an
-    HS256 sandbox token only — so `admit` is never called and the per-execution counter map stays
-    empty. The sandbox is handed that secret today and the SDK attaches it to every request, so
-    on the day `SANDBOX_ENABLED` flips a script can shed all four counters by sending the internal
-    secret instead of sending nothing.
+    Built here rather than imported: this repo is the VERIFIER, and a test that reuses the
+    minter's own helper cannot catch the two drifting apart. That argument only holds for
+    values written as LITERALS — `iss`, `aud` and `alg` used to be read off the verifier's
+    own constants, which made those three tautological and left drift in exactly the fields
+    a validator rejects on. They are spelled out here, as `test_a_db_api_token_is_refused_here`
+    already spells out its crossed audience.
+    """
+    now = int(time.time())
+    return jwt.encode(
+        {
+            "iss": "chat-backend",
+            "aud": "results-api",
+            "sub": "someone@example.org",
+            "sid": "session-1",
+            "jti": jti,
+            "iat": now,
+            "exp": now + ttl,
+            "scope": "genetics:read",
+        },
+        key,
+        algorithm="HS256",
+    )
 
-    EXPECTED TO CHANGE when genetics-results-suite-4h6.7 (stop giving the sandbox the secret) and
-    genetics-results-suite-4h6.14 (make the SDK send the per-execution token) land: this test
-    should then fail, and that failure is the signal that the hole is closed, not a regression.
+
+def test_the_sdk_s_per_execution_token_is_accounted(monkeypatch):
+    """THE acceptance for genetics-results-suite-4h6.44, and it is a measurement of the counter
+    map rather than of a status code.
+
+    A 200 proves nothing here: an INTERNAL_API_SECRET caller is served 200 too, as `mcp-tool`,
+    with `_executions == {}` — that shape of check is exactly what let genetics-results-suite-0lf
+    through. `admit` runs in `app/middleware.py` off `_sandbox_principal`, so the only credential
+    that reaches it is an HS256 token whose `aud` is this service, which is what the SDK now
+    attaches per destination (genetics-mcp-server tools/executor.py `_SandboxTokenAuth`).
+    """
+    key = "test-signing-key-0123456789abcdef"
+    monkeypatch.setattr(config, "sandbox_enabled", True)
+    monkeypatch.setattr(config, "require_auth", True)
+    monkeypatch.setattr(config, "sandbox_token_signing_key", key)
+    sandbox_budget.reset()
+
+    status, _ = _drive(
+        "/api/v1", headers=[("authorization", f"Bearer {_sandbox_bearer(key)}")]
+    )
+
+    assert status == 200
+    assert "exec-4h6-44" in sandbox_budget._executions, (
+        "the SDK's request did not appear in the per-execution counter map: admit() never ran, "
+        "so every quota control above it is inert"
+    )
+    entry = sandbox_budget._executions["exec-4h6-44"]
+    assert entry.requests == 1
+    assert entry.in_flight == 0, "the middleware's finally-release did not run"
+    sandbox_budget.reset()
+
+
+def test_a_db_api_token_is_refused_here(monkeypatch):
+    """Audience binding is the reason the SDK picks by destination rather than holding one
+    bearer. PyJWT treats a list `aud` as membership, so this is asserted against the validator
+    and not against the minter."""
+    key = "test-signing-key-0123456789abcdef"
+    monkeypatch.setattr(config, "sandbox_enabled", True)
+    monkeypatch.setattr(config, "require_auth", True)
+    monkeypatch.setattr(config, "sandbox_token_signing_key", key)
+    sandbox_budget.reset()
+
+    now = int(time.time())
+    crossed = jwt.encode(
+        {
+            "iss": sandbox_token.ISSUER,
+            "aud": "db-api",
+            "sub": "someone@example.org",
+            "sid": "session-1",
+            "jti": "exec-crossed",
+            "iat": now,
+            "exp": now + 300,
+            "scope": "genetics:read",
+        },
+        key,
+        algorithm=sandbox_token.ALGORITHM,
+    )
+    status, _ = _drive("/api/v1", headers=[("authorization", f"Bearer {crossed}")])
+
+    assert status == 401
+    assert sandbox_budget._executions == {}
+    sandbox_budget.reset()
+
+
+def test_the_internal_secret_path_survives_but_the_sdk_no_longer_takes_it(monkeypatch):
+    """The residue, pinned as what it now is.
+
+    This service still serves an INTERNAL_API_SECRET caller with no accounting: the secret
+    satisfies `is_internal_caller`, `get_verified_user` resolves `mcp-tool`, and
+    `_sandbox_principal` accepts an HS256 sandbox token only, so `admit` is never called. That
+    remains true and is deliberately not "fixed" here — the browser's BFF and the MCP service are
+    legitimate secret-bearing callers and are not per-execution anything.
+
+    What changed (genetics-results-suite-4h6.44) is that the sandbox is no longer one of them.
+    The SDK reads the supervisor's per-execution token file and attaches the audience-bound token
+    instead of the shared secret; genetics-mcp-server
+    tests/test_sandbox_sdk_credential.py::test_the_internal_secret_is_not_attached_when_a_token_file_exists
+    is the assertion on that side, and it is the one that fails if this route back out reopens.
     """
     monkeypatch.setattr(config, "sandbox_enabled", True)
     monkeypatch.setattr(config, "require_auth", True)
