@@ -11,6 +11,7 @@ fails closed when the signing key is unset.
 
 import base64
 import json
+import logging
 import time
 
 import jwt
@@ -278,3 +279,48 @@ def test_internal_marker_plus_identity_header_still_resolves_the_user():
 
 def test_no_credentials_is_still_unauthenticated():
     assert auth.get_verified_user(_request({})) is None
+
+
+# --- the signing key must be long enough to be a key (genetics-results-suite-4h6.36) -------
+
+
+@pytest.mark.parametrize("weak", ["   ", "\n", "x", "0", "a" * 31])
+def test_require_sandbox_config_refuses_a_blank_ish_or_short_signing_key(monkeypatch, weak):
+    """Every one of these passed the truthiness check and became a guessable HMAC key that
+    mints valid sandbox principals. 31 bytes is the boundary: PyJWT warns below 32."""
+    monkeypatch.setattr(config, "sandbox_enabled", True)
+    monkeypatch.setattr(config, "internal_api_secret", INTERNAL_SECRET)
+    monkeypatch.setattr(config, "sandbox_token_signing_key", weak)
+    with pytest.raises(SystemExit) as exc:
+        sandbox_token.require_sandbox_config()
+    assert exc.value.code == 1
+
+
+def test_require_sandbox_config_accepts_a_real_generated_key(monkeypatch):
+    """`openssl rand -base64 32`, what scripts/create-secrets.sh produces: 44 chars."""
+    key = base64.b64encode(b"\x11" * 32).decode()
+    assert len(key) == 44
+    monkeypatch.setattr(config, "sandbox_enabled", True)
+    monkeypatch.setattr(config, "internal_api_secret", INTERNAL_SECRET)
+    monkeypatch.setattr(config, "sandbox_token_signing_key", key)
+    sandbox_token.require_sandbox_config()  # must not raise
+
+
+def test_the_gate_does_not_normalise_the_key_that_reaches_jwt_decode(monkeypatch, caplog):
+    """The property the obvious `.strip()` fix would have broken. chat-backend mints with its
+    own copy of the secret, so a key deployed with a trailing newline signs as "key\\n"; if the
+    gate normalised it, every legitimate token would 401. The gate warns and changes nothing."""
+    key = SIGNING_KEY + "\n"
+    monkeypatch.setattr(config, "sandbox_enabled", True)
+    monkeypatch.setattr(config, "internal_api_secret", INTERNAL_SECRET)
+    monkeypatch.setattr(config, "sandbox_token_signing_key", key)
+    with caplog.at_level(logging.WARNING, logger="app.core.sandbox_token"):
+        sandbox_token.require_sandbox_config()  # must not raise
+    assert any("whitespace" in r.message for r in caplog.records)
+
+    assert config.sandbox_token_signing_key == key, "the gate mutated the key it verifies with"
+
+    principal = sandbox_token.verify_sandbox_token(_mint(key=key))
+    assert principal.user == "user@finngen.fi"
+    with pytest.raises(sandbox_token.SandboxTokenError):
+        sandbox_token.verify_sandbox_token(_mint(key=key.strip()))
