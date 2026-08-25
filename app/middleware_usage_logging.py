@@ -59,7 +59,9 @@ class UsageLoggingMiddleware:
     """
     Pure ASGI middleware for logging endpoint usage.
 
-    Captures: timestamp, user_email, endpoint_path, http_method, status_code, duration_ms
+    Captures per request: message, log_type, service, log_source, timestamp, user_email,
+    endpoint_path, full_path (stdout only — the Cloud Logging path strips it), http_method,
+    status_code and duration_ms, plus sid and jti when a sandbox token authorized the call.
 
     Logs are emitted with log_type="endpoint_access" for filtering in GCP log sinks.
     """
@@ -131,6 +133,24 @@ class UsageLoggingMiddleware:
             if principal is not None:
                 entry["sid"] = principal.session_id
                 entry["jti"] = principal.execution_id
+                # `sub` is the end-user address chat-backend/genetics-mcp-server put in the
+                # token (`src/genetics_mcp_server/sandbox_token.py`); the supervisor only checks
+                # it matches the user it was minted for, and this service's verifier only
+                # requires the claim to be present and non-empty. That is deliberately NOT the
+                # rule the header path above applies — it returns None unless `_email_allowed`
+                # passes — and the asymmetry is the point: a signed token is not spoofable by
+                # anything that can reach this port, an identity header is.
+                #
+                # Stamped as `principal.identity` (`sandbox:<sub>`), never the bare address: the
+                # prefix is what keeps a script's row separable from a verified human's in the
+                # one column that reaches BigQuery, and it is byte-identical to what
+                # `get_verified_user` already puts in `state["authenticated_user"]`, so this
+                # assignment is a no-op wherever auth ran. It matters where auth did not: on an
+                # `@is_public` route with the minimal anonymous surface off, or with
+                # REQUIRE_AUTH=false (the local e2e harness), user_email was null and a sandbox
+                # row differed from an unaccounted INTERNAL_API_SECRET row only by `jti`
+                # (genetics-results-suite-4h6.65).
+                entry["user_email"] = principal.identity
 
             # log as dict for Cloud Logging to parse as jsonPayload
             logger.info(entry)

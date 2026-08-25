@@ -15,6 +15,7 @@ import logging
 import pytest
 
 import app.config.common as config
+from app.core.sandbox_token import PRINCIPAL_PREFIX, SandboxPrincipal
 from app.middleware_usage_logging import UsageLoggingMiddleware
 
 
@@ -67,3 +68,53 @@ def test_service_is_on_every_logged_route_not_only_authenticated_ones(caplog, pa
 
 def test_log_type_still_marks_the_row_for_the_sink_filter(caplog):
     assert _emit(caplog, _scope())["log_type"] == "endpoint_access"
+
+
+def _sandbox_principal(user: str = "person@example.org") -> SandboxPrincipal:
+    return SandboxPrincipal(
+        user=user, session_id="sess-9", execution_id="exec-9", scope="read", expires_at=0
+    )
+
+
+def test_a_sandbox_request_is_attributable_to_the_user_from_this_log_alone(caplog):
+    """The token's `sub` is the end user; without it the row named a session, not a person.
+
+    An INTERNAL_API_SECRET caller logs `user_email: null` too, so a null here left an accounted
+    sandbox request and an unaccounted internal one differing only by the presence of `jti`
+    (genetics-results-suite-4h6.65). Reachable only where no auth dependency ran — an
+    `@is_public` route with ANONYMOUS_SURFACE_MINIMAL off, or REQUIRE_AUTH=false.
+    """
+    scope = _scope()
+    scope["state"] = {"sandbox_principal": _sandbox_principal()}
+    entry = _emit(caplog, scope)
+    assert entry["user_email"] == "sandbox:person@example.org"
+    assert entry["sid"] == "sess-9"
+    assert entry["jti"] == "exec-9"
+
+
+def test_the_sandbox_marker_survives_into_the_one_column_that_reaches_bigquery(caplog):
+    """`sandbox:` is the only thing separating a script's row from a verified human's.
+
+    The sink admits `log_type="endpoint_access"` and nothing else, so if this stamped the bare
+    address the two rows for the same person would be identical in every field a query can see
+    — which is what `docs/code-execution-security.md` says cannot happen.
+    """
+    scope = _scope()
+    scope["state"] = {"sandbox_principal": _sandbox_principal()}
+    assert _emit(caplog, scope)["user_email"].startswith(PRINCIPAL_PREFIX)
+
+
+def test_the_sandbox_stamp_agrees_with_what_the_auth_dependency_already_stored(caplog):
+    """`get_verified_user` returns `principal.identity`, so on an authenticated route the
+    fallback has already put that string in `user_email`. Stamping anything else here would
+    make the same request log two different identities depending on which route it hit."""
+    principal = _sandbox_principal()
+    scope = _scope()
+    scope["state"] = {"sandbox_principal": principal, "authenticated_user": principal.identity}
+    assert _emit(caplog, scope)["user_email"] == principal.identity
+
+
+def test_a_non_sandbox_request_still_carries_no_sandbox_attribution(caplog):
+    entry = _emit(caplog, _scope())
+    assert entry["user_email"] is None
+    assert "sid" not in entry and "jti" not in entry

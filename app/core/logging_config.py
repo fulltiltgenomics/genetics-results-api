@@ -5,24 +5,96 @@ from datetime import datetime, timezone
 
 import app.config.common as config
 
-# extra fields to include in structured logs
-EXTRA_LOG_FIELDS = [
-    "log_type",
-    "log_source",
-    "timestamp",
-    "user_email",
-    "endpoint_path",
-    "full_path",
-    "http_method",
-    "status_code",
-    "duration_ms",
-    # sandbox execution attribution (app/core/auth.py's "sandbox request authorized" line).
-    # Without these three names the formatter's string-message branch drops the whole `extra=`,
-    # so nothing of that line reaches jsonPayload and the sink cannot answer "which execution".
-    "sub",
-    "sid",
-    "jti",
-]
+# Names LogRecord owns. Anything else a caller attaches via `extra=` is, by construction, a
+# field somebody wanted in the log, so the formatter copies all of it into jsonPayload.
+#
+# This was an EXTRA_LOG_FIELDS allow-list, and it failed in the only direction that is silent:
+# `app/core/sandbox_budget.py`'s `log_rejection` passes `code`, `limit` and `observed`, none of
+# which were listed, so every "sandbox per-execution limit exceeded" line reached the operator
+# saying who but never which control fired — and nothing raised, nothing warned, the line simply
+# arrived short (genetics-results-suite-4h6.65). An allow-list makes forgetting an entry a
+# no-op; a deny-list of names that already mean something makes the omission impossible instead
+# of merely discouraged.
+#
+# Derived from a probe record rather than typed out, so it tracks the interpreter: `taskName`
+# exists on 3.12+ and did not before. `logging.Logger.makeRecord` already raises on an `extra`
+# key that collides with one of these, so this set is a backstop for records built by other
+# means, not the primary guard.
+_RESERVED_RECORD_ATTRS = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, None))) | {
+    "message",
+    "asctime",
+    "taskName",
+}
+
+# Keys the Cloud Logging ingester lifts out of a structured stdout line and honours as the
+# entry's own metadata rather than as payload. An extra reaching one of them is not a cosmetic
+# clash: `extra={"severity": "DEBUG"}` on a `logger.warning()` would file the line at DEBUG and
+# put it under any alerting threshold keyed on severity, and `httpRequest`/`trace`/`labels`
+# would let a caller forge the request line, the trace correlation and the index labels. The
+# allow-list this formatter used to have made that unreachable by construction; inverting it to
+# a deny-list reopened it, so the reserved names are re-keyed instead — never dropped, since a
+# silently missing field is the exact failure genetics-results-suite-4h6.65 is about.
+_CLOUD_LOGGING_RESERVED_KEYS = frozenset(
+    {"severity", "timestamp", "message", "logger", "trace", "labels", "httpRequest"}
+)
+_CLOUD_LOGGING_RESERVED_PREFIX = "logging.googleapis.com/"
+
+
+def _extra_fields(record: logging.LogRecord) -> dict:
+    return {k: v for k, v in vars(record).items() if k not in _RESERVED_RECORD_ATTRS}
+
+
+def _is_reserved_output_key(key: str) -> bool:
+    return key in _CLOUD_LOGGING_RESERVED_KEYS or key.startswith(_CLOUD_LOGGING_RESERVED_PREFIX)
+
+
+def _merge_extras(log_entry: dict, extras: dict) -> None:
+    """Copy `extras` in without letting any of them displace a key the line already owns.
+
+    Two passes so that a caller's own `extra_severity` keeps its name and the re-keyed
+    `severity` moves further out of the way, rather than the outcome depending on which
+    attribute happened to be set on the record first.
+    """
+    displaced = {}
+    for key, value in extras.items():
+        if key in log_entry or _is_reserved_output_key(key):
+            displaced[key] = value
+        else:
+            log_entry[key] = value
+    for key, value in displaced.items():
+        safe = f"extra_{key}"
+        while safe in log_entry or _is_reserved_output_key(safe):
+            safe = f"extra_{safe}"
+        log_entry[safe] = value
+
+
+def _safe_str(value: object) -> str:
+    try:
+        return str(value)
+    except Exception:
+        # a `__str__` that raises is one of the three shapes `default=str` cannot rescue
+        return f"<unrepresentable {type(value).__name__}>"
+
+
+def _degrade(log_entry: dict, exc: BaseException) -> str:
+    """Serialize an entry `json.dumps` refused, replacing only the values it choked on.
+
+    `default=str` covers an object json does not know; it does not cover a self-referential
+    dict or list (ValueError: Circular reference detected), a non-str dict key (TypeError) or a
+    `__str__` that raises. Letting those propagate out of `format()` loses the whole line:
+    `logging.Handler.handleError` swallows the exception and prints a traceback on stderr,
+    which on GKE is ingested as an unparsed line — so the operator loses the record and gains
+    noise. A degraded entry naming the offending value is strictly better.
+    """
+    degraded = {}
+    for key, value in log_entry.items():
+        try:
+            json.dumps(value, default=str)
+        except Exception:
+            value = _safe_str(value)
+        degraded[_safe_str(key)] = value
+    degraded["log_format_error"] = f"{type(exc).__name__}: {_safe_str(exc)}"
+    return json.dumps(degraded, default=str)
 
 
 class GCPJsonFormatter(logging.Formatter):
@@ -54,9 +126,7 @@ class GCPJsonFormatter(logging.Formatter):
                 "logger": record.name,
                 "message": record.getMessage(),
             }
-            for key in EXTRA_LOG_FIELDS:
-                if hasattr(record, key):
-                    log_entry[key] = getattr(record, key)
+            _merge_extras(log_entry, _extra_fields(record))
 
         # strip sensitive fields (full_path) when going to Cloud Logging
         if self.strip_sensitive:
@@ -65,7 +135,19 @@ class GCPJsonFormatter(logging.Formatter):
         if record.exc_info:
             log_entry["exception"] = self.formatException(record.exc_info)
 
-        return json.dumps(log_entry)
+        try:
+            return json.dumps(log_entry, default=str)
+        except Exception as exc:
+            try:
+                return _degrade(log_entry, exc)
+            except Exception:
+                return json.dumps(
+                    {
+                        "severity": record.levelname,
+                        "logger": record.name,
+                        "message": "log entry could not be serialized",
+                    }
+                )
 
 
 class StripSensitiveFieldsFilter(logging.Filter):
@@ -88,6 +170,17 @@ def _setup_cloud_logging_api():
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, config.log_level, logging.INFO))
 
+    # Handler order is load-bearing, not cosmetic. `CloudLoggingFilter.filter()` in
+    # google.cloud.logging_v2.handlers.handlers mutates the SHARED record, writing ~13
+    # underscore-prefixed attributes onto it (`_http_request` — whose `requestUrl` carries the
+    # query string this formatter's `strip_sensitive` exists to remove — plus `_trace`,
+    # `_labels`, `_source_location` and the rest). None of them are LogRecord attributes, so
+    # none are in `_RESERVED_RECORD_ATTRS`, and the deny-list would copy every one of them into
+    # jsonPayload. It is not live only because `callHandlers` runs handlers in insertion order
+    # and stdout is added first, so this formatter sees the record before that filter has
+    # touched it. Swap the two `addHandler` calls below and every stdout line regains the query
+    # string. The risk here is other HANDLERS on the same logger, not other interpreters.
+    #
     # stdout first (includes full_path for debugging)
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setFormatter(GCPJsonFormatter())
