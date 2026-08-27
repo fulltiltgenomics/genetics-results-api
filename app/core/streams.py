@@ -1,30 +1,34 @@
 import asyncio
 import logging
-from typing import AsyncGenerator, AsyncIterator, Any, Callable
+from typing import TYPE_CHECKING, AsyncGenerator, AsyncIterator, Any, Callable
 
 from app.core.logging_config import setup_logging
+from app.core.service_container import container
 from app.core.variant import Variant
-from app.services.dataset_mapping import DatasetMapping
 
+
+if TYPE_CHECKING:
+    from app.services.dataset_mapping import DatasetMapping
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
-_dataset_mapping: DatasetMapping | None = None
 
+def get_dataset_mapping() -> "DatasetMapping":
+    """The dataset->resource mapping: the one container-held instance.
 
-def get_dataset_mapping() -> DatasetMapping:
-    """The dataset->resource mapping, built on first use and cached.
+    Resolved through the container rather than cached in a module global so that the
+    whole process shares a single `DatasetMapping`. Each construction re-reads every
+    entry of `dataset_mapping_files` — `read_file` handles `gs://`, so those are
+    network reads — and the object is read-only afterwards, so there is nothing to
+    gain from a second one.
 
-    Constructed lazily because `DatasetMapping.__init__` reads its mapping files off
-    GCS: building it at import time would make merely importing this module — which
-    pytest collection does — require credentials. Callers bind it once per stream
-    rather than per row, so the per-row cost is unchanged.
+    Still lazy: the container builds on first `get`, and building at import time
+    would make merely importing this module — which pytest collection does — require
+    credentials. Callers bind it once per stream rather than per row, so the per-row
+    cost is a dict lookup as before.
     """
-    global _dataset_mapping
-    if _dataset_mapping is None:
-        _dataset_mapping = DatasetMapping()
-    return _dataset_mapping
+    return container.get("dataset_mapping")
 
 
 async def _prepend(iterator: AsyncIterator[Any], kind: str, value: Any) -> AsyncIterator[Any]:
