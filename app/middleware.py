@@ -277,7 +277,10 @@ def setup_middleware(app: FastAPI):
     # measured on the bytes the caller decodes, and its 429 is logged by the usage middleware
     app.add_middleware(SandboxResponseCapMiddleware)
 
-    # usage logging (outermost - captures full request duration)
+    # usage logging: wraps the cap middleware above, but add_middleware prepends, so
+    # SecurityHeaders/GZip/CORS below all end up OUTSIDE it. That position is load-bearing —
+    # being inside GZip is what makes the size it records uncompressed body bytes (the same
+    # quantity the cap measures) rather than wire bytes, and what lets it log the cap's 429.
     if config.usage_logging_enabled:
         from app.middleware_usage_logging import UsageLoggingMiddleware
 

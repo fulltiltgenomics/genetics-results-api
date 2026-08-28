@@ -61,7 +61,8 @@ class UsageLoggingMiddleware:
 
     Captures per request: message, log_type, service, log_source, timestamp, user_email,
     endpoint_path, full_path (stdout only — the Cloud Logging path strips it), http_method,
-    status_code and duration_ms, plus sid and jti when a sandbox token authorized the call.
+    status_code, duration_ms and response_body_bytes, plus sid and jti when a sandbox
+    token authorized the call.
 
     Logs are emitted with log_type="endpoint_access" for filtering in GCP log sinks.
     """
@@ -83,12 +84,23 @@ class UsageLoggingMiddleware:
         method = scope.get("method", "UNKNOWN")
         start_time = time.perf_counter()
         status_code: int = 0
+        response_bytes: int = 0
         user_email = _extract_user_from_header(scope)
 
         async def send_wrapper(message: Message) -> None:
-            nonlocal status_code
+            nonlocal status_code, response_bytes
             if message["type"] == "http.response.start":
                 status_code = message.get("status", 0)
+            elif message["type"] == "http.response.body":
+                # Accumulated here rather than read off Content-Length, because the responses
+                # whose size the question is about are the streamed ones: TimedStreamingResponse
+                # sets no Content-Length, so the header is absent for precisely the large bodies.
+                # The chunk is forwarded untouched and only an int is kept, so nothing is
+                # buffered and a stream that must not be held back is not held back; the cost is
+                # one O(1) len() and one add per chunk already materialized by the ASGI layer.
+                # A client that disconnects mid-stream simply leaves the count at the bytes that
+                # actually went out, which is the honest number.
+                response_bytes += len(message.get("body", b""))
             await send(message)
 
         try:
@@ -125,6 +137,19 @@ class UsageLoggingMiddleware:
                 "http_method": method,
                 "status_code": status_code,
                 "duration_ms": round(duration_ms, 2),
+                # Uncompressed application body bytes, excluding headers: `setup_middleware`
+                # registers this middleware INSIDE GZipMiddleware, so it sees the body the caller
+                # decodes, which is the same quantity SandboxResponseCapMiddleware caps and hence
+                # the one the response-cap and truncation questions need.
+                #
+                # Deliberately a self-describing payload key and NOT `httpRequest.responseSize`:
+                # that field means wire size *including* headers, and auth-gateway's
+                # `$body_bytes_sent` and the GCLB request logs already fill it with genuine wire
+                # bytes elsewhere in this suite, so a third source with different semantics under
+                # the same name would mix silently in a join. The sink grows its jsonPayload
+                # schema when a new key first appears, so the column costs nothing extra; a plain
+                # key also preserves 0, which protobuf JSON drops from an int64 responseSize.
+                "response_body_bytes": response_bytes,
             }
 
             # a sandbox execution carries the conversation and the execution id, which is what

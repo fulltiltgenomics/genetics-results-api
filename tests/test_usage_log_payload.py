@@ -28,17 +28,25 @@ async def _ok_app(scope, receive, send):
     await send({"type": "http.response.body", "body": b"{}"})
 
 
-def _emit(caplog, scope: dict) -> dict:
-    """Run one request through the middleware and return the logged dict payload."""
+def _emit_record(caplog, scope: dict, app=_ok_app) -> logging.LogRecord:
+    """Run one request through the middleware and return the LogRecord it emitted."""
     with caplog.at_level(logging.INFO, logger="app.middleware_usage_logging"):
 
         async def _noop_receive():
             return {"type": "http.request", "body": b"", "more_body": False}
 
-        asyncio.run(UsageLoggingMiddleware(_ok_app)(scope, _noop_receive, lambda m: _sent(m)))
-    entries = [r.msg for r in caplog.records if isinstance(r.msg, dict)]
-    assert entries, "middleware logged nothing"
-    return entries[-1]
+        try:
+            asyncio.run(UsageLoggingMiddleware(app)(scope, _noop_receive, lambda m: _sent(m)))
+        except _AppFailed:
+            pass  # the middleware logs from a finally, so a failing app still produces a row
+    records = [r for r in caplog.records if isinstance(r.msg, dict)]
+    assert records, "middleware logged nothing"
+    return records[-1]
+
+
+def _emit(caplog, scope: dict, app=_ok_app) -> dict:
+    """Run one request through the middleware and return the logged dict payload."""
+    return _emit_record(caplog, scope, app).msg
 
 
 async def _sent(message):
@@ -118,3 +126,98 @@ def test_a_non_sandbox_request_still_carries_no_sandbox_attribution(caplog):
     entry = _emit(caplog, _scope())
     assert entry["user_email"] is None
     assert "sid" not in entry and "jti" not in entry
+
+
+# --- response size (genetics-results-suite-fv5) -------------------------------------------
+#
+# No response size was recorded on any of the 278,757 rows of genetics_api_logs, so "did any
+# response approach the cap?" was unanswerable from logs. These pin the number actually
+# recorded, and the key it is recorded under: `httpRequest.responseSize` means wire bytes
+# including headers and is already filled with genuine wire bytes by auth-gateway and the GCLB
+# elsewhere in the suite, so this number — uncompressed body bytes, pre-gzip — must not share
+# that name.
+
+
+class _AppFailed(Exception):
+    pass
+
+
+async def _streaming_app(scope, receive, send):
+    """Several chunks and no Content-Length — what TimedStreamingResponse puts on the wire.
+
+    The final message omits `body` entirely, which the ASGI spec permits and which is the
+    shape that makes a naive `message["body"]` raise.
+    """
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [(b"content-type", b"text/tab-separated-values")],
+        }
+    )
+    for chunk in (b"chrom\tpos\n", b"1\t100\n", b"1\t200\n"):
+        await send({"type": "http.response.body", "body": chunk, "more_body": True})
+    await send({"type": "http.response.body", "more_body": False})
+
+
+_STREAMED_BYTES = len(b"chrom\tpos\n") + len(b"1\t100\n") + len(b"1\t200\n")
+
+
+async def _disconnecting_app(scope, receive, send):
+    await send({"type": "http.response.start", "status": 200, "headers": []})
+    await send({"type": "http.response.body", "body": b"partial", "more_body": True})
+    raise _AppFailed("client went away mid-stream")
+
+
+def test_response_size_is_recorded_for_a_buffered_response(caplog):
+    assert _emit(caplog, _scope())["response_body_bytes"] == len(b"{}")
+
+
+def test_response_size_counts_every_chunk_of_a_streamed_body(caplog):
+    """Content-Length is absent for exactly these responses, so the header could not answer.
+
+    Reading it would have left the streamed bulk endpoints — the only ones whose size the
+    truncation question is about — with no size at all.
+    """
+    entry = _emit(caplog, _scope("/api/v1/credible_sets"), _streaming_app)
+    assert entry["response_body_bytes"] == _STREAMED_BYTES
+
+
+def test_the_size_is_not_emitted_as_httpRequest_responseSize(caplog):
+    """Different quantity, same name: `httpRequest.responseSize` is wire size *including*
+    headers, and auth-gateway's `$body_bytes_sent` and the GCLB request logs already populate
+    that field with real wire bytes elsewhere in this suite. This number is pre-gzip body
+    bytes, so under that name it would over-report and mix silently in a join. Pinned on both
+    emission paths — the payload dict and the LogRecord `extra` the dev handler reads."""
+    record = _emit_record(caplog, _scope())
+    assert "httpRequest" not in record.msg, record.msg
+    assert not hasattr(record, "http_request")
+
+
+def test_the_size_key_stays_top_level_in_the_stdout_line(caplog):
+    """Production and staging log to stdout (`use_cloud_logging_api` is dev-only), and the sink
+    grows a jsonPayload column for a top-level key when the first row carries it. Nested
+    anywhere else there is no column to query."""
+    import json
+
+    from app.core.logging_config import GCPJsonFormatter
+
+    line = json.loads(GCPJsonFormatter(strip_sensitive=True).format(_emit_record(caplog, _scope())))
+    assert line["response_body_bytes"] == len(b"{}")
+
+
+def test_a_zero_byte_response_records_zero_rather_than_nothing(caplog):
+    """A plain int key keeps the 0 that protobuf JSON would drop from `responseSize`, so an
+    empty body stays distinguishable from a row written before the field existed."""
+
+    async def _empty_app(scope, receive, send):
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    entry = _emit(caplog, _scope(), _empty_app)
+    assert entry["response_body_bytes"] == 0
+
+
+def test_a_stream_torn_down_mid_body_records_the_bytes_that_went_out(caplog):
+    entry = _emit(caplog, _scope(), _disconnecting_app)
+    assert entry["response_body_bytes"] == len(b"partial")
