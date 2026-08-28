@@ -31,16 +31,36 @@ def _get_google_request():
     return _google_request
 
 
-def _email_allowed(email: str) -> bool:
+def _email_allowed(email: str, *, allow_wildcard: bool = True) -> bool:
     """True when the address is covered by ALLOWED_EMAILS or ALLOWED_EMAIL_DOMAINS.
 
     Compared case-insensitively on both sides: oauth2-proxy lower-cases the address before its
     own domain check, so `User@FinnGen.fi` gets a session there and must not be rejected here.
-    A literal `*` in ALLOWED_EMAIL_DOMAINS means "any domain", matching what oauth2-proxy does
-    with the same value — without this it would match no domain at all and lock out every user
-    of a deployment whose operator set `oauth_email_domain = "*"` deliberately. Note it also
-    opens the Google-JWT path to any verified Google account, leaving GOOGLE_TOKEN_AUDIENCE as
-    the only narrowing; that is what `*` asks for.
+    A literal `*` in ALLOWED_EMAIL_DOMAINS means "any domain" BY DEFAULT, matching what
+    oauth2-proxy does with the same value — without this it would match no domain at all and
+    lock out every user of a deployment whose operator set `oauth_email_domain = "*"`
+    deliberately.
+
+    `allow_wildcard=False` refuses that bare `*` and changes NOTHING else — every other form
+    stays at full parity with oauth2-proxy v7.14.3, `*.example.com` included, because that is
+    a different value. It is the suite's one deliberate divergence
+    (genetics-results-suite-g8i), and the reason does not generalise: parity on the matching
+    FORMS (case-folding, exact address, exact domain, leading dot, `*.`) is right because those
+    describe which humans the gateway admits, but `*` means "any domain behind the gateway",
+    and the caller that passes False has no gateway in front of it. ALLOWED_EMAIL_DOMAINS
+    arrives from the shared `bearer-auth-allowed` ConfigMap, whose value is the SAME terraform
+    `${OAUTH_EMAIL_DOMAIN}` oauth2-proxy is configured from, so an operator writing `*` with
+    the gateway in mind would otherwise open the ungated Google id_token path to any verified
+    Google account. `GOOGLE_TOKEN_AUDIENCE` is no backstop there: inert while unset (a warning
+    and continue), and the *public* gcloud client id when set.
+
+    The default is True so the two proxied, marker-gated callers — `get_authenticated_user`
+    below and `middleware_usage_logging._extract_user_from_header`, which must agree with it —
+    are untouched. The opt-out is spelled out at the one call site that needs it rather than
+    defaulted, so a new caller inherits oauth2-proxy parity and has to say when it is not
+    behind the proxy. mcp-server's `auth/core.py:_matches_allow_list` carries the same keyword
+    with the same default; that function, not mcp-server's own `_email_allowed`, is this one's
+    behavioural twin.
 
     A domain written with a LEADING DOT matches subdomains and NOT the bare domain, which is
     what oauth2-proxy v7.14.3 does in `isEmailValidWithDomains` (validator.go): it accepts on
@@ -55,7 +75,13 @@ def _email_allowed(email: str) -> bool:
     """
     domains = {d.strip().lower() for d in config.allowed_email_domains}
     if "*" in domains:
-        return True
+        if allow_wildcard:
+            return True
+        # drop the star rather than fall through with it: the suffix branches below ignore a
+        # bare "*" anyway, but the plain `domain in domains` test would otherwise still admit
+        # the malformed address "a@*". Only this one entry is removed, so a `*, .example.com`
+        # list keeps matching subdomains.
+        domains.discard("*")
     email = email.strip().lower()
     # LATENT, fail-closed: with no "@" this yields "" where oauth2-proxy's atoms[len-1] yields
     # the WHOLE string, so `--email-domain=.com` admits the malformed identity "example.com" at
@@ -116,6 +142,31 @@ def is_internal_caller(auth_header: str | None) -> bool:
         # if a str-taking entry point is ever added there too.
         return False
     return hmac.compare_digest(presented, config.internal_api_secret.encode("utf-8"))
+
+
+def warn_if_wildcard_allow_list() -> None:
+    """Warn once at startup when ALLOWED_EMAIL_DOMAINS is a literal `*`.
+
+    Called from `app/server.py` at import of the serving module, beside
+    `require_sandbox_config()`, because that is where this service's auth configuration is
+    already checked once per process. It needs no transport condition, unlike mcp-server's
+    equivalent: results-api serves `get_bearer_token_user` unconditionally, so the path that
+    refuses `*` is reachable in every deployment of it.
+
+    A warning rather than a refusal: `*` remains a valid, honoured configuration for the
+    proxied path, so the deployment is not broken — it is half-honoured, and the operator set
+    it from a terraform variable that never mentions this service
+    (genetics-results-suite-g8i). Staying silent about that is the whole problem repeating.
+    """
+    if any(d.strip() == "*" for d in config.allowed_email_domains):
+        logger.warning(
+            "ALLOWED_EMAIL_DOMAINS contains a literal '*'. oauth2-proxy honours it as "
+            "allow-all, and so does the proxied identity-header path, because the gateway "
+            "has already decided who gets in. The Google id_token bearer path REFUSES it: "
+            "no gateway sits in front of that path, so allow-all there would accept any "
+            "Google-verified account. Bearer callers must be covered by an explicit domain "
+            "or address in ALLOWED_EMAIL_DOMAINS / ALLOWED_EMAILS, or they will get 403s."
+        )
 
 
 def get_authenticated_user(request: Request) -> str | None:
@@ -258,8 +309,16 @@ def get_bearer_token_user(request: Request) -> str | None:
     if not payload.get("email_verified", False):
         raise HTTPException(status_code=401, detail="Email not verified")
 
-    # domain restriction
-    if not _email_allowed(email):
+    # domain restriction. allow_wildcard=False is the deliberate divergence from oauth2-proxy
+    # (genetics-results-suite-g8i) and applies to the bare "*" ONLY — every other form,
+    # "*.example.com" included, stays at full parity. ALLOWED_EMAIL_DOMAINS comes from the same
+    # terraform ${OAUTH_EMAIL_DOMAIN} oauth2-proxy reads, where "*" means "any domain the
+    # gateway admits"; no gateway sits in front of THIS path for that scope to be relative to,
+    # so honouring it here would accept any Google-verified account. The audience check above
+    # is not a backstop: inert while GOOGLE_TOKEN_AUDIENCE is unset, and the *public* gcloud
+    # client id when set. get_authenticated_user's call keeps the default — it runs behind
+    # is_internal_caller, so there the gateway really has decided.
+    if not _email_allowed(email, allow_wildcard=False):
         raise HTTPException(status_code=403, detail="Email domain not allowed")
 
     return email

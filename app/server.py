@@ -10,6 +10,7 @@ from app.core.query_params import reject_unknown_query_params
 from app.middleware import setup_middleware
 from app.services import config_util
 from app.core.logging_config import setup_logging
+from app.core.auth import warn_if_wildcard_allow_list
 from app.core.sandbox_token import require_sandbox_config
 from app.core.service_container import container
 from app.routers import (
@@ -44,6 +45,11 @@ logger = logging.getLogger(__name__)
 
 # refuses to start rather than warn when the sandbox is deployed and either secret is missing
 require_sandbox_config()
+
+# warns rather than refuses: a literal "*" is still honoured on the proxied path, so the
+# deployment works — it is the bearer path that will not do what the operator asked
+# (genetics-results-suite-g8i)
+warn_if_wildcard_allow_list()
 
 
 async def _smoke_query_range():
