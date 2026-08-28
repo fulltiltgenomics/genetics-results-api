@@ -325,6 +325,86 @@ def test_wildcard_domain_allows_everything(monkeypatch):
     assert auth._email_allowed("anyone@anywhere.example") is True
 
 
+def _allowed(monkeypatch, email: str, domains: set[str]) -> bool:
+    monkeypatch.setattr(config, "allowed_email_domains", domains)
+    monkeypatch.setattr(config, "allowed_emails", {"guest@example.org"})
+    return auth._email_allowed(email)
+
+
+def test_leading_dot_domain_matches_subdomains(monkeypatch):
+    """oauth2-proxy's `--email-domain=.example.com` form (genetics-results-suite-zl2).
+
+    v7.14.3 `isEmailValidWithDomains` (validator.go) accepts on
+    `HasSuffix(email, "@"+domain)`, and separately on
+    `HasPrefix(domain, ".") && HasSuffix(atoms[len(atoms)-1], domain)` where `atoms[len-1]` is
+    the part after the last `@`. Before this, such a deployment got a session at the gateway
+    and a 401 here: a logged-in UI in which every call fails."""
+    assert _allowed(monkeypatch, "user@sub.example.com", {".example.com"}) is True
+    assert _allowed(monkeypatch, "user@deep.sub.example.com", {".example.com"}) is True
+
+
+def test_leading_dot_domain_does_not_match_the_bare_domain(monkeypatch):
+    """The half that is easy to get backwards: "@.example.com" is a suffix of no real address,
+    so oauth2-proxy refuses this one and so must we."""
+    assert _allowed(monkeypatch, "user@example.com", {".example.com"}) is False
+
+
+def test_domain_match_is_not_a_careless_suffix_test(monkeypatch):
+    """A suffix test against the whole address, or one forgetting the dot, admits these."""
+    assert _allowed(monkeypatch, "user@notexample.com", {".example.com"}) is False
+    assert _allowed(monkeypatch, "user@evilexample.com", {"example.com"}) is False
+    assert _allowed(monkeypatch, "user@other.example", {".example.com"}) is False
+
+
+def test_exact_and_star_forms_survive_the_leading_dot_branch(monkeypatch):
+    """These assertions are duplicated in genetics-mcp-server's tests/test_auth_header_trust.py
+    — the two implementations must not drift apart."""
+    assert _allowed(monkeypatch, "user@example.com", {"example.com"}) is True
+    assert _allowed(monkeypatch, "user@sub.example.com", {"example.com"}) is False
+    assert _allowed(monkeypatch, "anyone@anywhere.example", {"*"}) is True
+    assert _allowed(monkeypatch, "Guest@Example.ORG", {"example.com"}) is True
+
+
+def test_star_dot_domain_is_a_synonym_for_the_leading_dot_form(monkeypatch):
+    """v7.14.3 strips the star (`domain[1:]`) and runs the leading-dot suffix test, so
+    `*.example.com` and `.example.com` decide identically — and neither is allow-all."""
+    assert _allowed(monkeypatch, "user@sub.example.com", {"*.example.com"}) is True
+    assert _allowed(monkeypatch, "user@deep.sub.example.com", {"*.example.com"}) is True
+    assert _allowed(monkeypatch, "user@example.com", {"*.example.com"}) is False
+    assert _allowed(monkeypatch, "user@notexample.com", {"*.example.com"}) is False
+    # the over-admission this code has never made: a "*."-prefixed entry is not allow-all
+    assert _allowed(monkeypatch, "anyone@anywhere.example", {"*.example.com"}) is False
+    # while a bare "*" still is
+    assert _allowed(monkeypatch, "anyone@anywhere.example", {"*"}) is True
+
+
+def test_domain_is_taken_from_the_last_at_sign(monkeypatch):
+    """Go's `atoms[len(atoms)-1]` is the part after the LAST "@"; str.split("@")[-1] agrees,
+    including when there is no local part at all."""
+    assert _allowed(monkeypatch, "a@b@example.com", {"example.com"}) is True
+    assert _allowed(monkeypatch, "a@b@sub.example.com", {".example.com"}) is True
+    assert _allowed(monkeypatch, "a@b@example.com", {".example.com"}) is False
+    assert _allowed(monkeypatch, "@sub.example.com", {".example.com"}) is True
+
+
+def test_degenerate_dot_entries_reduce_to_a_trailing_dot_test(monkeypatch):
+    """A configured "." or "*." reduces to HasSuffix(domain_part, "."), which no ordinary
+    address satisfies. Pinning what oauth2-proxy does with the value, not endorsing it."""
+    assert _allowed(monkeypatch, "user@example.com", {"."}) is False
+    assert _allowed(monkeypatch, "user@example.com", {"*."}) is False
+    assert _allowed(monkeypatch, "user@example.com.", {"."}) is True
+    assert _allowed(monkeypatch, "user@example.com.", {"*."}) is True
+
+
+def test_address_without_an_at_sign_is_refused(monkeypatch):
+    """The one known divergence, recorded in the comment at auth.py's `domain = ...` line:
+    oauth2-proxy's last atom is the whole string, so `.com` would admit this at the gateway.
+    Here the domain part is "" and it is refused — fail-closed, and unreachable unless an IdP
+    emits an address with no "@"."""
+    assert _allowed(monkeypatch, "example.com", {".com"}) is False
+    assert _allowed(monkeypatch, "example.com", {"com"}) is False
+
+
 def test_non_ascii_bearer_does_not_raise():
     """compare_digest on str raises TypeError for non-ASCII, and is_internal_caller runs in
     ASGI middleware before routing — that would be a 500 instead of a clean 401."""
