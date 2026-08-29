@@ -87,11 +87,14 @@ credential whose presentation calls `admit`. `admit` is reached only from `_sand
 which accepts an HS256 sandbox token and nothing else; `INTERNAL_API_SECRET` satisfies
 `is_internal_caller`, so a caller presenting it resolves as `mcp-tool` and enters the handler with
 **no accounting at all** — measured, 200 on `/api/v1/rsid/variants` and `/api/v1/variant_sets`
-with `sandbox_budget._executions` still `{}`. The sandbox is handed that secret today and the SDK
-attaches it to every request, so as things stand this turns "omit the header" into "send the other
-header". That path closes when genetics-results-suite-4h6.7 stops giving the sandbox
-`INTERNAL_API_SECRET` and genetics-results-suite-4h6.14 makes the SDK send the per-execution
-token — the Deployment and the transport, neither of them this module.
+with `sandbox_budget._executions` still `{}`. **The sandbox's half of that is closed** — neither
+the Deployment nor the transport is this module's: `genetics-results-suite-4h6.7` gives the
+sandbox pod no credentials at all, and `genetics-results-suite-4h6.44` made the SDK build its
+client from the per-execution tokens and never attach `INTERNAL_API_SECRET` alongside or instead.
+What is left is **intentional**: chat-backend, mcp-server and bff authenticate with the secret and
+none of them is a per-execution tenant, so an internal-secret caller is still served unaccounted.
+`tests/test_anonymous_surface.py::test_the_internal_secret_path_survives_but_the_sdk_no_longer_takes_it`
+pins both halves.
 
 Also deliberately remaining: `/healthz` is anonymous by necessity (the kubelet holds no credential
 and its probes bypass NetworkPolicy), and nothing bounds the *rate* of anonymous requests to it.

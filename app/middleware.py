@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 
@@ -63,6 +64,27 @@ class SandboxResponseCapMiddleware:
     `tests/test_sandbox_budget.py::test_an_unmatched_route_releases_its_slot` is the test that
     fails if the release moves. This is also the only layer that knows the exact byte count that
     went on the wire.
+
+    **It also arms the sandbox request deadline** (`SANDBOX_REQUEST_TIMEOUT_SECONDS`), for the
+    same reason and in the same `try`. Nothing else was bounding how long one request may hold a
+    slot: a request wedged in a GCS read held a per-execution slot, a pod-wide slot **and** its
+    counter-map entry for as long as the socket stayed open, since `_sweep_locked` refuses to
+    evict an entry with `in_flight > 0` — so the rule that closes the fail-open direction had no
+    counterpart bounding how long an entry may stay unevictable, and a handful of hung requests
+    reached the pod-wide bound with no attacker (`genetics-results-suite-yv4`).
+
+    The two rejected placements: **uvicorn has no per-request timeout to set** — `timeout_keep_alive`
+    bounds an idle connection between requests and `timeout_graceful_shutdown` a shutdown, neither
+    of which touches a request in progress — and an **outer ASGI middleware** would cancel this
+    `__call__` from outside, which still runs the `finally` but makes the deadline and the
+    release two separately-ordered layers that a later `setup_middleware` edit could reorder
+    without any test noticing. Armed here, the `TimeoutError` unwinds through the very `finally`
+    that calls `release`, so the release on the timeout path is the same line as on the happy
+    path rather than a second one that has to be kept in step.
+
+    Armed only for a request that carries an execution token: a browser or BFF request holds no
+    slot, pins no counter entry, and a deadline on it would be a new bound on traffic this bead
+    is not about (`asyncio.timeout(None)` is the no-op for those).
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -74,28 +96,25 @@ class SandboxResponseCapMiddleware:
             return
 
         principal = _sandbox_principal(scope)
-        if principal is not None:
-            rejection = sandbox_budget.admit(principal)
-            if rejection is not None:
-                sandbox_budget.log_rejection(rejection, scope.get("path"), principal)
-                await _send_429(
-                    send,
-                    {
-                        "detail": rejection.detail,
-                        "code": rejection.code,
-                        "limit": rejection.limit,
-                        "observed": rejection.observed,
-                    },
-                )
-                return
 
         # `sent` is what actually reached the caller, and is what the aggregate budget is
-        # charged; it stays 0 for a response this middleware did not put on the wire itself
-        state: dict = {"capped": None, "start": None, "body": bytearray(), "sent": 0}
+        # charged; it stays 0 for a response this middleware did not put on the wire itself.
+        # `wrote` is the weaker, separate fact that *something* has been handed to `send` —
+        # see the deadline handler for why the two are not interchangeable.
+        state: dict = {
+            "capped": None, "start": None, "body": bytearray(), "sent": 0, "wrote": False
+        }
+
+        async def send_out(message):
+            """The single door to the wire. Everything this middleware sends goes through it,
+            so `wrote` is exactly "the response has begun" and no later branch has to
+            reconstruct that from the buffering state."""
+            state["wrote"] = True
+            await send(message)
 
         async def send_wrapper(message):
             if state["capped"] is False:
-                await send(message)
+                await send_out(message)
                 return
 
             if message["type"] == "http.response.start":
@@ -109,21 +128,21 @@ class SandboxResponseCapMiddleware:
                 # changes is only the *rejection*: see `_reject`.
                 state["capped"] = caps.enforced
                 if not state["capped"]:
-                    await send(message)
+                    await send_out(message)
                     return
                 state["caps"] = caps
                 state["start"] = message
                 return
 
             if message["type"] != "http.response.body":
-                await send(message)
+                await send_out(message)
                 return
 
             caps = state["caps"]
             body = state["body"]
             body += message.get("body", b"")
             if len(body) > caps.max_response_bytes:
-                await _reject(send, scope, caps, len(body), state["start"]["status"])
+                await _reject(send_out, scope, caps, len(body), state["start"]["status"])
                 raise _ResponseCapExceeded
             if message.get("more_body"):
                 return
@@ -134,18 +153,87 @@ class SandboxResponseCapMiddleware:
                 if k.lower() != b"content-length"
             ]
             headers.append((b"content-length", str(len(body)).encode()))
-            await send({**state["start"], "headers": headers})
+            await send_out({**state["start"], "headers": headers})
             # the bytearray goes out as-is: a bytes() copy here doubled the peak for no gain,
             # and nothing downstream mutates or retains it
-            await send({"type": "http.response.body", "body": body, "more_body": False})
+            await send_out({"type": "http.response.body", "body": body, "more_body": False})
             state["sent"] = len(body)
 
+        deadline = asyncio.timeout(
+            sandbox_budget.SANDBOX_REQUEST_TIMEOUT_SECONDS if principal is not None else None
+        )
+        # `admit` reserves three things at once, and the reservation is only undone by the
+        # `finally` below. Anything raising between the reservation and the `try` would strand a
+        # per-execution slot, a pod-wide slot and a map entry `_sweep_locked` may never evict —
+        # permanently, since no deadline is armed yet either. So the admission happens *inside*
+        # the try, and the flag is set the instant it returns.
+        admitted = False
         try:
-            await self.app(scope, receive, send_wrapper)
+            if principal is not None:
+                rejection = sandbox_budget.admit(principal)
+                if rejection is not None:
+                    sandbox_budget.log_rejection(rejection, scope.get("path"), principal)
+                    await _send_429(
+                        send_out,
+                        {
+                            "detail": rejection.detail,
+                            "code": rejection.code,
+                            "limit": rejection.limit,
+                            "observed": rejection.observed,
+                        },
+                    )
+                    return
+                admitted = True
+                # after the flag, never before: this is the admission signal an operator reads,
+                # and `admit` deliberately no longer emits it, because anything raising between
+                # its counter increment and its return strands the reservation for good
+                sandbox_budget.log_admission(principal)
+
+            async with deadline:
+                await self.app(scope, receive, send_wrapper)
         except _ResponseCapExceeded:
             pass
+        except TimeoutError:
+            # a TimeoutError the *handler* raised is its own 500 to answer, not ours; only a
+            # cancellation this deadline caused is ours to convert
+            if not deadline.expired():
+                raise
+            if state["wrote"]:
+                # The deadline fired *after* the response had begun. Measured: a `yield`
+                # dependency's teardown runs after the body, so a slow teardown produces exactly
+                # this — the caller already has its answer and the request succeeded. Sending
+                # the 504 here put a second `http.response.start` on a completed response (an
+                # ASGI protocol violation) and counted a success as `sandbox_request_timeout`,
+                # which made the counters lie. So it gets its own code and no 504 — **not**
+                # silence: the slot was still pinned for the full deadline, which is the cheapest
+                # slot-pinning primitive in the module, and swallowing it would remove the only
+                # signal that it happened.
+                #
+                # `state["sent"] == 0` is NOT the right test for this. It is 0 both when nothing
+                # has been sent and while the *body* message is still in flight — the deadline
+                # can fire between this middleware's two `send`s, or inside uvicorn's `drain()`
+                # against a slow-reading client, and the start message is on the wire in both.
+                # `wrote` is set by `send_out` and so covers those too. (The teardown variant is
+                # measured. The drain variant is reproduced only against a blocking recorder, not
+                # a real uvicorn socket under backpressure: the control flow is the same one, but
+                # that `drain()` suspends exactly where assumed is unconfirmed.)
+                sandbox_budget.log_request_timeout(
+                    scope.get("path"), principal, response_started=True
+                )
+            else:
+                sandbox_budget.log_request_timeout(scope.get("path"), principal)
+                await _send_json(send_out, 504, {
+                    "detail": (
+                        "This request exceeded the sandbox request deadline "
+                        f"({sandbox_budget.SANDBOX_REQUEST_TIMEOUT_SECONDS}s) and was "
+                        "abandoned. Narrow the request and retry."
+                    ),
+                    "code": "sandbox_request_timeout",
+                    "limit": sandbox_budget.SANDBOX_REQUEST_TIMEOUT_SECONDS,
+                    "observed": sandbox_budget.SANDBOX_REQUEST_TIMEOUT_SECONDS,
+                })
         finally:
-            if principal is not None:
+            if admitted:
                 sandbox_budget.release(principal.execution_id, state["sent"])
 
 
@@ -156,8 +244,21 @@ def _sandbox_principal(scope: Scope) -> sandbox_token.SandboxPrincipal | None:
     point of a request-count and a concurrency bound — whereas ``request.state.sandbox_principal``
     is set later, by ``app.dependencies.auth_required``. So this middleware verifies the bearer
     itself, with the same ``is_sandbox_shaped`` routing and the same HS256 decode against the
-    same key, which is why it cannot disagree with what ``limits.caps_for_scope`` later reads off
-    the request state.
+    same key.
+
+    **They agree for a matched route and only for one**, and an earlier draft of this docstring
+    asserted the unconditional version. ``limits.caps_for_scope`` reads
+    ``scope["state"]["sandbox_principal"]``, which ``app.dependencies.auth_required`` sets — a
+    **route** dependency. It is app-level (``app/server.py``'s ``FastAPI(dependencies=[...])``)
+    and it runs before every short circuit in ``auth_required``, so every registered route,
+    ``@is_public`` ones included, sets it. A request that matches **no** route never solves a
+    dependency, so this function resolves a principal, ``admit`` reserves a slot, and
+    ``caps_for_scope`` still reports ``RELAXED`` — the response is neither capped nor charged.
+    That is bounded by what an unmatched path can produce: the router's own 404/405/307, a fixed
+    handful of bytes. It is bounded by nothing else, so a route registered outside that app-level
+    dependency would be a real cap bypass — which is why ``docs_url``/``redoc_url``/``openapi_url``
+    are ``None`` and the three doc routes are re-registered by hand behind the dependency
+    (``app/server.py``, which records the incident where they were not).
 
     Never raises: a sandbox-shaped bearer that fails validation is left to ``auth_required``,
     which answers the 401 it already answers today. Rejecting here would duplicate that, and
