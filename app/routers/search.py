@@ -2,12 +2,49 @@ import logging
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
+from app.core.responses import (
+    ColumnDeclarationError,
+    columns_header,
+    verified_columns_header,
+)
 from app.dependencies import get_search_index
-from app.services.search_service import SearchIndex
+from app.services.search_service import RESULT_COLUMNS_BY_TYPE, SearchIndex
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# `types=` is plural on the wire, singular in a result row's `type`
+_RESULT_TYPE_BY_QUERY_TYPE = {"phenotypes": "phenotype", "genes": "gene"}
+
+
+def _verified_search_columns(
+    results: list[dict], type_list: list[str] | None
+) -> dict[str, str]:
+    """Verify every row against its declared columns, and advertise them when they are one set.
+
+    A JSON search result is a bare array, so an empty one tells a client nothing about the
+    columns it would have had. The declaration lives next to the rows in
+    services/search_service.py and is REFUSED here when a row contradicts it — a search
+    result dict is assembled from a live index, so this response is the only place the
+    declaration can be checked against reality (genetics-results-suite-8a1).
+
+    Advertised only when the caller pinned a single type: a mixed phenotype+gene result has
+    two different column sets and no honest single answer, so the header is omitted rather
+    than guessed. Every row is still verified in that case.
+    """
+    for row in results:
+        declared = RESULT_COLUMNS_BY_TYPE.get(row.get("type"))
+        if declared is None:
+            raise ColumnDeclarationError(
+                f"search returned an undeclared result type {row.get('type')!r}"
+            )
+        verified_columns_header(declared, [row])
+    if type_list and len(type_list) == 1:
+        return columns_header(
+            list(RESULT_COLUMNS_BY_TYPE[_RESULT_TYPE_BY_QUERY_TYPE[type_list[0]]])
+        )
+    return {}
 
 
 @router.get(
@@ -198,7 +235,9 @@ async def search_autocomplete(
 
         # format response
         if format == "json":
-            return JSONResponse(results)
+            return JSONResponse(
+                results, headers=_verified_search_columns(results, type_list)
+            )
         elif format == "tsv":
             # for TSV, require a type filter to avoid mixed columns
             if not type_list or len(type_list) > 1:

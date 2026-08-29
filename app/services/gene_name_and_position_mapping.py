@@ -9,6 +9,31 @@ from app.core.exceptions import DataException, GeneNotFoundException
 
 logger = logging.getLogger(__name__)
 
+# The columns each gene lookup projects to, and the ONE place they are written down:
+# app/routers/genes.py advertises them to clients that get zero genes back, and the
+# `.select()` calls below take their list from here rather than repeating it, so the
+# advertisement cannot describe a projection that no longer exists
+# (genetics-results-suite-8a1).
+GENES_IN_REGION_COLUMNS = (
+    "gene_name",
+    "chrom",
+    "gene_start",
+    "gene_end",
+    "gene_strand",
+    "gene_type",
+    "hgnc_symbol",
+    "hgnc_name",
+    "hgnc_alias_symbol",
+    "hgnc_prev_symbol",
+)
+
+# same projection plus the computed distance, which sits after gene_type
+NEAREST_GENES_COLUMNS = (
+    *GENES_IN_REGION_COLUMNS[:6],
+    "distance",
+    *GENES_IN_REGION_COLUMNS[6:],
+)
+
 
 class GeneNameAndPositionMapping:
     def __init__(self) -> None:
@@ -235,18 +260,7 @@ class GeneNameAndPositionMapping:
             (pl.col("gene_start") <= end) & (pl.col("gene_end") >= start)
         )
         genes_in_region = genes_in_region.select(
-            [
-                "gene_name",
-                "chrom",
-                "gene_start",
-                "gene_end",
-                "gene_strand",
-                "gene_type",
-                "hgnc_symbol",
-                "hgnc_name",
-                "hgnc_alias_symbol",
-                "hgnc_prev_symbol",
-            ]
+            list(GENES_IN_REGION_COLUMNS)
         ).to_dicts()
         return genes_in_region
 
@@ -305,21 +319,14 @@ class GeneNameAndPositionMapping:
             .filter(pl.col("distance") <= max_distance)
             .sort("distance")
             .head(n)
-            .select(
-                [
-                    "gene_name",
-                    "chrom",
-                    "gene_start",
-                    "gene_end",
-                    "gene_strand",
-                    "gene_type",
-                    "distance",
-                    "hgnc_symbol",
-                    "hgnc_name",
-                    "hgnc_alias_symbol",
-                    "hgnc_prev_symbol",
-                ]
-            )
+            .select(list(NEAREST_GENES_COLUMNS))
+            # NEAREST_GENES_COLUMNS matches these rows only because polars keeps a REPLACED
+            # column in its original position under `with_columns(...alias(existing))`
+            # (measured on polars 1.40.1; not a documented guarantee). A version that
+            # appended instead would move `gene_name` last and make every
+            # nearest_genes?format=json call 500 on ColumnDeclarationError. The test in
+            # tests/test_declared_columns.py breaks at the same moment, so this surfaces on
+            # upgrade rather than in production (genetics-results-suite-8a1).
             .with_columns(  # use HGNC symbol if gencode has only ENSG id but HGNC symbol is available, otherwise keep ENSG id
                 pl.when(
                     (pl.col("gene_name").str.starts_with("ENSG"))

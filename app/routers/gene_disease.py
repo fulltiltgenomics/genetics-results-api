@@ -2,9 +2,14 @@ import logging
 import time
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from app.config.gene_disease import gene_disease
 from app.dependencies import get_gene_disease_data
 from app.services.gene_disease_data import GeneDiseaseData
-from app.core.responses import TimedStreamingResponse, TimedJSONResponse
+from app.core.responses import (
+    TimedStreamingResponse,
+    TimedJSONResponse,
+    verified_columns_header,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,10 +95,19 @@ async def get_gene_disease(
         # get filtered data
         filtered_df = gene_disease_data.get_by_gene_symbol(gene_name)
 
+        # GeneDiseaseData harmonizes every source down to exactly these columns
+        # (`.select(output_columns)`), so the config list IS the endpoint's schema rather
+        # than a copy of it (genetics-results-suite-8a1)
+        columns = gene_disease["output_columns"]
+
         if filtered_df.is_empty():
+            # a gene with no Mendelian association is the empty result this endpoint
+            # expresses as a 404; the schema still has to survive it, because the client
+            # turns this into an empty frame rather than an error
             raise HTTPException(
                 status_code=404,
                 detail=f"No disease associations found for gene {gene_name}",
+                headers=verified_columns_header(columns, []),
             )
 
         logger.debug(
@@ -120,12 +134,15 @@ async def get_gene_disease(
                 records,
                 request_url,
                 start_time,
+                headers=verified_columns_header(columns, records),
             )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"{request_url} error processing gene-disease query: {e}")
+        # generic, like every other router here: the exception is logged above, and a
+        # ColumnDeclarationError's message carries both column lists
         raise HTTPException(
-            status_code=500, detail=f"Error processing gene-disease query: {str(e)}"
+            status_code=500, detail="Error processing gene-disease query"
         )

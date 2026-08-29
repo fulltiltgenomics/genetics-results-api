@@ -779,7 +779,11 @@ class TestAccumulateCsLeads:
             for r in rows:
                 yield [str(x) for x in r]
 
-        return asyncio.run(accumulate_cs_leads(line_stream(), self.SCHEMA))
+        # returns (header, leads) since genetics-results-suite-8a1 — the leads endpoint
+        # advertises the file's header so an empty result keeps its columns
+        header, leads = asyncio.run(accumulate_cs_leads(line_stream(), self.SCHEMA))
+        assert header == self.HEADER
+        return leads
 
     def test_picks_max_pip_across_interleaved_cs_ids(self):
         rows = [

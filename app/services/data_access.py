@@ -178,6 +178,18 @@ class DataAccessObject(BaseDataAccessObject):
         pass
 
     @abstractmethod
+    async def json_phenotype_with_header(
+        self,
+        phenotype: str,
+        interval: Literal[95, 99] | None,
+        header_schema: dict[str, type],
+        data_type: str,
+        chunk_size: int,
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        """Same, plus the column names the rows were keyed by (the file's header line)."""
+        pass
+
+    @abstractmethod
     async def lead_variants_phenotype(
         self,
         phenotype: str,
@@ -186,6 +198,17 @@ class DataAccessObject(BaseDataAccessObject):
         chunk_size: int,
     ) -> list[dict[str, Any]]:
         """Get the lead variant (one per cs_id) for a phenotype, streamed from the data source."""
+        pass
+
+    @abstractmethod
+    async def lead_variants_phenotype_with_header(
+        self,
+        phenotype: str,
+        interval: Literal[95, 99] | None,
+        header_schema: dict[str, type],
+        chunk_size: int,
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        """Same, plus the column names the leads are keyed by (the file's header line)."""
         pass
 
     @abstractmethod
@@ -478,6 +501,32 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         chunk_size: int = 1024 * 1024,
     ) -> list[dict[str, Any]]:
         """Get JSON data from all data files for the resource that have this phenotype."""
+        _, rows = await self.json_phenotype_with_header(
+            resource, phenotype, interval, header_schema, data_type, chunk_size
+        )
+        return rows
+
+    async def json_phenotype_with_header(
+        self,
+        resource: str,
+        phenotype: str,
+        interval: Literal[95, 99] | None,
+        header_schema: dict[str, type],
+        data_type: str = "cs",
+        chunk_size: int = 1024 * 1024,
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        """Same, plus the column names the rows were keyed by.
+
+        The header comes from the first data file that yields one, which is the same file
+        whose rows lead the merged result.
+
+        NOTHING ENFORCES THAT THE MERGED FILES SHARE A HEADER. `tsv_stream_to_list_with_header`
+        only checks that each name is *in* `header_schema`, which is a superset, so two files
+        carrying different subsets - or the same names in a different order - both pass, and
+        the advertised header then describes the first file's rows rather than all of them.
+        Every resource merged here has one layout today; a second one would need this to
+        intersect the headers rather than take the first.
+        """
         from app.services.config_util import get_data_file_ids_for_resource
 
         data_file_ids = _dedup_by_phenotype_path(
@@ -489,13 +538,16 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
 
         # collect results from all data files that have this phenotype
         all_results = []
+        header: list[str] = []
         for data_file_id in data_file_ids:
             try:
                 access = await self._get_resource_access(data_file_id, data_type)
                 if await access.check_phenotype_exists(phenotype, interval):
-                    results = await access.json_phenotype(
+                    file_header, results = await access.json_phenotype_with_header(
                         phenotype, interval, header_schema, data_type, chunk_size
                     )
+                    if not header:
+                        header = file_header
                     all_results.extend(results)
             except ValueError:
                 # data file doesn't support this data type, skip it
@@ -508,7 +560,7 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 f"Phenotype {phenotype} not found in resource {resource}"
             )
 
-        return all_results
+        return header, all_results
 
     async def lead_variants_phenotype(
         self,
@@ -519,6 +571,23 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         chunk_size: int = 1024 * 1024,
     ) -> list[dict[str, Any]]:
         """Lead variant (one per cs_id) across all data files for the resource that have this phenotype."""
+        _, rows = await self.lead_variants_phenotype_with_header(
+            resource, phenotype, interval, header_schema, chunk_size
+        )
+        return rows
+
+    async def lead_variants_phenotype_with_header(
+        self,
+        resource: str,
+        phenotype: str,
+        interval: Literal[95, 99] | None,
+        header_schema: dict[str, type],
+        chunk_size: int = 1024 * 1024,
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        """Same, plus the column names the leads are keyed by.
+
+        Same first-file caveat as json_phenotype_with_header above.
+        """
         from app.services.config_util import get_data_file_ids_for_resource
 
         data_file_ids = get_data_file_ids_for_resource(resource)
@@ -528,15 +597,19 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
 
         # cs_ids are unique per dataset/trait, so a plain dict merge across files needs no tie-break
         by_cs_id: dict[str, dict[str, Any]] = {}
+        header: list[str] = []
         found = False
         for data_file_id in data_file_ids:
             try:
                 access = await self._get_resource_access(data_file_id, "cs")
                 if await access.check_phenotype_exists(phenotype, interval):
                     found = True
-                    for row in await access.lead_variants_phenotype(
+                    file_header, leads = await access.lead_variants_phenotype_with_header(
                         phenotype, interval, header_schema, chunk_size
-                    ):
+                    )
+                    if not header:
+                        header = file_header
+                    for row in leads:
                         by_cs_id[row["cs_id"]] = row
             except ValueError:
                 # data file doesn't support this data type, skip it
@@ -549,7 +622,7 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
                 f"Phenotype {phenotype} not found in resource {resource}"
             )
 
-        return list(by_cs_id.values())
+        return header, list(by_cs_id.values())
 
     async def stream_range(
         self,

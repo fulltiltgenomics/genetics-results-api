@@ -325,6 +325,86 @@ def test_wildcard_domain_allows_everything(monkeypatch):
     assert auth._email_allowed("anyone@anywhere.example") is True
 
 
+def _allowed(monkeypatch, email: str, domains: set[str]) -> bool:
+    monkeypatch.setattr(config, "allowed_email_domains", domains)
+    monkeypatch.setattr(config, "allowed_emails", {"guest@example.org"})
+    return auth._email_allowed(email)
+
+
+def test_leading_dot_domain_matches_subdomains(monkeypatch):
+    """oauth2-proxy's `--email-domain=.example.com` form (genetics-results-suite-zl2).
+
+    v7.14.3 `isEmailValidWithDomains` (validator.go) accepts on
+    `HasSuffix(email, "@"+domain)`, and separately on
+    `HasPrefix(domain, ".") && HasSuffix(atoms[len(atoms)-1], domain)` where `atoms[len-1]` is
+    the part after the last `@`. Before this, such a deployment got a session at the gateway
+    and a 401 here: a logged-in UI in which every call fails."""
+    assert _allowed(monkeypatch, "user@sub.example.com", {".example.com"}) is True
+    assert _allowed(monkeypatch, "user@deep.sub.example.com", {".example.com"}) is True
+
+
+def test_leading_dot_domain_does_not_match_the_bare_domain(monkeypatch):
+    """The half that is easy to get backwards: "@.example.com" is a suffix of no real address,
+    so oauth2-proxy refuses this one and so must we."""
+    assert _allowed(monkeypatch, "user@example.com", {".example.com"}) is False
+
+
+def test_domain_match_is_not_a_careless_suffix_test(monkeypatch):
+    """A suffix test against the whole address, or one forgetting the dot, admits these."""
+    assert _allowed(monkeypatch, "user@notexample.com", {".example.com"}) is False
+    assert _allowed(monkeypatch, "user@evilexample.com", {"example.com"}) is False
+    assert _allowed(monkeypatch, "user@other.example", {".example.com"}) is False
+
+
+def test_exact_and_star_forms_survive_the_leading_dot_branch(monkeypatch):
+    """These assertions are duplicated in genetics-mcp-server's tests/test_auth_header_trust.py
+    — the two implementations must not drift apart."""
+    assert _allowed(monkeypatch, "user@example.com", {"example.com"}) is True
+    assert _allowed(monkeypatch, "user@sub.example.com", {"example.com"}) is False
+    assert _allowed(monkeypatch, "anyone@anywhere.example", {"*"}) is True
+    assert _allowed(monkeypatch, "Guest@Example.ORG", {"example.com"}) is True
+
+
+def test_star_dot_domain_is_a_synonym_for_the_leading_dot_form(monkeypatch):
+    """v7.14.3 strips the star (`domain[1:]`) and runs the leading-dot suffix test, so
+    `*.example.com` and `.example.com` decide identically — and neither is allow-all."""
+    assert _allowed(monkeypatch, "user@sub.example.com", {"*.example.com"}) is True
+    assert _allowed(monkeypatch, "user@deep.sub.example.com", {"*.example.com"}) is True
+    assert _allowed(monkeypatch, "user@example.com", {"*.example.com"}) is False
+    assert _allowed(monkeypatch, "user@notexample.com", {"*.example.com"}) is False
+    # the over-admission this code has never made: a "*."-prefixed entry is not allow-all
+    assert _allowed(monkeypatch, "anyone@anywhere.example", {"*.example.com"}) is False
+    # while a bare "*" still is
+    assert _allowed(monkeypatch, "anyone@anywhere.example", {"*"}) is True
+
+
+def test_domain_is_taken_from_the_last_at_sign(monkeypatch):
+    """Go's `atoms[len(atoms)-1]` is the part after the LAST "@"; str.split("@")[-1] agrees,
+    including when there is no local part at all."""
+    assert _allowed(monkeypatch, "a@b@example.com", {"example.com"}) is True
+    assert _allowed(monkeypatch, "a@b@sub.example.com", {".example.com"}) is True
+    assert _allowed(monkeypatch, "a@b@example.com", {".example.com"}) is False
+    assert _allowed(monkeypatch, "@sub.example.com", {".example.com"}) is True
+
+
+def test_degenerate_dot_entries_reduce_to_a_trailing_dot_test(monkeypatch):
+    """A configured "." or "*." reduces to HasSuffix(domain_part, "."), which no ordinary
+    address satisfies. Pinning what oauth2-proxy does with the value, not endorsing it."""
+    assert _allowed(monkeypatch, "user@example.com", {"."}) is False
+    assert _allowed(monkeypatch, "user@example.com", {"*."}) is False
+    assert _allowed(monkeypatch, "user@example.com.", {"."}) is True
+    assert _allowed(monkeypatch, "user@example.com.", {"*."}) is True
+
+
+def test_address_without_an_at_sign_is_refused(monkeypatch):
+    """The one known divergence, recorded in the comment at auth.py's `domain = ...` line:
+    oauth2-proxy's last atom is the whole string, so `.com` would admit this at the gateway.
+    Here the domain part is "" and it is refused — fail-closed, and unreachable unless an IdP
+    emits an address with no "@"."""
+    assert _allowed(monkeypatch, "example.com", {".com"}) is False
+    assert _allowed(monkeypatch, "example.com", {"com"}) is False
+
+
 def test_non_ascii_bearer_does_not_raise():
     """compare_digest on str raises TypeError for non-ASCII, and is_internal_caller runs in
     ASGI middleware before routing — that would be a 500 instead of a clean 401."""
@@ -445,3 +525,170 @@ def test_is_internal_caller_rejects_malformed_authorization():
     assert auth.is_internal_caller(INTERNAL_SECRET) is False
     assert auth.is_internal_caller(f"Basic {INTERNAL_SECRET}") is False
     assert auth.is_internal_caller(f"Bearer {INTERNAL_SECRET}") is True
+
+
+# ---------------------------------------------------------------------------
+# the `*` divergence: allow-all on the proxied path, refused on the bearer path
+# (genetics-results-suite-g8i). Mirrors genetics-mcp-server's tests of the same name.
+# ---------------------------------------------------------------------------
+
+
+def _bearer_request(token: str) -> Request:
+    return _request({"Authorization": f"Bearer {token}"})
+
+
+@pytest.fixture
+def google_id_token(monkeypatch):
+    """Make `get_bearer_token_user` accept a fixed payload for the token "a.b.c".
+
+    Patches the real verifier, so everything between it and the allow-list check — the
+    audience branch, `email_verified`, the missing-email guard — still runs.
+    """
+    from google.oauth2 import id_token
+
+    def _verify(token, request, *args, **kwargs):
+        if token != "a.b.c":
+            raise ValueError("unexpected token")
+        return {"email": _verify.email, "email_verified": True, "aud": "any"}
+
+    _verify.email = "anyone@anywhere.example"
+    monkeypatch.setattr(id_token, "verify_oauth2_token", _verify)
+    # unset audience is the deployed-inert case and the one that makes the allow-list the whole
+    # of the authorization; keep it so, or the test would not be testing the exposed shape
+    monkeypatch.setattr(config, "google_token_audience", set())
+    return _verify
+
+
+def _bearer_email_accepted(monkeypatch, google_id_token, email: str, domains: set[str]) -> bool:
+    from fastapi import HTTPException
+
+    google_id_token.email = email
+    monkeypatch.setattr(config, "allowed_email_domains", domains)
+    try:
+        return auth.get_bearer_token_user(_bearer_request("a.b.c")) == email
+    except HTTPException as exc:
+        assert exc.status_code == 403, exc.detail
+        return False
+
+
+def test_wildcard_is_refused_on_the_bearer_path(monkeypatch, google_id_token):
+    """A literal `*` is the ONE form the bearer path deliberately does not honour.
+
+    oauth2-proxy reads the same terraform `${OAUTH_EMAIL_DOMAIN}` and honours `*` as "any
+    domain the gateway admits". Nothing proxies this path — the token was minted by Google,
+    not by the gateway — so honouring it here would accept every Google-verified address, with
+    `GOOGLE_TOKEN_AUDIENCE` (unset here, the public gcloud client id when set) as no backstop.
+    """
+    monkeypatch.setattr(config, "allowed_email_domains", {"*"})
+    assert _bearer_email_accepted(monkeypatch, google_id_token, "anyone@anywhere.example", {"*"}) is False
+
+
+def test_wildcard_still_allows_everything_on_the_proxied_path(monkeypatch):
+    """The marker-gated path is untouched: `*` still means allow-all there.
+
+    `allow_wildcard` defaults to True precisely so this stays true; a default flipped to False
+    would show up here rather than in production as a total lockout of a deployment that set
+    `oauth_email_domain = "*"` on purpose. `_extract_user_from_header` must agree with it, or
+    the usage log and the auth path would disagree about who the caller was.
+    """
+    monkeypatch.setattr(config, "allowed_email_domains", {"*"})
+    req = _request(
+        {
+            USER_HEADER: "accounts.google.com:anyone@anywhere.example",
+            "Authorization": f"Bearer {INTERNAL_SECRET}",
+        }
+    )
+    assert auth.get_authenticated_user(req) == "anyone@anywhere.example"
+    assert auth.get_verified_user(req) == "anyone@anywhere.example"
+    assert _extract_user_from_header(
+        _scope(
+            {
+                USER_HEADER: "accounts.google.com:anyone@anywhere.example",
+                "Authorization": f"Bearer {INTERNAL_SECRET}",
+            }
+        )
+    ) == "anyone@anywhere.example"
+
+
+def test_star_dot_form_still_matches_a_subdomain_on_both_paths(monkeypatch, google_id_token):
+    """`*` and `*.example.com` are different values: refusing the first must not touch the
+    second, on either path, even when both are configured together."""
+    assert _allowed(monkeypatch, "user@sub.example.com", {"*", "*.example.com"}) is True
+    assert (
+        _bearer_email_accepted(monkeypatch, google_id_token, "user@sub.example.com", {"*", "*.example.com"})
+        is True
+    )
+    assert (
+        _bearer_email_accepted(monkeypatch, google_id_token, "user@sub.example.com", {"*.example.com"})
+        is True
+    )
+
+
+def test_wildcard_alongside_a_real_domain_still_refuses_strangers(monkeypatch, google_id_token):
+    """Dropping `*` from the set must not turn the remaining entries into allow-all, nor stop
+    them matching."""
+    assert (
+        _bearer_email_accepted(monkeypatch, google_id_token, "alice@finngen.fi", {"*", "finngen.fi"}) is True
+    )
+    assert _bearer_email_accepted(monkeypatch, google_id_token, "eve@evil.example", {"*", "finngen.fi"}) is False
+
+
+def test_bare_star_is_not_itself_a_matchable_domain(monkeypatch):
+    """With the wildcard refused, the star must not survive in the set as a domain that the
+    plain membership test could match — the malformed address "a@*" is the one that would."""
+    monkeypatch.setattr(config, "allowed_email_domains", {"*"})
+    assert auth._email_allowed("a@*", allow_wildcard=False) is False
+    assert auth._email_allowed("a@*") is True  # allow-all, for the same reason as any address
+
+
+def test_the_opt_out_does_not_mutate_the_configured_domains(monkeypatch):
+    """`domains.discard("*")` is the only mutation this change introduced, and it must stay on
+    the per-call set comprehension: a refusal that ate the star out of the configured value
+    would silently turn the proxied path into a lockout for the rest of the process."""
+    configured = {"*"}
+    monkeypatch.setattr(config, "allowed_email_domains", configured)
+    assert auth._email_allowed("anyone@anywhere.example", allow_wildcard=False) is False
+    assert auth._email_allowed("anyone@anywhere.example") is True
+    assert configured == {"*"}
+
+
+def test_every_other_form_is_unchanged_by_the_opt_out(monkeypatch):
+    """The opt-out touches the bare `*` and nothing else."""
+    monkeypatch.setattr(config, "allowed_emails", {"Guest@Example.org"})
+    for domains, email in (
+        ({"finngen.fi"}, "User@FinnGen.fi"),
+        ({".example.com"}, "user@sub.example.com"),
+        ({"*.example.com"}, "user@sub.example.com"),
+        ({"*", "*.example.com"}, "user@deep.sub.example.com"),
+        (set(), "guest@example.org"),
+    ):
+        monkeypatch.setattr(config, "allowed_email_domains", domains)
+        assert auth._email_allowed(email, allow_wildcard=False) is True, (domains, email)
+    for domains, email in (
+        ({".example.com"}, "user@example.com"),
+        ({".example.com"}, "user@notexample.com"),
+        ({"example.com"}, "user@evilexample.com"),
+        ({"*.example.com"}, "anyone@anywhere.example"),
+    ):
+        monkeypatch.setattr(config, "allowed_email_domains", domains)
+        assert auth._email_allowed(email, allow_wildcard=False) is False, (domains, email)
+
+
+def test_startup_warning_fires_only_for_a_literal_star(monkeypatch, caplog):
+    """The operator set `*` from a terraform variable that never mentions this service, so
+    silence about the half-honoured result is the whole problem repeating."""
+    import logging
+
+    monkeypatch.setattr(config, "allowed_email_domains", {"*"})
+    with caplog.at_level(logging.WARNING, logger="app.core.auth"):
+        auth.warn_if_wildcard_allow_list()
+    fired = [r for r in caplog.records if "ALLOWED_EMAIL_DOMAINS contains a literal" in r.message]
+    assert len(fired) == 1
+    # the operator has to learn WHICH path disagrees, or the warning is just "something is wrong"
+    assert "REFUSES" in fired[0].message and "id_token" in fired[0].message
+
+    caplog.clear()
+    monkeypatch.setattr(config, "allowed_email_domains", {"finngen.fi", "*.example.com"})
+    with caplog.at_level(logging.WARNING, logger="app.core.auth"):
+        auth.warn_if_wildcard_allow_list()
+    assert [r for r in caplog.records if "ALLOWED_EMAIL_DOMAINS contains a literal" in r.message] == []

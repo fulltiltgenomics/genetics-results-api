@@ -1,14 +1,20 @@
 import logging
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
-from fastapi.responses import PlainTextResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 from app.dependencies import get_gene_name_mapping
 from app.core.variant import Variant
 from app.core.exceptions import (
     ParseException,
 )
-from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
+from app.core.responses import verified_columns_header
+from app.services.gene_name_and_position_mapping import (
+    GENES_IN_REGION_COLUMNS,
+    NEAREST_GENES_COLUMNS,
+    GeneNameAndPositionMapping,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +128,15 @@ async def genes_in_region(
             tsv = f"{header}\n{rows}\n"
         return PlainTextResponse(tsv, media_type="text/tab-separated-values")
     else:
-        return genes
+        # a region with no genes is an ordinary answer, not an error, and JSON says so with
+        # `[]` — which carries no schema, so the columns go in the header (8a1)
+        # jsonable_encoder, because returning a Response directly skips the encoding
+        # FastAPI would otherwise do for a returned value: a dtype json.dumps cannot
+        # serialize would become a 500 instead of a string
+        return JSONResponse(
+            jsonable_encoder(genes),
+            headers=verified_columns_header(GENES_IN_REGION_COLUMNS, genes),
+        )
 
 
 @router.get(
@@ -248,7 +262,10 @@ async def nearest_genes(
             tsv = f"{header}\n{rows}\n"
         return PlainTextResponse(tsv, media_type="text/tab-separated-values")
     else:
-        return genes
+        return JSONResponse(
+            jsonable_encoder(genes),
+            headers=verified_columns_header(NEAREST_GENES_COLUMNS, genes),
+        )
 
 
 class NearestGenesRequest(BaseModel):
@@ -379,6 +396,10 @@ async def nearest_genes_post(
         tsv = f"{header}\n{rows}\n"
         return PlainTextResponse(tsv, media_type="text/tab-separated-values")
     else:
+        # deliberately NOT advertising columns like the GET route above: these rows carry an
+        # extra `variant` key appended per row, so they are NEAREST_GENES_COLUMNS + one, and
+        # no SDK function reaches this route (genetics-results-suite-8a1 covers the GET).
+        # Advertising here means declaring that wider shape, not reusing the GET's list
         return all_genes
 
 

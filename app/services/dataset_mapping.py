@@ -10,6 +10,15 @@ class DatasetMapping:
         self._init_dataset_to_resource_mapping()
 
     def _init_dataset_to_resource_mapping(self) -> None:
+        # NOTE: this aliases the module-level config dict rather than copying it, and
+        # the loop below writes into it. Re-running __init__ is idempotent on its own —
+        # same files, same keys, same values — so repetition is not the hazard. The
+        # hazard is that app.config.common.dataset_to_resource and this attribute are
+        # one object: anything else that mutates that dict silently rewrites an
+        # already-built mapping, and a construction under changed config keeps the
+        # previous entries alongside the new ones. The process builds exactly one of
+        # these (the container-held instance, see app.core.streams.get_dataset_mapping);
+        # a test that rebuilds it must hand __init__ a throwaway copy of the config dict.
         self.dataset_to_resource_version = dataset_to_resource
         if dataset_mapping_files:
             for path, key, resource, version in dataset_mapping_files:

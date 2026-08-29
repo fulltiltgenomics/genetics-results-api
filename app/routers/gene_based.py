@@ -6,7 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Res
 from fastapi.responses import StreamingResponse
 from app.dependencies import get_gene_name_mapping, ensure_gcs_token, get_data_access
 from app.core.exceptions import GeneNotFoundException, NotFoundException
-from app.core.responses import TimedStreamingResponse, TimedJSONResponse
+from app.core.responses import (
+    TimedStreamingResponse,
+    TimedJSONResponse,
+    columns_header,
+)
 from app.services.data_access import DataAccess
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 from app.config.gene_based_results import (
@@ -288,7 +292,10 @@ async def gene_based_results_by_phenotype(
             return TimedStreamingResponse(
                 stream, request.url, start_time, media_type="text/tab-separated-values"
             )
-        rows = await data_access.json_phenotype(
+        # the file's own header line, not `gene_based_header_schema` (a validating
+        # superset), so the advertised columns are the ones these rows are actually keyed
+        # by — the same ground truth range_response uses (genetics-results-suite-8a1)
+        header, rows = await data_access.json_phenotype_with_header(
             resource,
             phenotype_or_study,
             None,
@@ -296,7 +303,9 @@ async def gene_based_results_by_phenotype(
             "gene_based",
             config_common.read_chunk_size,
         )
-        return TimedJSONResponse(rows, request.url, start_time)
+        return TimedJSONResponse(
+            rows, request.url, start_time, headers=columns_header(header)
+        )
     except NotFoundException as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
