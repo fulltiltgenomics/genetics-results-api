@@ -111,7 +111,15 @@ class GeneDiseaseData:
             self.data = pl.concat(dataframes, how="vertical")
 
             # create an index on gene_symbol for faster lookups
-            # convert to uppercase for case-insensitive matching
+            # convert to uppercase for case-insensitive matching.
+            #
+            # THIS APPENDED COLUMN IS LOAD-BEARING FOR THE ENDPOINT'S SCHEMA. Every source
+            # above ends `.select(output_columns)`, and app/routers/gene_disease.py
+            # advertises that same list, verified against the row it serves. This helper is
+            # the one column outside it, and it stays invisible only because
+            # `get_by_gene_symbol` drops it. A SECOND post-concat helper without a matching
+            # drop makes every gene_disease JSON request 500 on ColumnDeclarationError
+            # (genetics-results-suite-8a1).
             self.data = self.data.with_columns(
                 pl.col("gene_symbol").str.to_uppercase().alias("gene_symbol_upper")
             )

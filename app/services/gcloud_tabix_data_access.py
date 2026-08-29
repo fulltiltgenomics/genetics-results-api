@@ -1,6 +1,10 @@
 import logging
 from typing import Any, AsyncGenerator, Literal
-from app.core.streams import tsv_line_iterator_str, tsv_stream_to_list, accumulate_cs_leads
+from app.core.streams import (
+    tsv_line_iterator_str,
+    tsv_stream_to_list_with_header,
+    accumulate_cs_leads,
+)
 from app.services.data_access import DataAccessObject
 from app.services.gcloud_tabix_base import GCloudTabixBase, validate_path_component
 from app.config.credible_sets import data_file_by_id as cs_data_file_by_id
@@ -164,6 +168,19 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
         chunk_size: int,
     ) -> list[dict[str, Any]]:
         """Stream a phenotype's credible sets and return only the lead variant per cs_id."""
+        _, rows = await self.lead_variants_phenotype_with_header(
+            phenotype, interval, header_schema, chunk_size
+        )
+        return rows
+
+    async def lead_variants_phenotype_with_header(
+        self,
+        phenotype: str,
+        interval: Literal[95, 99] | None,
+        header_schema: dict[str, type],
+        chunk_size: int,
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        """Same, plus the column names the leads are keyed by (the file's header line)."""
         blob_path = self._get_blob_path(phenotype, interval)
         stream = self._stream_file(blob_path, chunk_size)
         line_stream = tsv_line_iterator_str(stream)
@@ -178,14 +195,33 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
         chunk_size: int,
     ) -> list[dict[str, Any]]:
         """Get data as JSON response from GCloud Storage."""
+        _, rows = await self.json_phenotype_with_header(
+            phenotype, interval, header_schema, data_type, chunk_size
+        )
+        return rows
+
+    async def json_phenotype_with_header(
+        self,
+        phenotype: str,
+        interval: Literal[95, 99] | None,
+        header_schema: dict[str, type],
+        data_type: str,
+        chunk_size: int,
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        """Same, plus the column names the rows were keyed by.
+
+        Read from the file's own header line rather than from ``header_schema``, which is a
+        validating superset. The line is there even when the file has no data rows, which
+        is the point: it is the schema of an otherwise empty JSON result.
+        """
         start_time = time.time()
 
         blob_path = self._get_blob_path(phenotype, interval)
         stream = self._stream_file(blob_path, chunk_size)
         line_stream = tsv_line_iterator_str(stream)
-        rows = await tsv_stream_to_list(line_stream, header_schema)
+        header, rows = await tsv_stream_to_list_with_header(line_stream, header_schema)
 
         logger.debug(
             f"read and parsed {len(rows)} rows from {phenotype} from {self.resource} in {time.time() - start_time} seconds"
         )
-        return rows
+        return header, rows

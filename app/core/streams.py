@@ -889,8 +889,12 @@ def _cast_tsv_field(value: str, type_: type) -> Any:
 async def accumulate_cs_leads(
     line_stream: AsyncIterator[list[str]],
     header_schema: dict[str, type],
-) -> list[dict[str, Any]]:
+) -> tuple[list[str], list[dict[str, Any]]]:
     """Stream credible-set rows and keep only the lead variant per cs_id.
+
+    Returns the file's header line alongside the leads: the rows are keyed by it, and it is
+    read even when the file has no data rows, so it is also the schema of an empty result
+    (genetics-results-suite-8a1).
 
     Lead = the row flagged by an ``is_lead``/``lead`` column if one exists, otherwise the highest
     ``pip``, ties broken by highest ``mlog10p``. Memory is O(number of credible sets): only the
@@ -946,7 +950,7 @@ async def accumulate_cs_leads(
     except Exception as e:
         logger.error(f"Error parsing lead variant data: {e}")
         raise ValueError("Error parsing data")
-    return rows
+    return header, rows
 
 
 async def filter_stream_by_cs_id(

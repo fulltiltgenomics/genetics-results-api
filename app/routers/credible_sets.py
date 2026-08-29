@@ -9,7 +9,12 @@ from app.dependencies import (
     get_gene_name_mapping,
     get_credible_set_stats_service,
 )
-from app.core.responses import TimedStreamingResponse, TimedJSONResponse, range_response
+from app.core.responses import (
+    TimedStreamingResponse,
+    TimedJSONResponse,
+    columns_header,
+    range_response,
+)
 from app.core.streams import (
     filter_stream_by_cs_id,
     filter_stream_by_coding,
@@ -178,7 +183,10 @@ async def credible_sets_by_phenotype(
             )
     elif format == "json":
         try:
-            rows = await data_access.json_phenotype(
+            # the file's own header line, so a phenotype with no rows still tells the
+            # client its columns (genetics-results-suite-8a1). `coding_only` drops rows,
+            # never columns
+            header, rows = await data_access.json_phenotype_with_header(
                 resource,
                 phenotype_or_study,
                 interval,
@@ -188,7 +196,9 @@ async def credible_sets_by_phenotype(
             )
             if coding_only:
                 rows = filter_coding_rows(rows, config_common.coding_set)
-            return TimedJSONResponse(rows, request.url, start_time)
+            return TimedJSONResponse(
+                rows, request.url, start_time, headers=columns_header(header)
+            )
         except NotFoundException as e:
             raise HTTPException(status_code=404, detail=str(e))
         except Exception as e:
@@ -238,7 +248,7 @@ async def credible_sets_by_phenotype_leads(
     if interval == 99:
         raise HTTPException(status_code=422, detail="Interval 99 is not supported yet")
     try:
-        rows = await data_access.lead_variants_phenotype(
+        header, rows = await data_access.lead_variants_phenotype_with_header(
             resource,
             phenotype_or_study,
             interval,
@@ -254,7 +264,9 @@ async def credible_sets_by_phenotype_leads(
         raise HTTPException(status_code=500, detail="Internal server error")
 
     if format == "json":
-        return TimedJSONResponse(rows, request.url, start_time)
+        return TimedJSONResponse(
+            rows, request.url, start_time, headers=columns_header(header)
+        )
 
     # tsv: re-serialize the accumulated leads (the source file can't be passed through verbatim
     # since the non-lead rows are dropped). emit the full cs schema header for stable columns.

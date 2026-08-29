@@ -13,6 +13,48 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# The keys of one search result, in the order `search()` builds them: the indexed item's
+# own keys followed by the four ranking keys spliced on at match time
+# (`{**item, "match_type": ...}`). Unlike the gene lookups and gene-disease, these dicts
+# are assembled while loading a live index, so nothing in the repo can be projected
+# through this tuple — it is a DECLARATION, and app/routers/search.py verifies every row
+# it returns against it rather than trusting it (genetics-results-suite-8a1).
+_RANKING_COLUMNS = ("match_type", "match_score", "rank_score", "matched_key")
+
+PHENOTYPE_RESULT_COLUMNS = (
+    "type",
+    "code",
+    "name",
+    "resource",
+    "data_type",
+    "sample_size",
+    "n_cases",
+    "n_controls",
+    "has_summary_stats",
+    "has_credible_sets",
+    "search_strings",
+    *_RANKING_COLUMNS,
+)
+
+GENE_RESULT_COLUMNS = (
+    "type",
+    "hgnc_id",
+    "symbol",
+    "name",
+    "aliases",
+    "ensembl_id",
+    "chrom",
+    "gene_start",
+    "gene_end",
+    "search_strings",
+    *_RANKING_COLUMNS,
+)
+
+RESULT_COLUMNS_BY_TYPE = {
+    "phenotype": PHENOTYPE_RESULT_COLUMNS,
+    "gene": GENE_RESULT_COLUMNS,
+}
+
 # (resource, data_type) pairs that have summary statistics available, used to
 # annotate phenotype search results with has_summary_stats
 _SUMSTATS_PAIRS = set(get_available_resources_and_types())

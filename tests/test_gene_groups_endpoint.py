@@ -10,6 +10,7 @@ tests run against a live server).
 """
 
 import asyncio
+import json
 
 import pytest
 from fastapi import HTTPException
@@ -103,11 +104,14 @@ def _call(service, search_index, **kwargs):
     # the route is invoked directly (no FastAPI layer), so Query(...) defaults
     # are not resolved -- supply the same default FastAPI would inject.
     kwargs.setdefault("exclude_olfactory", False)
-    return asyncio.run(
+    # the route now returns a JSONResponse so it can carry the X-Columns header for an
+    # empty membership (genetics-results-suite-8a1); the body is what these assert on
+    resp = asyncio.run(
         gene_group_members(
             gene_group_service=service, search_index=search_index, **kwargs
         )
     )
+    return json.loads(bytes(resp.body))
 
 
 @pytest.fixture

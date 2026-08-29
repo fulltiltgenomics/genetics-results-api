@@ -91,11 +91,58 @@ no-hit query (`genetics-results-suite-6uk`). `range_response`'s JSON branch ther
 One change in `app/core/responses.py` covers every JSON range endpoint — all 23 call sites
 across the 11 routers that use `range_response`.
 
-**Not covered**: endpoints that compute JSON directly instead of streaming a TSV through
-`range_response` — `search`, gene annotations (`genes.py`), gene groups (`gene_groups.py`),
-rsID lookup (`rsid.py`), gene-disease (`gene_disease.py`), and gene-based/gene-burden results
-(`gene_based.py`, `TimedJSONResponse`/`StreamingResponse` directly). These have no header line
-to advertise and degrade to the pre-existing behaviour.
+**Endpoints outside `range_response`** fall into two groups (`genetics-results-suite-8a1`).
+
+*They read a file, so they advertise its real header and declare nothing.* These are the
+`json_phenotype` callers, which `6uk` missed because they look like JSON endpoints rather
+than streaming ones: `/credible_sets_by_phenotype`, `/credible_sets_by_phenotype_leads`,
+`/exome_results_by_phenotype` and `/gene_based_results_by_phenotype`. They call
+`json_phenotype_with_header` / `lead_variants_phenotype_with_header`
+(`app/services/data_access.py`), which return the header line the rows were keyed by.
+
+*They compute their JSON, so they have no header line and **declare** their columns:*
+`search` (`search.py`), gene annotations (`genes.py`), gene groups (`gene_groups.py`) and
+gene-disease (`gene_disease.py`).
+
+`/gene_based/{gene}` needs nothing here — it serves TSV, whose header line `tabix -h` prints
+even for a locus with no hits. Re-derived and **still not covered**: `/rsid/variants`
+(`rsid.py`) and LD, which is a different service. `/credible_sets_by_id` is not an
+empty-result path at all — an unmatched `cs_id` is a 404.
+
+A hand-maintained list per router is the thing that rots, so a declaration is never trusted:
+
+- **Where the rows are projected in this repo, the declaration is the object the projection
+  uses**, so it cannot drift. `GENES_IN_REGION_COLUMNS` / `NEAREST_GENES_COLUMNS`
+  (`app/services/gene_name_and_position_mapping.py`) are what `.select()` is given;
+  `MEMBER_COLUMNS` (`app/routers/gene_groups.py`) is what `_member_row` builds each row
+  from; gene-disease advertises `gene_disease["output_columns"]`, the same profile list
+  `GeneDiseaseData` ends every source with `.select()`.
+- **`verified_columns_header` (`app/core/responses.py`) REFUSES rather than degrading.**
+  A non-empty response cross-checks its declaration against **`rows[0]`** — names and order —
+  and raises `ColumnDeclarationError` on a disagreement, before any byte is written. The four
+  direct callers check that first row only, on the ground that their rows come from one
+  projection; the search path is the exception and loops **every** row, because a search
+  result array is heterogeneous by construction. That check is on the response path, not only
+  in a test, because search's result dicts are assembled from a live index and no offline
+  fixture can produce a real one.
+- **Search's declaration is checked against its construction sites.**
+  `PHENOTYPE_RESULT_COLUMNS` / `GENE_RESULT_COLUMNS` (`app/services/search_service.py`) are
+  compared with the dict literals in that module's own source, so a key added **inside** an
+  indexed item's literal, or to the `{**item, "match_type": ...}` ranking splice, fails
+  `tests/test_declared_columns.py` rather than reaching a client as a wrong empty schema. A
+  key attached to an item *after* the literal is invisible to that check and is caught by the
+  runtime refusal instead — `search_service.py` already builds `search_items` that way, safe
+  today only because those keys are absent from the result row. The test asserts a
+  construction site was actually found, so a refactor that hides one fails closed too.
+- **Search advertises only when the caller pinned one type.** A mixed phenotype+gene result
+  has two column sets and no honest single answer, so the header is omitted; every row is
+  still verified.
+- **Gene-disease advertises on its 404.** "No association for this gene" is expressed as a
+  404 that the SDK reads as an empty frame, so the header rides on the error response.
+
+`json_phenotype_with_header` (`app/services/data_access.py`) is the gene-burden-by-phenotype
+exception: that endpoint does read a file, so it advertises that file's real header line and
+declares nothing.
 
 - **The names come from the FILE header, not from `header_schema`.**
   `tsv_stream_to_list_with_header` returns the header it already reads and keys the rows by;

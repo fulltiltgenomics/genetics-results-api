@@ -7,7 +7,12 @@ from app.dependencies import (
     get_data_access,
     get_gene_name_mapping,
 )
-from app.core.responses import TimedStreamingResponse, TimedJSONResponse, range_response
+from app.core.responses import (
+    TimedStreamingResponse,
+    TimedJSONResponse,
+    columns_header,
+    range_response,
+)
 from app.core.variant import Variant
 from app.core.exceptions import (
     GeneNotFoundException,
@@ -171,7 +176,9 @@ async def exome_results_by_phenotype(
             logger.info(
                 f"Getting exome results for phenotype or study: {phenotype_or_study} from resource: {resource} in JSON format"
             )
-            rows = await data_access.json_phenotype(
+            # the file's own header line, so a phenotype with no rows still tells the
+            # client its columns (genetics-results-suite-8a1)
+            header, rows = await data_access.json_phenotype_with_header(
                 resource,
                 phenotype_or_study,
                 None,
@@ -182,7 +189,9 @@ async def exome_results_by_phenotype(
             logger.info(
                 f"Got {len(rows)} exome results for phenotype or study: {phenotype_or_study} from resource: {resource} in JSON format in {time.time() - start_time} seconds"
             )
-            return TimedJSONResponse(rows, request.url, start_time)
+            return TimedJSONResponse(
+                rows, request.url, start_time, headers=columns_header(header)
+            )
         except NotFoundException as e:
             raise HTTPException(status_code=404, detail=str(e))
         except Exception as e:

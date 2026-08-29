@@ -1,7 +1,10 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 
+from app.core.responses import verified_columns_header
 from app.dependencies import get_gene_group_service, get_search_index
 from app.services.gene_group_service import GeneGroupService
 from app.services.search_service import SearchIndex
@@ -9,6 +12,35 @@ from app.services.search_service import SearchIndex
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# the columns of one `members` row, and the ONE place they are written down: the rows below
+# are built from this tuple, and it is what an empty membership advertises (8a1)
+MEMBER_COLUMNS = (
+    "hgnc_id",
+    "symbol",
+    "ensembl_id",
+    "chr",
+    "gene_start",
+    "gene_end",
+)
+
+
+def _member_row(hgnc_id: str, gene: dict | None) -> dict:
+    """One member row. A member with no search/coords record is still listed, with nulls."""
+    gene = gene or {}
+    return dict(
+        zip(
+            MEMBER_COLUMNS,
+            (
+                hgnc_id,
+                gene.get("symbol"),
+                gene.get("ensembl_id") or None,
+                gene.get("chrom"),
+                gene.get("gene_start"),
+                gene.get("gene_end"),
+            ),
+        )
+    )
 
 
 @router.get(
@@ -39,7 +71,7 @@ async def gene_group_members(
     ),
     gene_group_service: GeneGroupService = Depends(get_gene_group_service),
     search_index: SearchIndex = Depends(get_search_index),
-) -> dict:
+) -> JSONResponse:
     """
     Return all member genes of an HGNC gene group, resolved by lineage:
     any group id (leaf, intermediate, or root) returns every gene whose
@@ -65,12 +97,15 @@ async def gene_group_members(
             "gene_group/members requested but gene-group data is not loaded; "
             "returning empty members"
         )
-        return {
-            "group_id": group_id,
-            "group_name": group_name,
-            "count": 0,
-            "members": [],
-        }
+        return JSONResponse(
+            jsonable_encoder({
+                "group_id": group_id,
+                "group_name": group_name,
+                "count": 0,
+                "members": [],
+            }),
+            headers=verified_columns_header(MEMBER_COLUMNS, []),
+        )
 
     if group_name is not None:
         resolved_id = gene_group_service.resolve_group_id(group_name)
@@ -88,42 +123,27 @@ async def gene_group_members(
         group_id=group_id, exclude_olfactory=exclude_olfactory
     )
 
-    members = []
-    for hgnc_id in sorted(hgnc_ids):
-        gene = search_index.get_gene_by_hgnc_id(hgnc_id)
-        if gene is None:
-            # member without a search/coords record is still listed with nulls
-            members.append(
-                {
-                    "hgnc_id": hgnc_id,
-                    "symbol": None,
-                    "ensembl_id": None,
-                    "chr": None,
-                    "gene_start": None,
-                    "gene_end": None,
-                }
-            )
-            continue
-        members.append(
-            {
-                "hgnc_id": hgnc_id,
-                "symbol": gene.get("symbol"),
-                "ensembl_id": gene.get("ensembl_id") or None,
-                "chr": gene.get("chrom"),
-                "gene_start": gene.get("gene_start"),
-                "gene_end": gene.get("gene_end"),
-            }
-        )
+    members = [
+        _member_row(hgnc_id, search_index.get_gene_by_hgnc_id(hgnc_id))
+        for hgnc_id in sorted(hgnc_ids)
+    ]
 
     members.sort(key=lambda m: (m["symbol"] is None, m["symbol"] or m["hgnc_id"]))
 
-    return {
-        "group_id": group_id,
-        "group_name": resolved_name,
-        "exclude_olfactory": exclude_olfactory,
-        "count": len(members),
-        "members": members,
-    }
+    # jsonable_encoder: returning a Response directly skips the encoding FastAPI would do
+    # for a returned value, and json.dumps alone 500s on a dtype it cannot serialize
+    return JSONResponse(
+        jsonable_encoder(
+            {
+                "group_id": group_id,
+                "group_name": resolved_name,
+                "exclude_olfactory": exclude_olfactory,
+                "count": len(members),
+                "members": members,
+            }
+        ),
+        headers=verified_columns_header(MEMBER_COLUMNS, members),
+    )
 
 
 @router.get(

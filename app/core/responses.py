@@ -82,7 +82,11 @@ def columns_header(columns: list[str]) -> dict[str, str]:
 
     Fail-open by design: header values are latin-1 encoded by Starlette and the value is
     comma-delimited, so a name that cannot survive the round trip drops the header rather
-    than turning a working request into a 500. Nothing today has such a name.
+    than turning a working request into a 500. Nothing today has such a name. That is not in
+    tension with `verified_columns_header` below, which DOES raise: the two answer different
+    questions. Here the columns are known to be right and only the transport is in doubt, so
+    dropping the header loses nothing a client had before. There the columns themselves are
+    in doubt, and serving a schema that contradicts the rows is the failure.
 
     This guard is defence in depth, not the primary control: every column here has already
     passed `header_schema` validation (app/core/streams.py), which only allows
@@ -95,6 +99,40 @@ def columns_header(columns: list[str]) -> dict[str, str]:
     ):
         return {}
     return {COLUMNS_HEADER: ",".join(columns)}
+
+
+class ColumnDeclarationError(RuntimeError):
+    """A router's declared output columns disagree with the rows it is returning."""
+
+
+def verified_columns_header(
+    declared: list[str] | tuple[str, ...], rows: list[dict] | None
+) -> dict[str, str]:
+    """Advertise DECLARED columns, refusing when the rows on hand contradict them.
+
+    The endpoints that stream a TSV read their column names off the file's own header line
+    (``range_response`` above), so their advertisement cannot drift. The four SDK functions
+    of genetics-results-suite-8a1 compute their JSON instead, and for them the declaration
+    IS the ground truth — there is no file header to be a superset of.
+
+    A hand-maintained list per router is exactly the thing that rots, so this refuses
+    rather than degrading: every non-empty response cross-checks its own declaration
+    against the rows it is about to serialize, and a disagreement raises. Order matters —
+    the SDK builds a frame from this list, and a reordering is a silently wrong schema.
+
+    The check is deliberately on the response path rather than only in a test: most of the
+    declarations here are the same object the rows are built from (a ``.select()`` list, a
+    profile's ``output_columns``), so they cannot drift at all, and the ones that CAN drift
+    (search's result dicts) are assembled from data that only a running index has. A test
+    fixture cannot prove anything about those; a real response can.
+    """
+    if rows:
+        actual = list(rows[0])
+        if actual != list(declared):
+            raise ColumnDeclarationError(
+                f"declared columns {list(declared)} do not match the returned row {actual}"
+            )
+    return columns_header(list(declared))
 
 
 async def range_response(
