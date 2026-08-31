@@ -188,15 +188,37 @@ class GCloudTabixBase:
     - Async context manager support
     """
 
+    # backing fields for the `storage`/`session` properties below. class-level so
+    # they resolve even for a subclass that defers GCloudTabixBase.__init__
+    _storage: "Storage | None" = None
+    _session: "aiohttp.ClientSession | None" = None
+
     def __init__(self):
-        self.storage = None
-        self.session = None
         os.makedirs("/tmp/tbi_cache", exist_ok=True)
-        # the aiohttp GCS client is only used by _stream_file; header and range
-        # access go through the tabix subprocess. creating the session eagerly
-        # here leaks an unclosed aiohttp session for every object used solely for
-        # tabix (e.g. the whole credible-set/coloc path), so create it lazily.
+        # header and range access go through the tabix subprocess, so an object can
+        # live its whole life without an aiohttp GCS client; creating the session here
+        # would leak an unclosed one per tabix-only object (e.g. the credible-set/coloc
+        # path). the `storage`/`session` properties open it on first read instead.
         ensure_gcs_token()
+
+    @property
+    def storage(self) -> Storage:
+        """GCS client for this instance; reading it opens the session if there is none.
+
+        A property rather than a plain attribute so no call site can reach the client
+        without the guard. A site that reaches an unopened client raises an AttributeError
+        its callers cannot tell apart from a missing object, and one of those callers is
+        the existence check that gates every path which would otherwise open the session —
+        so the resulting 404 is permanent and cannot self-heal.
+        """
+        self._ensure_storage()
+        return self._storage
+
+    @property
+    def session(self) -> aiohttp.ClientSession:
+        """aiohttp session backing the GCS client; guarded the same way as `storage`."""
+        self._ensure_storage()
+        return self._session
 
     async def __aenter__(self):
         """Async context manager entry."""
@@ -208,10 +230,11 @@ class GCloudTabixBase:
 
     async def cleanup(self):
         """Clean up resources."""
-        if self.session:
-            await self.session.close()
-        if self.storage:
-            await self.storage.close()
+        # the backing fields, not the properties: shutting down must never open a session
+        if self._session:
+            await self._session.close()
+        if self._storage:
+            await self._storage.close()
 
     TBI_CACHE_ROOT = "/tmp/tbi_cache"
     TBI_CACHE_MAX_BYTES = 10 * 1024 * 1024 * 1024  # 10GB
@@ -295,15 +318,33 @@ class GCloudTabixBase:
         # a fan-out burst; concurrent fetches are already capped globally by
         # _get_fetch_semaphore()
         connector = aiohttp.TCPConnector(limit=256, keepalive_timeout=5)
-        self.session = aiohttp.ClientSession(connector=connector)
-        self.storage = Storage(session=self.session)
+        self._session = aiohttp.ClientSession(connector=connector)
+        self._storage = Storage(session=self._session)
 
     def _ensure_storage(self):
-        """Lazily create the aiohttp GCS client on first streaming use, and
-        recreate it if a previous session was closed (e.g. by shutdown cleanup
-        racing a late request, or a pooled connection going stale)."""
-        if self.session is None or self.session.closed:
+        """Lazily create the aiohttp GCS client on first use, and recreate it if a
+        previous session was closed (e.g. by shutdown cleanup racing a late request,
+        or a pooled connection going stale).
+
+        The `storage`/`session` properties call this on every read, which is what makes
+        the guard unforgettable; reading `_session`/`_storage` directly outside them is
+        the one remaining way to reach an unopened client, so nothing else should.
+        """
+        # checked on _storage (what `storage` actually returns), not _session: if
+        # _init_storage() raises after building the ClientSession but before Storage(...)
+        # completes, _session is set and _storage is not, and a session-only check would
+        # then never retry — permanently handing back a None storage client. checking
+        # _session too catches the (currently hypothetical) reverse partial-init.
+        if self._storage is None or self._session is None or self._session.closed:
             self._init_storage()
+        if self._storage is None or self._session is None:
+            # a subclass may stub _init_storage out when it only shells out to tabix
+            # (GnomAD); reaching the client anyway must say so rather than hand back a
+            # None whose AttributeError reads as a missing object at the callers
+            raise RuntimeError(
+                f"{type(self).__name__}._init_storage() opened no GCS session: this class "
+                "does not support aiohttp GCS access"
+            )
 
     def _get_header(self, gs_path: str) -> list[bytes]:
         """
@@ -449,7 +490,6 @@ class GCloudTabixBase:
             aiohttp.client_exceptions.ClientResponseError: For other HTTP errors
         """
         start_time = time.time()
-        self._ensure_storage()
         headers = await self.storage._headers()
         url = blob_path.replace("gs://", "https://storage.googleapis.com/")
         gunzip = _MultiMemberGunzip() if blob_path.endswith((".gz", ".bgz")) else None
@@ -523,7 +563,6 @@ class GCloudTabixBase:
         last_exc: Exception | None = None
         for attempt in range(_TABIX_MAX_ATTEMPTS):
             try:
-                self._ensure_storage()
                 async with _get_fetch_semaphore():
                     headers = await self.storage._headers()
                     async with self.session.get(url, headers=headers) as resp:
@@ -550,7 +589,6 @@ class GCloudTabixBase:
         last_exc: Exception | None = None
         for attempt in range(_TABIX_MAX_ATTEMPTS):
             try:
-                self._ensure_storage()
                 # hold a global slot only for the network op (not the backoff sleep)
                 # so total concurrent GCS sockets stay bounded across all requests
                 async with _get_fetch_semaphore():
@@ -610,7 +648,6 @@ class GCloudTabixBase:
             return _empty()
 
         idx = await self._get_index(file_path)
-        self._ensure_storage()
 
         # build 0-based half-open regions, grouped per tid for overlap filtering
         regions: list[tuple[int, int, int]] = []

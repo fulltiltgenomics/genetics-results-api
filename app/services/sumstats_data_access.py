@@ -46,7 +46,6 @@ class SumstatsDataAccess(GCloudTabixBase):
         """Check if a file exists (GCS or local)."""
         if not path.startswith("gs://"):
             return os.path.exists(path)
-        self._ensure_storage()
         headers = await self.storage._headers()
         url = path.replace("gs://", "https://storage.googleapis.com/")
         try:
