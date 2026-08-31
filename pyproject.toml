@@ -29,6 +29,12 @@ dev = [
     "ruff==0.8.6",
 ]
 
+# ruff only treats pyproject.toml as configuration when this table is present, so
+# without it the `requires-python` above never reaches ruff and builtins added after
+# the oldest supported version are reported undefined
+[tool.ruff]
+target-version = "py313"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short -rw"

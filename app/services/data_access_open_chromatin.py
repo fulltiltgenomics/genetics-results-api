@@ -6,7 +6,7 @@ from app.config.sort_keys import create_sort_key, SORT_CONFIG_OPEN_CHROMATIN
 from app.core.streams import (
     chunk_iterator,
     start_iterators,
-    tsv_line_iterator_open_chromatin,
+    tsv_line_iterator_prepend_resource,
 )
 from asyncstdlib.heapq import merge
 from app.services.base_data_access import (
@@ -187,7 +187,7 @@ class DataAccessOpenChromatin(BaseDataAccess[DataAccessObjectOpenChromatin]):
         accesses = [await self._get_resource_access(resource) for resource in resources]
 
         line_iterators = [
-            tsv_line_iterator_open_chromatin(
+            tsv_line_iterator_prepend_resource(
                 await access.stream_range(chrom, start, end, in_chunk_size),
                 access.get_resource_name(),
             )
