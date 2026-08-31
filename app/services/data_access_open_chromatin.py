@@ -151,6 +151,8 @@ class DataAccessOpenChromatin(BaseDataAccess[DataAccessObjectOpenChromatin]):
                 access = await self._get_resource_access(resource)
                 if hasattr(access, "warm"):
                     await access.warm()
+            # swallowed by design, not omission: warm_all prefetches, it does not gate.
+            # verify_all_data_files() decides reachability (see Warm.ASYNC in the container).
             except Exception as e:
                 logger.warning(f"Open-chromatin warm failed for {resource}: {e}")
 

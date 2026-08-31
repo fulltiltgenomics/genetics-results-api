@@ -125,6 +125,8 @@ class DataAccessMpra(BaseDataAccess[DataAccessObjectMpra]):
                 access = await self._get_dataset_access(dataset_id)
                 if hasattr(access, "warm"):
                     await access.warm()
+            # swallowed by design, not omission: warm_all prefetches, it does not gate.
+            # verify_all_data_files() decides reachability (see Warm.ASYNC in the container).
             except Exception as e:
                 logger.warning(f"MPRA warm failed for {dataset_id}: {e}")
 
