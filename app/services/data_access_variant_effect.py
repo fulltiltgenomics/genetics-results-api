@@ -6,7 +6,7 @@ from app.config.sort_keys import create_sort_key, SORT_CONFIG_VARIANT_EFFECT
 from app.core.streams import (
     chunk_iterator,
     start_iterators,
-    tsv_line_iterator_variant_effect,
+    tsv_line_iterator_prepend_resource,
 )
 from asyncstdlib.heapq import merge
 from app.services.base_data_access import (
@@ -17,6 +17,9 @@ from app.services.base_data_access import (
 from typing import AsyncGenerator, List
 
 logger = logging.getLogger(__name__)
+
+# ref/alt offsets in the file row, before the resource column is prepended
+VARIANT_EFFECT_ALLELE_COLUMNS = (2, 3)
 
 
 class DataAccessObjectVariantEffect(BaseDataAccessObject):
@@ -129,6 +132,8 @@ class DataAccessVariantEffect(BaseDataAccess[DataAccessObjectVariantEffect]):
                 access = await self._get_dataset_access(dataset_id)
                 if hasattr(access, "warm"):
                     await access.warm()
+            # swallowed by design, not omission: warm_all prefetches, it does not gate.
+            # verify_all_data_files() decides reachability (see Warm.ASYNC in the container).
             except Exception as e:
                 logger.warning(f"Variant-effect warm failed for {dataset_id}: {e}")
 
@@ -152,11 +157,12 @@ class DataAccessVariantEffect(BaseDataAccess[DataAccessObjectVariantEffect]):
         accesses = [await self._get_dataset_access(ds) for ds in dataset_ids]
 
         line_iterators = [
-            tsv_line_iterator_variant_effect(
+            tsv_line_iterator_prepend_resource(
                 await access.stream_range(chrom, start, end, in_chunk_size),
                 access.get_resource_name(),
                 ref,
                 alt,
+                allele_columns=VARIANT_EFFECT_ALLELE_COLUMNS,
             )
             for access in accesses
         ]
