@@ -57,6 +57,10 @@ GENE_POSITIONS = pl.DataFrame(
         "hgnc_name": ["proprotein convertase", "ubiquitin specific peptidase 24"],
         "hgnc_alias_symbol": ["NARC-1", "KIAA1057"],
         "hgnc_prev_symbol": ["HCHOLA3", None],
+        "exon_starts": [[55039445, 55043843], []],
+        "exon_ends": [[55039763, 55044063], []],
+        "cds_starts": [[None, 55043843], []],
+        "cds_ends": [[None, 55044063], []],
     }
 )
 

@@ -127,7 +127,6 @@ def _collect_mapping_files() -> list[tuple[str, str]]:
     from app.config.genes import genes
 
     files: list[tuple[str, str]] = [
-        ("genes:model_file", genes["model_file"]),
         ("genes:gene_name_mapping_file", genes["gene_name_mapping_file"]),
         ("genes:hgnc_file", genes["hgnc_file"]),
     ]
@@ -136,6 +135,8 @@ def _collect_mapping_files() -> list[tuple[str, str]]:
         files.append(
             (f"genes:gencode_v{version}", template.format(version=version))
         )
+    for version, path in genes.get("exon_file_by_version", {}).items():
+        files.append((f"genes:exons_v{version}", path))
 
     for key, cfg in gene_disease.items():
         if isinstance(cfg, dict) and "file" in cfg:
