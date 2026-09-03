@@ -29,6 +29,7 @@ from app.routers import (
     mpra,
     hla,
     exome_results,
+    ld,
     search,
     phenotype,
     resources,
@@ -147,6 +148,7 @@ setup_middleware(app)
 app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
 app.include_router(metadata.router, prefix="/api/v1", tags=["metadata"])
 app.include_router(search.router, prefix="/api/v1", tags=["search"])
+app.include_router(ld.router, prefix="/api/v1", tags=["ld"])
 app.include_router(credible_sets.router, prefix="/api/v1", tags=["credible-sets"])
 app.include_router(colocalization.router, prefix="/api/v1", tags=["colocalization"])
 app.include_router(expression.router, prefix="/api/v1", tags=["expression"])

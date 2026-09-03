@@ -17,6 +17,7 @@ from app.services.gcloud_tabix_base import ensure_gcs_token  # noqa: F401 - re-e
 if TYPE_CHECKING:
     from app.services.request_util import RequestUtil
     from app.services.search_service import SearchIndex
+    from app.services.ld_service import LDService
     from app.services.data_access import DataAccess
     from app.services.data_access_coloc import DataAccessColoc
     from app.services.data_access_expression import DataAccessExpression
@@ -173,6 +174,11 @@ def is_public(func):
 def get_request_util() -> "RequestUtil":
     """Get RequestUtil service instance."""
     return container.get("request_util")
+
+
+def get_ld_service() -> "LDService":
+    """Get LDService instance."""
+    return container.get("ld_service")
 
 
 def get_search_index() -> "SearchIndex":

@@ -1,5 +1,5 @@
 import logging
-from typing import Literal
+from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -21,6 +21,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _tsv_value(value: Any) -> str:
+    """Render one cell of the genes TSV.
+
+    The exon columns are lists, and a list has no TSV spelling, so they are comma-joined.
+    The four lists are positional against each other, so an untranslated exon holds its
+    place with NA rather than being dropped — cds_starts[i] belongs to exon i or to no
+    exon at all. An empty field is a gene with no exon structure for the requested GENCODE
+    version, which is every version but the newest.
+    """
+    if value is None:
+        return "NA"
+    if isinstance(value, list):
+        return ",".join("NA" if v is None else str(v) for v in value)
+    return str(value)
+
+
 @router.get(
     "/genes_in_region/{chr}/{start}/{end}",
     include_in_schema=False,
@@ -30,7 +46,7 @@ router = APIRouter()
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "gene_name\tchrom\tgene_start\tgene_end\tgene_strand\tgene_type\thgnc_symbol\thgnc_name\thgnc_alias_symbol\thgnc_prev_symbol\nBSND\t1\t54998933\t55017172\t+\tprotein_coding\tBSND\tbarttin CLCNK type accessory subunit beta\tBART\tDFNB73\nPCSK9\t1\t55039445\t55064852\t+\tprotein_coding\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tHCHOLA3\n...",
+                    "example": "gene_name\tchrom\tgene_start\tgene_end\tgene_strand\tgene_type\thgnc_symbol\thgnc_name\thgnc_alias_symbol\thgnc_prev_symbol\texon_starts\texon_ends\tcds_starts\tcds_ends\nPCSK9\t1\t55039445\t55064852\t+\tprotein_coding\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tHCHOLA3\t55039445,55043843\t55039763,55044063\tNA,55043843\tNA,55044063\n...",
                 },
                 "application/json": {
                     "schema": {
@@ -48,22 +64,26 @@ router = APIRouter()
                                 "hgnc_name": {"type": "string"},
                                 "hgnc_alias_symbol": {"type": "string"},
                                 "hgnc_prev_symbol": {"type": "string"},
+                                "exon_starts": {
+                                    "type": "array",
+                                    "items": {"type": "integer"},
+                                },
+                                "exon_ends": {
+                                    "type": "array",
+                                    "items": {"type": "integer"},
+                                },
+                                "cds_starts": {
+                                    "type": "array",
+                                    "items": {"type": ["integer", "null"]},
+                                },
+                                "cds_ends": {
+                                    "type": "array",
+                                    "items": {"type": ["integer", "null"]},
+                                },
                             },
                         },
                     },
                     "example": [
-                        {
-                            "gene_name": "BSND",
-                            "chrom": 1,
-                            "gene_start": 54998933,
-                            "gene_end": 55017172,
-                            "gene_strand": "+",
-                            "gene_type": "protein_coding",
-                            "hgnc_symbol": "BSND",
-                            "hgnc_name": "barttin CLCNK type accessory subunit beta",
-                            "hgnc_alias_symbol": "BART",
-                            "hgnc_prev_symbol": "DFNB73",
-                        },
                         {
                             "gene_name": "PCSK9",
                             "chrom": 1,
@@ -75,6 +95,12 @@ router = APIRouter()
                             "hgnc_name": "proprotein convertase subtilisin/kexin type 9",
                             "hgnc_alias_symbol": "NARC-1|FH3",
                             "hgnc_prev_symbol": "HCHOLA3",
+                            # the four lists are positional: exon 1 here is entirely 5' UTR,
+                            # so its coding bounds are null while exon 2 carries a CDS
+                            "exon_starts": [55039445, 55043843],
+                            "exon_ends": [55039763, 55044063],
+                            "cds_starts": [None, 55043843],
+                            "cds_ends": [None, 55044063],
                         },
                     ],
                 },
@@ -122,8 +148,7 @@ async def genes_in_region(
         else:
             header = "\t".join(genes[0].keys())
             rows = "\n".join(
-                "\t".join(str(v) if v is not None else "NA" for v in gene.values())
-                for gene in genes
+                "\t".join(_tsv_value(v) for v in gene.values()) for gene in genes
             )
             tsv = f"{header}\n{rows}\n"
         return PlainTextResponse(tsv, media_type="text/tab-separated-values")
@@ -403,61 +428,5 @@ async def nearest_genes_post(
         return all_genes
 
 
-# TODO implement by gencode version
-# @router.get(
-#     "/gene_model/{chr}/{start}/{end}",
-#     include_in_schema=False,
-#     responses={
-#         200: {
-#             "description": "Successful response",
-#             "content": {"application/octet-stream": {"schema": {"type": "string"}}},
-#         },
-#         401: {"description": "Not authenticated"},
-#         404: {"description": "Gene model not found"},
-#         500: {"description": "Internal server error"},
-#     },
-# )
-# async def gene_model(
-#     chr: str,
-#     start: int,
-#     end: int,
-#     user: str = Depends(auth_required),
-#     request_util: RequestUtil = Depends(get_request_util),
-# ) -> Response:
-#     return request_util.stream_tabix_response( # TODO replace stream_tabix_response with something else
-#         config.genes["model_file"], f"{chr}:{start}-{end}"
-#     )
-
-
-# TODO implement by gencode version
-# @router.get(
-#     "/gene_model_by_gene/{gene}/{padding}",
-#     include_in_schema=False,
-#     responses={
-#         200: {
-#             "description": "Successful response",
-#             "content": {"application/octet-stream": {"schema": {"type": "string"}}},
-#         },
-#         401: {"description": "Not authenticated"},
-#         404: {"description": "Gene not found"},
-#         422: {"description": "Invalid padding parameter"},
-#         500: {"description": "Internal server error"},
-#     },
-# )
-# async def gene_model_by_gene(
-#     gene: str,
-#     padding: int,
-#     user: str = Depends(auth_required),
-#     request_util: RequestUtil = Depends(get_request_util),
-# ) -> Response:
-#     if padding < 0:
-#         raise HTTPException(status_code=422, detail="padding must be non-negative")
-#     try:
-#         chr, start, end = request_util.get_gene_range(gene.upper()) # TODO replace get_gene_range with get_coordinates_by_gene_name
-#     except GeneNotFoundException as e:
-#         raise HTTPException(status_code=404, detail=str(e))
-#     return request_util.stream_tabix_response(
-#         config.genes["model_file"], f"{chr}:{start-padding}-{end+padding}"
-#     )
 
 

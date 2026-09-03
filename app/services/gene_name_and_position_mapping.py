@@ -2,19 +2,21 @@ import concurrent.futures
 from typing import Literal
 from app.config.genes import genes
 from app.core.file_utils import read_file
+from app.core.gcs_retry import with_gcs_retry
 from collections import defaultdict as dd
+import fsspec
 import polars as pl
 import logging
 from app.core.exceptions import DataException, GeneNotFoundException
 
 logger = logging.getLogger(__name__)
 
-# The columns each gene lookup projects to, and the ONE place they are written down:
+# The gene-level columns both lookups project, and the ONE place they are written down:
 # app/routers/genes.py advertises them to clients that get zero genes back, and the
 # `.select()` calls below take their list from here rather than repeating it, so the
 # advertisement cannot describe a projection that no longer exists
-# (genetics-results-suite-8a1).
-GENES_IN_REGION_COLUMNS = (
+# (genetics-results-suite-8a1). The two lookups differ only in what they add, below.
+_GENE_CORE_COLUMNS = (
     "gene_name",
     "chrom",
     "gene_start",
@@ -27,12 +29,72 @@ GENES_IN_REGION_COLUMNS = (
     "hgnc_prev_symbol",
 )
 
-# same projection plus the computed distance, which sits after gene_type
+# Exon structure, four positional lists of equal length per gene: the i-th exon spans
+# exon_starts[i]..exon_ends[i] and its translated part is cds_starts[i]..cds_ends[i], null
+# where that exon is entirely untranslated. They ride on the region lookup only — a gene
+# track is the thing that draws them, and a nearest-gene answer is a lookup nobody draws.
+EXON_COLUMNS = ("exon_starts", "exon_ends", "cds_starts", "cds_ends")
+
+GENES_IN_REGION_COLUMNS = (*_GENE_CORE_COLUMNS, *EXON_COLUMNS)
+
+# same gene-level projection plus the computed distance, which sits after gene_type
 NEAREST_GENES_COLUMNS = (
-    *GENES_IN_REGION_COLUMNS[:6],
+    *_GENE_CORE_COLUMNS[:6],
     "distance",
-    *GENES_IN_REGION_COLUMNS[6:],
+    *_GENE_CORE_COLUMNS[6:],
 )
+
+# the dtype the exon columns hold whether or not a version has an exon file, so the
+# projection is one shape for every version
+_EXON_LIST = pl.List(pl.Int64)
+
+
+def _exons_by_gene(path: str) -> pl.DataFrame:
+    """One row per gene id: its canonical transcript's exons, ascending by position.
+
+    Read whole rather than range-queried: the file is one row per exon of one transcript
+    per gene, so it is a fraction of the gene position frames already held, and a lookup
+    built once at startup costs nothing per request.
+    """
+
+    def _read() -> pl.DataFrame:
+        with fsspec.open(path, "rb", compression="gzip") as handle:
+            return pl.read_csv(
+                handle.read(),
+                separator="\t",
+                null_values=["NA"],
+                columns=["gene_id", "exon_start", "exon_end", "cds_start", "cds_end"],
+            )
+
+    return (
+        with_gcs_retry(_read)
+        .sort(["gene_id", "exon_start"])
+        .group_by("gene_id", maintain_order=True)
+        .agg(
+            pl.col("exon_start").alias("exon_starts"),
+            pl.col("exon_end").alias("exon_ends"),
+            pl.col("cds_start").alias("cds_starts"),
+            pl.col("cds_end").alias("cds_ends"),
+        )
+    )
+
+
+def _with_exon_columns(df: pl.DataFrame) -> pl.DataFrame:
+    """Give a version's frame the exon columns, empty where it has no exons.
+
+    Empty rather than absent: one declaration serves both response formats, so a version
+    with no exon file would otherwise advertise a schema its rows do not have.
+    """
+    return df.with_columns(
+        [
+            (
+                pl.col(name).fill_null(pl.lit([], dtype=_EXON_LIST))
+                if name in df.columns
+                else pl.lit([], dtype=_EXON_LIST).alias(name)
+            )
+            for name in EXON_COLUMNS
+        ]
+    )
 
 
 class GeneNameAndPositionMapping:
@@ -169,7 +231,14 @@ class GeneNameAndPositionMapping:
                     )
                     .collect()
                 )
-                return version, df
+                # joined on the VERSIONED gene id, which is what makes borrowing another
+                # release's exons impossible: the suffix moves whenever the gene's
+                # structure does, so a mismatched release attaches nothing rather than
+                # attaching something misplaced
+                exon_file = genes.get("exon_file_by_version", {}).get(version)
+                if exon_file:
+                    df = df.join(_exons_by_gene(exon_file), on="gene_id", how="left")
+                return version, _with_exon_columns(df)
 
             # the per-version position files are independent GCS reads; collect them
             # concurrently rather than one network round-trip after another

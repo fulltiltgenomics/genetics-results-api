@@ -115,3 +115,57 @@ def test_range_response_json_coding_only_false_is_unchanged():
     assert len(rows) == 4
     assert any(r["most_severe"] == "intron_variant" for r in rows)
     assert any(r["most_severe"] is None for r in rows)
+
+
+def test_the_coding_set_is_the_one_the_rest_of_the_suite_uses():
+    """Five copies of this list exist — here, genetics-mcp-server's sdk/plots.py
+    `_CODING_CONSEQUENCES` and its chat prompt's Terminology block, and
+    genetics-results-browser's src/utils/coding.ts and bff/coding.ts. They had drifted four
+    ways before being reconciled, so this pins the membership and not only the behaviour.
+    """
+    assert coding_set == {
+        "missense_variant",
+        "frameshift_variant",
+        "inframe_insertion",
+        "inframe_deletion",
+        "transcript_ablation",
+        "stop_gained",
+        "stop_lost",
+        "start_lost",
+        "splice_acceptor_variant",
+        "splice_donor_variant",
+        "incomplete_terminal_codon_variant",
+        "protein_altering_variant",
+    }
+
+
+def test_every_term_is_a_spelling_the_annotation_actually_uses():
+    """`transcript_ablation_variant` sat in this set and matched nothing: the SO name has no
+    `_variant` suffix, and the annotation holds the SO name. Terms whose real name carries no
+    suffix must not be written with one.
+    """
+    unsuffixed = {
+        "transcript_ablation", "stop_gained", "stop_lost", "start_lost",
+        "inframe_insertion", "inframe_deletion",
+    }
+    for term in unsuffixed:
+        assert term in coding_set, f"{term} is the spelling the data uses"
+        assert f"{term}_variant" not in coding_set, (
+            f"{term}_variant is not a term the annotation ever holds"
+        )
+
+
+def test_synonymous_and_coding_sequence_are_not_coding():
+    """Neither changes the protein, which is what this set selects for. Both are common
+    enough to matter: synonymous_variant is the second most frequent coding-adjacent term in
+    the annotation.
+    """
+    rows = [
+        {"pip": 0.9, "most_severe": "synonymous_variant"},
+        {"pip": 0.8, "most_severe": "coding_sequence_variant"},
+        {"pip": 0.7, "most_severe": "start_retained_variant"},
+        {"pip": 0.6, "most_severe": "stop_retained_variant"},
+        {"pip": 0.5, "most_severe": "missense_variant"},
+    ]
+    kept = filter_coding_rows(rows, coding_set)
+    assert [r["most_severe"] for r in kept] == ["missense_variant"]

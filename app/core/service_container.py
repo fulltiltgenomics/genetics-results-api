@@ -247,11 +247,21 @@ def _register_services():
         from app.services.variant_set_service import VariantSetService
         return VariantSetService()
 
+    def create_ld_service():
+        from app.services.ld_service import LDService
+        return LDService()
+
     # every registration states whether startup warms it; app.server's lifespan derives
     # its warming from these declarations rather than repeating the names.
     container.register(
         "request_util", create_request_util, Warm.NONE,
         "pure parsing; construction touches nothing",
+    )
+    container.register(
+        "ld_service", create_ld_service, Warm.NONE,
+        "construction touches nothing; the aiohttp session opens on the first LD request. "
+        "Warming would open a session to a third party this pod may never need, and there "
+        "is nothing to prefetch — the upstream computes per query",
     )
     container.register("search_index", create_search_index, Warm.THREAD)
     container.register("data_access", create_data_access, Warm.ASYNC)
