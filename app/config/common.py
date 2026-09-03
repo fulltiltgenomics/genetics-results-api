@@ -159,13 +159,22 @@ max_range_size_json = 5e6  # 5Mb
 max_gene_window = 3e6  # 3Mb
 max_query_variants = 2000
 
+# The suite's shared definition of a coding variant, matched against `most_severe`. The other
+# four copies are genetics-mcp-server's sdk/plots.py `_CODING_CONSEQUENCES` and the chat
+# prompt's Terminology block, and genetics-results-browser's src/utils/coding.ts and
+# bff/coding.ts; changing one means changing all five.
+#
+# Terms whose SO name carries no `_variant` suffix are written without one — `transcript_ablation`
+# is the value the annotation actually holds, so a suffixed spelling matches nothing.
+# `synonymous_variant` and `coding_sequence_variant` are deliberately absent: neither changes
+# the protein, which is what this set is for.
 coding_set = set(
     [
         "missense_variant",
         "frameshift_variant",
         "inframe_insertion",
         "inframe_deletion",
-        "transcript_ablation_variant",
+        "transcript_ablation",
         "stop_gained",
         "stop_lost",
         "start_lost",
@@ -173,6 +182,5 @@ coding_set = set(
         "splice_donor_variant",
         "incomplete_terminal_codon_variant",
         "protein_altering_variant",
-        "coding_sequence_variant",
     ]
 )
