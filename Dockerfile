@@ -32,13 +32,7 @@ RUN curl -LO https://github.com/samtools/htslib/releases/download/${HTSLIB_VER}/
     && ./configure --enable-libcurl --enable-gcs --with-libdeflate \
 	&& make && make install && cd .. && rm -rf htslib-${HTSLIB_VER}*
 
-# gcloud sdk
-WORKDIR /opt/gcloud
-RUN curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz && \
-    tar -xf google-cloud-cli-linux-x86_64.tar.gz && \
-    ./google-cloud-sdk/install.sh -q --usage-reporting false
-
-# init gcloud and run server at container start
+# mint the startup GCS token and run the server at container start
 COPY <<EOF /opt/genetics-results-api/start.sh
 #!/bin/bash
 
@@ -47,15 +41,30 @@ COPY <<EOF /opt/genetics-results-api/start.sh
 # default soft limit of 1024 that "Too many open files" can otherwise hit).
 ulimit -n 65536 2>/dev/null || true
 
-source /opt/gcloud/google-cloud-sdk/completion.bash.inc && \
-source /opt/gcloud/google-cloud-sdk/path.bash.inc
-if [ -n "\$GOOGLE_APPLICATION_CREDENTIALS" ] && [ -f "\$GOOGLE_APPLICATION_CREDENTIALS" ]; then
-    echo "Using GOOGLE_APPLICATION_CREDENTIALS: \$GOOGLE_APPLICATION_CREDENTIALS"
-    gcloud auth activate-service-account --key-file="\$GOOGLE_APPLICATION_CREDENTIALS"
-else
-    echo "No GOOGLE_APPLICATION_CREDENTIALS, using Workload Identity / metadata server"
+# htslib reads the GCS bearer token out of the environment, so it needs a value before the
+# first request. The app's ensure_gcs_token() owns it from then on (google-auth credentials
+# refreshed in-process), so this only covers the startup window — and an empty value must not
+# stop the server, since the app mints its own on first use.
+# no line continuations below: the Dockerfile parser strips a trailing backslash inside a
+# heredoc, silently splitting the command into fragments.
+mint_gcs_token() {
+    # under Workload Identity the metadata server is the cheapest source; off GCE it is
+    # unreachable, and google-auth's default credentials then pick up GOOGLE_APPLICATION_CREDENTIALS
+    md_url=http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+    curl -s --max-time 2 -H 'Metadata-Flavor: Google' "\$md_url" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])' 2>/dev/null && return 0
+    python3 -c 'import google.auth, google.auth.transport.requests as r; c, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"]); c.refresh(r.Request()); print(c.token)' 2>/dev/null
+}
+
+# an explicitly provided token wins, so a caller can inject one without any credential source
+if [ -z "\$GCS_OAUTH_TOKEN" ]; then
+    GCS_OAUTH_TOKEN=\$(mint_gcs_token || true)
 fi
-export GCS_OAUTH_TOKEN=\$(gcloud auth print-access-token 2>/dev/null || true)
+export GCS_OAUTH_TOKEN
+if [ -n "\$GCS_OAUTH_TOKEN" ]; then
+    echo "GCS_OAUTH_TOKEN set for startup"
+else
+    echo "No startup GCS token; the app will mint one on first use"
+fi
 
 # if no command provided, run server
 if [ -z "\$@" ]; then
