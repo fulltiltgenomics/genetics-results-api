@@ -42,23 +42,13 @@ COPY <<EOF /opt/genetics-results-api/start.sh
 ulimit -n 65536 2>/dev/null || true
 
 # htslib reads the GCS bearer token out of the environment, so it needs a value before the
-# first request. The app's ensure_gcs_token() owns it from then on (google-auth credentials
-# refreshed in-process), so this only covers the startup window — and an empty value must not
-# stop the server, since the app mints its own on first use.
-# no line continuations below: the Dockerfile parser strips a trailing backslash inside a
-# heredoc, silently splitting the command into fragments.
-mint_gcs_token() {
-    # under Workload Identity the metadata server is the cheapest source; off GCE it is
-    # unreachable, and google-auth's default credentials then pick up GOOGLE_APPLICATION_CREDENTIALS
-    md_url=http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
-    curl -s --max-time 2 -H 'Metadata-Flavor: Google' "\$md_url" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])' 2>/dev/null && return 0
-    python3 -c 'import google.auth, google.auth.transport.requests as r; c, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"]); c.refresh(r.Request()); print(c.token)' 2>/dev/null
-}
-
-# an explicitly provided token wins, so a caller can inject one without any credential source
-if [ -z "\$GCS_OAUTH_TOKEN" ]; then
-    GCS_OAUTH_TOKEN=\$(mint_gcs_token || true)
-fi
+# first request. GCloudTabixBase.ensure_gcs_token() overwrites it from google-auth default
+# credentials on first use and owns it from then on, so this only bridges the startup window
+# — and an empty value must not stop the server.
+# no bare trailing backslash below: the Dockerfile parser strips one inside COPY <<EOF and
+# silently splits the command into fragments (a line ending in && is fine, the shell
+# continues it anyway).
+GCS_OAUTH_TOKEN=\$(python3 -c 'import google.auth, google.auth.transport.requests as r; c, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"]); c.refresh(r.Request()); print(c.token)' 2>/dev/null || true)
 export GCS_OAUTH_TOKEN
 if [ -n "\$GCS_OAUTH_TOKEN" ]; then
     echo "GCS_OAUTH_TOKEN set for startup"
