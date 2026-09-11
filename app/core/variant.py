@@ -92,6 +92,3 @@ class Variant(object):
 
     def __repr__(self) -> str:
         return self.varid
-
-    def ot_repr(self) -> str:
-        return "{}_{}_{}_{}".format(self.chr, self.pos, self.ref, self.alt)

@@ -157,19 +157,6 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
         blob_path = self._get_blob_path(phenotype, interval)
         return self._stream_file(blob_path, chunk_size)
 
-    async def lead_variants_phenotype(
-        self,
-        phenotype: str,
-        interval: Literal[95, 99] | None,
-        header_schema: dict[str, type],
-        chunk_size: int,
-    ) -> list[dict[str, Any]]:
-        """Stream a phenotype's credible sets and return only the lead variant per cs_id."""
-        _, rows = await self.lead_variants_phenotype_with_header(
-            phenotype, interval, header_schema, chunk_size
-        )
-        return rows
-
     async def lead_variants_phenotype_with_header(
         self,
         phenotype: str,

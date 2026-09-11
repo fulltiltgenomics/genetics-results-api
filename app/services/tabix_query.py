@@ -55,19 +55,6 @@ class TabixIndex:
                 return tid
         return None
 
-    def record_interval(self, fields: list[bytes]) -> tuple[int, int]:
-        """0-based half-open [beg, end) of a record, computed like htslib get_intv."""
-        beg = int(fields[self.col_beg - 1])
-        beg0 = beg if self.zero_based else beg - 1
-        if self.col_end != 0:
-            end = int(fields[self.col_end - 1])
-        elif self.preset == _TBX_VCF:
-            # VCF: end spans the REF allele (column 4, 0-based index 3)
-            end = beg0 + max(1, len(fields[3]))
-        else:
-            end = beg0 + 1
-        return beg0, end
-
     def byte_ranges(
         self, regions: list[tuple[int, int, int]]
     ) -> list[tuple[int, int, int]]:

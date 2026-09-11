@@ -58,40 +58,6 @@ def create_sort_key(
     return sort_key
 
 
-def create_sort_key_from_dict(
-    header_with_resources: list[bytes], sort_config_dict: dict[str, str]
-) -> Callable[[list[bytes]], tuple]:
-    """
-    Create a sort key function from a header and a dictionary mapping column names to indices.
-
-    This is an alternative helper for cases where the sort configuration is provided
-    as a dictionary with column names as keys (like sort_key_coloc).
-
-    Args:
-        header_with_resources: Header list including prepended columns
-        sort_config_dict: Dict of column names used for sorting (values are ignored)
-
-    Returns:
-        Sort key function
-
-    Example:
-        >>> header = [b"resource1", b"version1", b"resource2", b"version2", b"chr", b"region_start_min"]
-        >>> config = {"chr": 0, "region_start_min": 1}  # values ignored, only keys matter
-        >>> sort_fn = create_sort_key_from_dict(header, config)
-    """
-    # Extract column names from the dict keys and infer types
-    sort_config = []
-    for col_name in sort_config_dict.keys():
-        # Infer type from column name patterns
-        if any(x in col_name for x in ["chr", "pos", "start", "end", "size", "nsnps"]):
-            col_type = int
-        else:
-            col_type = bytes
-        sort_config.append((col_name, col_type))
-
-    return create_sort_key(header_with_resources, sort_config)
-
-
 # these define what columns to merge by
 SORT_CONFIG_CS = [
     ("chr", int),
@@ -168,14 +134,6 @@ SORT_CONFIG_VARIANT_EFFECT = [
 SORT_CONFIG_MPRA = [
     ("chrom", bytes),
     ("pos", int),
-]
-
-SORT_CONFIG_EXOME = [
-    ("chr", int),
-    ("pos", int),
-    ("ref", bytes),
-    ("alt", bytes),
-    ("trait", bytes),
 ]
 
 SORT_CONFIG_SUMSTATS = [

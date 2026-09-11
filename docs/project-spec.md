@@ -22,8 +22,6 @@ app/
 ├── config/         # resource/dataset configuration modules
 ├── core/           # shared utilities
 │   ├── auth.py         # bearer token / proxy-header authentication
-│   ├── cache.py        # caching layer
-│   ├── datatypes.py    # common data types
 │   ├── exceptions.py   # custom exceptions
 │   ├── file_utils.py   # file handling utilities
 │   ├── gcs_retry.py    # bounded retry for transient GCS errors on fsspec reads

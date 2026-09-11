@@ -190,17 +190,6 @@ class DataAccessObject(BaseDataAccessObject):
         pass
 
     @abstractmethod
-    async def lead_variants_phenotype(
-        self,
-        phenotype: str,
-        interval: Literal[95, 99] | None,
-        header_schema: dict[str, type],
-        chunk_size: int,
-    ) -> list[dict[str, Any]]:
-        """Get the lead variant (one per cs_id) for a phenotype, streamed from the data source."""
-        pass
-
-    @abstractmethod
     async def lead_variants_phenotype_with_header(
         self,
         phenotype: str,
@@ -564,20 +553,6 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
 
         return header, all_results
 
-    async def lead_variants_phenotype(
-        self,
-        resource: str,
-        phenotype: str,
-        interval: Literal[95, 99] | None,
-        header_schema: dict[str, type],
-        chunk_size: int = 1024 * 1024,
-    ) -> list[dict[str, Any]]:
-        """Lead variant (one per cs_id) across all data files for the resource that have this phenotype."""
-        _, rows = await self.lead_variants_phenotype_with_header(
-            resource, phenotype, interval, header_schema, chunk_size
-        )
-        return rows
-
     async def lead_variants_phenotype_with_header(
         self,
         resource: str,
@@ -853,7 +828,6 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
         sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_CS)
         merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
-        # header_line = b"\t".join(accesses[0].get_header()) + b"\n"
         header_line = (
             b"resource\tversion\t" + b"\t".join(accesses[0].get_header()) + b"\n"
         )
@@ -934,7 +908,6 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header(True)
         sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_CS_QTL)
         merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
-        # header_line = b"\t".join(accesses[0].get_header()) + b"\n"
         header_line = (
             b"resource\tversion\t" + b"\t".join(accesses[0].get_header(True)) + b"\n"
         )

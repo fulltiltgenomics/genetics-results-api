@@ -123,7 +123,6 @@ class DataAccessExpression(BaseDataAccess[DataAccessObjectExpression]):
         header_with_resources = [b"resource", b"version"] + accesses[0].get_header()
         sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_EXPRESSION)
         merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
-        # header_line = b"\t".join(accesses[0].get_header()) + b"\n"
         header_line = (
             b"resource\tversion\t" + b"\t".join(accesses[0].get_header()) + b"\n"
         )

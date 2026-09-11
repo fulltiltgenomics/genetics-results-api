@@ -11,7 +11,6 @@ from app.config.sort_keys import (
 from app.core.exceptions import DataException
 from app.core.streams import (
     chunk_iterator,
-    get_dataset_mapping,
     start_iterators,
     tsv_line_iterator,
     tsv_line_iterator_coloc,
@@ -201,7 +200,6 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
             # 1. Variant (cs1 or cs2 in cs_ids) - using tsv_line_iterator_coloc
             # 2. Resource/phenotype (cs1 or cs2 matches resource/phenotype) - custom filter
             # 3. Optionally swap columns if query side on side2 and simple=True - using iterator logic
-            dataset_mapping = get_dataset_mapping()
             resource_bytes = resource.encode()
             phenotype_bytes = phenotype_or_study.encode()
 

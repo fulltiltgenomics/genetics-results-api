@@ -15,10 +15,6 @@ def get_dataset(dataset_id: str) -> dict | None:
     return datasets.get(dataset_id)
 
 
-def get_datasets_by_resource(resource: str) -> dict[str, dict]:
-    """Return all dataset registry entries matching a resource name."""
-    return {k: v for k, v in datasets.items() if v.get("resource") == resource}
-
 
 def build_harmonizer_config(dataset_id: str) -> dict | None:
     """Build the legacy `config` dict (nested under 'metadata') that

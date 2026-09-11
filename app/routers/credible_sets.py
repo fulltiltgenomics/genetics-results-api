@@ -28,6 +28,7 @@ from app.core.exceptions import (
 )
 from app.services import config_util
 from app.services.data_access import DataAccess
+from app.services.credible_set_stats_service import CredibleSetStatsService
 from app.services.request_util import RequestUtil
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 import app.config.credible_sets as config_credible_sets
@@ -1205,7 +1206,7 @@ async def get_credible_set_stats(
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),
-    stats_service: "CredibleSetStatsService" = Depends(get_credible_set_stats_service),
+    stats_service: CredibleSetStatsService = Depends(get_credible_set_stats_service),
 ) -> Response:
     """
     Get statistics for a credible set data file or resource.
