@@ -84,21 +84,29 @@ async def _run_tabix(data_file: dict, gene_coords: list[dict], file_path: str | 
 async def _merge_results(
     data_files: list[dict], results: list[bytes]
 ) -> AsyncGenerator[bytes, None]:
-    """Merge tabix results from multiple data files, emitting header once."""
+    """Merge tabix results from multiple data files, emitting header once.
+
+    The burden files carry no resource column, and a merged result across datasets is
+    unusable without one: `gene_burden_results_v` in BigQuery exposes `resource` and its
+    schema docs tell callers to filter on it, so the sandbox SDK's frame has to carry it
+    too. It is appended from each data file's config, so the header is extended only by
+    the router and never by the files.
+    """
     header_emitted = False
     for data_file, result in zip(data_files, results):
         if not result:
             continue
+        resource = data_file["resource"].encode()
         lines = result.split(b"\n")
         for line in lines:
             if not line:
                 continue
             if line.startswith(b"#"):
                 if not header_emitted:
-                    yield line[1:] + b"\n"
+                    yield line[1:] + b"\tresource\n"
                     header_emitted = True
                 continue
-            yield line + b"\n"
+            yield line + b"\t" + resource + b"\n"
 
 
 @router.get(
