@@ -8,8 +8,7 @@ class BaseDataAccessObject(ABC):
     """
     Base class for all data access objects.
 
-    Provides common initialization pattern and defines the minimal interface
-    that all DAOs should implement.
+    Provides the common initialization pattern shared by all DAOs.
     """
 
     def __init__(self, identifier: str):
@@ -20,19 +19,6 @@ class BaseDataAccessObject(ABC):
             identifier: The resource name, dataset name, or other unique identifier
         """
         self.identifier = identifier
-
-    @abstractmethod
-    def get_primary_header(self) -> list[bytes]:
-        """
-        Get the primary header for this data source.
-
-        For single-file data sources, this is the only header.
-        For multi-file data sources, this is the main/primary file's header.
-
-        Returns:
-            List of header column names as bytes
-        """
-        pass
 
 
 class BaseFactory(ABC):

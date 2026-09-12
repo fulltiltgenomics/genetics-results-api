@@ -38,10 +38,6 @@ class DataAccessObjectVariantEffect(BaseDataAccessObject):
         """Get the header of data files for this dataset."""
         pass
 
-    def get_primary_header(self) -> list[bytes]:
-        """Get the primary header for this data source (implements BaseDataAccessObject)."""
-        return self.get_header()
-
     @abstractmethod
     def get_resource_name(self) -> str:
         """Get the resource name (prepended to each row) for this dataset."""

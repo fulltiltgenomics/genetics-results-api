@@ -43,10 +43,6 @@ class DataAccessObjectColoc(BaseDataAccessObject):
         """Get the header of the credible set data file"""
         pass
 
-    def get_primary_header(self) -> list[bytes]:
-        """Get the primary header for this data source (implements BaseDataAccessObject)."""
-        return self.get_credible_set_header()
-
     @abstractmethod
     def get_coloc_header(self) -> list[bytes]:
         """Get the header of the coloc data file"""

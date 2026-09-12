@@ -32,10 +32,6 @@ class DataAccessObjectOpenChromatin(BaseDataAccessObject):
         """Get the header of data files for this resource."""
         pass
 
-    def get_primary_header(self) -> list[bytes]:
-        """Get the primary header for this data source (implements BaseDataAccessObject)."""
-        return self.get_header()
-
     @abstractmethod
     def get_resource_name(self) -> str:
         """Get the resource name for this data access object."""

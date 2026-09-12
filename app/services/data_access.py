@@ -144,10 +144,6 @@ class DataAccessObject(BaseDataAccessObject):
         """Get the header of data files for this resource and data type"""
         pass
 
-    def get_primary_header(self) -> list[bytes]:
-        """Get the primary header for this data source (implements BaseDataAccessObject)."""
-        return self.get_header(qtl=False)
-
     @abstractmethod
     async def check_phenotype_exists(
         self, phenotype: str, interval: Literal[95, 99] | None = None

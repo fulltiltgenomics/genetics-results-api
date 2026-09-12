@@ -133,7 +133,7 @@ def test_only_the_accessor_module_touches_the_backing_fields():
 
 
 def test_a_tabix_only_subclass_says_so_instead_of_yielding_a_none_client(monkeypatch):
-    """`GnomAD` stubs `_init_storage` out because it only shells out to tabix.
+    """A subclass that only shells out to tabix stubs `_init_storage` out.
 
     That is the one way the guard can still run and produce nothing, so it must name the
     class rather than let an AttributeError reach a caller that reads it as "not found".

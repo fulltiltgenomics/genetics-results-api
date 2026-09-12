@@ -338,9 +338,9 @@ class GCloudTabixBase:
         if self._storage is None or self._session is None or self._session.closed:
             self._init_storage()
         if self._storage is None or self._session is None:
-            # a subclass may stub _init_storage out when it only shells out to tabix
-            # (GnomAD); reaching the client anyway must say so rather than hand back a
-            # None whose AttributeError reads as a missing object at the callers
+            # a subclass may stub _init_storage out when it only shells out to tabix;
+            # reaching the client anyway must say so rather than hand back a None whose
+            # AttributeError reads as a missing object at the callers
             raise RuntimeError(
                 f"{type(self).__name__}._init_storage() opened no GCS session: this class "
                 "does not support aiohttp GCS access"
