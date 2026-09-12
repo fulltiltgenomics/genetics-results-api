@@ -53,6 +53,23 @@ uv pip install --system -r pyproject.toml --extra dev
 SERVER_URL=http://localhost:8081 tests/run_tests.sh
 ```
 
+## Linting
+
+```bash
+ruff check                      # the whole repo
+scripts/lint-staged.sh          # only what is staged — what the pre-commit hook runs
+scripts/lint-staged.sh --all    # the whole repo, via the same resolution logic
+```
+
+Run `scripts/install-git-hooks.sh` once per clone. It wires `core.hooksPath`, which no
+clone carries, so that `pre-commit` runs both `scripts/check-doc-drift.sh` (warns) and
+`scripts/lint-staged.sh` (**blocks the commit** on a finding). `core.hooksPath` is shared
+across worktrees, so that one run covers every worktree too.
+
+The gate looks for ruff in this checkout's `.venv`, then the **main checkout's** (a
+worktree has none of its own), then `PATH`, then `uvx` — and fails the commit if it finds
+none, rather than passing it unchecked. `git commit --no-verify` is the deliberate bypass.
+
 ## License
 
 MIT

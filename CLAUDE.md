@@ -34,6 +34,12 @@ Changing a path on the left makes the doc on the right wrong until it is updated
 the same commit. `scripts/check-doc-drift.sh` warns (never blocks) on commits that
 violate this; it runs from the `pre-commit` hook.
 
+The same hook also runs `scripts/lint-staged.sh`, which **does** block: a commit whose
+staged files the linter rejects is refused. Neither hook runs until
+`scripts/install-git-hooks.sh` has been run once in the clone — `core.hooksPath` is
+local git config that no clone carries — and because that setting is shared across
+worktrees, one run also covers every worktree, existing and future.
+
 | changed path | doc to update | what to check |
 |---|---|---|
 | `app/routers/**` | `docs/project-spec.md` | the API Endpoints table — one row per router registered in `app/server.py` |
@@ -41,6 +47,7 @@ violate this; it runs from the `pre-commit` hook.
 | `app/core/auth.py` | `docs/project-spec.md` | the Authentication section: accepted credential order, env vars, the `@is_public` list |
 | `app/services/startup_checks.py` | `docs/project-spec.md` | the enumerated data-file families, what is intentionally excluded, the file counts |
 | `pyproject.toml` | `docs/project-spec.md` | Tech Stack: Python version, dependency claims, why `PyJWT` stays pinned |
+| `scripts/lint-staged.sh`, `scripts/install-git-hooks.sh` | `README.md`, `docs/project-spec.md` | the lint gate: which commits it blocks, the ruff rule set and its pinned version, how ruff is resolved when a worktree has no `.venv` |
 
 A doc is stale the moment it *enumerates* something the code no longer matches.
 Counts and lists rot silently — endpoint tables, dataset lists, verified-file
@@ -79,7 +86,11 @@ not just the docs here — this repo's own docs cannot detect that class of drif
    - Only add comments for tricky or complex parts of the code (explaining WHY something is done)
    - NO redundant and trivial comments that simply restate what the code does
 3. Private fields and methods should be prefixed with underscore
-4. Use `ruff` for linting (`ruff check`)
+4. Use `ruff` for linting (`ruff check`). The `pre-commit` hook runs
+   `scripts/lint-staged.sh`, which lints the **staged** Python files and **blocks the
+   commit** on a finding; `git commit --no-verify` is the bypass. The rule set is
+   `[tool.ruff.lint]` in `pyproject.toml` and matches the sibling repos, because the same
+   gate runs in all five
 5. Git commit messages should be concise and descriptive
 
 
@@ -98,7 +109,7 @@ not just the docs here — this repo's own docs cannot detect that class of drif
 2. `uv pip install -r pyproject.toml` for dependencies, `uv pip install -e ".[dev]"` for dev
 3. Server: `python run_server.py [port]` (default port 4000)
 4. Tests: `pytest` (boots the app in-process; needs GCS credentials), `pytest -m offline` (no network, no credentials — collection included, so no `app` module may reach the network *or* construct a client needing Application Default Credentials at import time; that is any Google client, not just GCS — `google.cloud.logging.Client()` was the second offender after `DatasetMapping`), `pytest --server-url http://host:port` (against a deployment)
-5. Lint: `ruff check`
+5. Lint: `ruff check` (whole repo), or `scripts/lint-staged.sh` for just what is staged
 6. `app` is a **namespace package** and is not installed — `tests/conftest.py` puts the repo
    root on `sys.path`, and a bare `python scripts/…` needs `PYTHONPATH=<this checkout>`.
    Because namespace packages merge every matching directory on `sys.path`, a `PYTHONPATH`
