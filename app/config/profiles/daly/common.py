@@ -37,6 +37,9 @@ dataset_to_resource = {
     "INTERVAL": ("interval", "1"),
     "UKB_PPP": ("ukbb", "3k"),
     "UKB_Finucane": ("ukbb", "1"),
+    # NOT the ukbb resource despite the UKBB prefix: the GWAS is an EstBB + UK Biobank
+    # meta-analysis, and only its fine-mapping is UKBB-only
+    "UKBB_EUR_NMR_2026": ("nmr_meta", "2026"),
     "Open_Targets_26.06": ("open_targets", "26.06"),
     "GTEx_v10": ("gtex", "v10"),
     "HPA_24.1": ("hpa", "24.1"),
