@@ -35,5 +35,8 @@ def build_harmonizer_config(dataset_id: str) -> dict | None:
             "publication_date": entry.get("publication_date"),
             "version_label": entry.get("version"),
             "metadata_file": entry.get("metadata_file"),
+            # only the harmonizers that are not FinnGen-specific read this; the older ones
+            # hardcode "finngen" and are only ever pointed at FinnGen metadata files
+            "resource": entry.get("resource"),
         }
     }
