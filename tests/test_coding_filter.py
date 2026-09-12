@@ -11,7 +11,7 @@ import json
 
 from app.config.common import coding_set
 from app.core.responses import range_response
-from app.core.streams import filter_stream_by_coding, filter_coding_rows
+from app.core.streams import filter_coding_rows, filter_stream_by_coding
 
 # header uses names the filter resolves by column name, not a fixed index
 HEADER = b"dataset\tpip\tmost_severe\tgene_most_severe"

@@ -1,17 +1,19 @@
 import logging
+import time
 from typing import Any, AsyncGenerator, Literal
-from app.core.streams import (
-    tsv_line_iterator_str,
-    tsv_stream_to_list_with_header,
-    accumulate_cs_leads,
-)
-from app.services.data_access import DataAccessObject
-from app.services.gcloud_tabix_base import GCloudTabixBase, validate_path_component
+
+import aiohttp.client_exceptions
+
 from app.config.credible_sets import data_file_by_id as cs_data_file_by_id
 from app.config.exome_results import exome_data_file_by_id
 from app.config.gene_based_results import gene_based_data_file_by_id
-import aiohttp.client_exceptions
-import time
+from app.core.streams import (
+    accumulate_cs_leads,
+    tsv_line_iterator_str,
+    tsv_stream_to_list_with_header,
+)
+from app.services.data_access import DataAccessObject
+from app.services.gcloud_tabix_base import GCloudTabixBase, validate_path_component
 
 # merge all config dicts
 data_file_by_id = {**cs_data_file_by_id, **exome_data_file_by_id, **gene_based_data_file_by_id}

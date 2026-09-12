@@ -1,8 +1,9 @@
 import logging
 from typing import AsyncGenerator
+
+from app.config.coloc import coloc
 from app.services.data_access_coloc import DataAccessObjectColoc
 from app.services.gcloud_tabix_base import GCloudTabixBase
-from app.config.coloc import coloc
 
 logger = logging.getLogger(__name__)
 

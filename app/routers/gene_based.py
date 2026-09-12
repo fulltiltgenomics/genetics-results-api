@@ -2,23 +2,25 @@ import asyncio
 import logging
 import time
 from typing import AsyncGenerator, Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from fastapi.responses import StreamingResponse
-from app.dependencies import get_gene_name_mapping, ensure_gcs_token, get_data_access
-from app.core.exceptions import GeneNotFoundException, NotFoundException
-from app.core.responses import (
-    TimedStreamingResponse,
-    TimedJSONResponse,
-    columns_header,
-)
-from app.services.data_access import DataAccess
-from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
+
+import app.config.common as config_common
 from app.config.gene_based_results import (
     gene_based_data_files,
     gene_based_header_schema,
     resource_to_gene_based_data_file_ids,
 )
-import app.config.common as config_common
+from app.core.exceptions import GeneNotFoundException, NotFoundException
+from app.core.responses import (
+    TimedJSONResponse,
+    TimedStreamingResponse,
+    columns_header,
+)
+from app.dependencies import ensure_gcs_token, get_data_access, get_gene_name_mapping
+from app.services.data_access import DataAccess
+from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 
 logger = logging.getLogger(__name__)
 

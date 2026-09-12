@@ -3,6 +3,7 @@ import logging
 from urllib.parse import urlparse
 
 import polars as pl
+
 from app.config.gene_disease import gene_disease
 from app.core.exceptions import DataException
 from app.core.gcs_retry import with_gcs_retry

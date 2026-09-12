@@ -1,12 +1,18 @@
-from abc import abstractmethod
 import asyncio
+import logging
 import time
+from abc import abstractmethod
+from collections import defaultdict as dd
+from typing import AsyncGenerator
+
+from asyncstdlib.heapq import merge
+
 from app.config.coloc import coloc
 from app.config.credible_sets import variant_columns as cs_variant_columns
 from app.config.sort_keys import (
-    create_sort_key,
-    SORT_CONFIG_COLOC_CREDSET,
     SORT_CONFIG_COLOC,
+    SORT_CONFIG_COLOC_CREDSET,
+    create_sort_key,
 )
 from app.core.exceptions import DataException
 from app.core.streams import (
@@ -20,14 +26,10 @@ from app.core.streams import (
 )
 from app.core.variant import Variant
 from app.services.base_data_access import (
-    BaseFactory,
     BaseDataAccess,
     BaseDataAccessObject,
+    BaseFactory,
 )
-from asyncstdlib.heapq import merge
-from typing import AsyncGenerator
-from collections import defaultdict as dd
-import logging
 
 logger = logging.getLogger(__name__)
 

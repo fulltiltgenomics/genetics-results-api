@@ -1,14 +1,22 @@
+import asyncio
 import hashlib
 import logging
 import multiprocessing
+import os
 import threading
 import time
 import zlib
-import asyncio
+from asyncio.unix_events import subprocess
+from concurrent.futures import ProcessPoolExecutor
+from datetime import datetime, timedelta
+from typing import AsyncGenerator
+
 import aiohttp
 import aiohttp.client_exceptions
-from typing import AsyncGenerator
-from asyncio.unix_events import subprocess
+from gcloud.aio.storage import Storage
+from google.auth import default
+from google.auth.transport.requests import Request
+
 from app.core.exceptions import NotFoundException, ParseException
 from app.services.tabix_query import (
     TabixIndex,
@@ -16,12 +24,6 @@ from app.services.tabix_query import (
     filter_batch,
     parse_tabix_index,
 )
-from concurrent.futures import ProcessPoolExecutor
-from gcloud.aio.storage import Storage
-from google.auth import default
-from google.auth.transport.requests import Request
-import os
-from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 

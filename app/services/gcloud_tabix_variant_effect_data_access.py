@@ -1,8 +1,9 @@
 import logging
 from typing import AsyncGenerator
+
+from app.config.variant_effect import variant_effect_data
 from app.services.data_access_variant_effect import DataAccessObjectVariantEffect
 from app.services.gcloud_tabix_base import GCloudTabixBase
-from app.config.variant_effect import variant_effect_data
 
 logger = logging.getLogger(__name__)
 

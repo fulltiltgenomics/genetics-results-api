@@ -1,8 +1,10 @@
 import concurrent.futures
 import logging
-from typing import Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+
 import polars as pl
 from rapidfuzz import fuzz, process
+
 from app.config.credible_sets import get_credible_set_resources_and_types
 from app.config.summary_stats import get_available_resources_and_types
 from app.services.config_util import get_datasets, get_resources_with_metadata

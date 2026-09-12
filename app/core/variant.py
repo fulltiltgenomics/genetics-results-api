@@ -1,4 +1,5 @@
 import re
+
 from app.core.exceptions import ParseException
 
 var_re = re.compile("-|_|:|\\|")

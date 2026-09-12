@@ -10,7 +10,6 @@ import pytest
 
 from app.services.gene_group_service import GeneGroupService
 
-
 # hierarchy: 100 (root "Receptors") -> 110 ("GPCRs") -> 170 ("5-HT1 receptors")
 #            110 ("GPCRs") -> 180 ("Olfactory receptors")
 #            100 -> 120 ("Ion channels")

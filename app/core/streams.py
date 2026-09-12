@@ -1,11 +1,10 @@
 import asyncio
 import logging
-from typing import TYPE_CHECKING, AsyncGenerator, AsyncIterator, Any, Callable
+from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Callable
 
 from app.core.logging_config import setup_logging
 from app.core.service_container import container
 from app.core.variant import Variant
-
 
 if TYPE_CHECKING:
     from app.services.dataset_mapping import DatasetMapping

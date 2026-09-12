@@ -1,16 +1,17 @@
+import asyncio
+import json
 import logging
 import subprocess
-from typing import Any, Optional, TypedDict
-import timeit
-import json
-from collections import OrderedDict as od, defaultdict as dd
-from app.core.exceptions import DataException, VariantNotFoundException
-from app.core.variant import Variant
-from app.core.logging_config import setup_logging
-from app.services.gcloud_tabix_base import GCloudTabixBase, ensure_gcs_token
-from typing import TypedDict
 import tempfile
-import asyncio
+import timeit
+from collections import OrderedDict as od
+from collections import defaultdict as dd
+from typing import Any, Optional, TypedDict
+
+from app.core.exceptions import DataException, VariantNotFoundException
+from app.core.logging_config import setup_logging
+from app.core.variant import Variant
+from app.services.gcloud_tabix_base import GCloudTabixBase, ensure_gcs_token
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -81,7 +82,7 @@ class GnomAD(GCloudTabixBase):
                     stderr.decode() if stderr else "Non-zero return code from tabix"
                 )
             if not stdout:
-                raise VariantNotFoundException(f"No variants found")
+                raise VariantNotFoundException("No variants found")
             result = stdout.decode()
 
         ac0_variants = set()
@@ -124,7 +125,7 @@ class GnomAD(GCloudTabixBase):
                 ac0_variants.add(str(variant))
 
         if len(found_variants) == 0:
-            raise VariantNotFoundException(f"No variants found")
+            raise VariantNotFoundException("No variants found")
 
         # calculate min and max AFs over populations
         for v in gnomad_results:

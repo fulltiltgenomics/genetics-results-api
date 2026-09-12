@@ -1,27 +1,38 @@
+from app.config.chromatin_peaks import chromatin_peaks_data as _chromatin_peaks_data
+from app.config.coloc import coloc as _coloc_configs
+from app.config.credible_sets import (
+    data_file_by_id as cs_data_file_by_id,
+)
 from app.config.credible_sets import (
     data_files as cs_data_files,
-    data_file_by_id as cs_data_file_by_id,
+)
+from app.config.credible_sets import (
     resource_to_data_file_ids as cs_resource_to_data_file_ids,
 )
+from app.config.datasets import build_harmonizer_config
+from app.config.datasets import datasets as _dataset_registry
 from app.config.exome_results import (
-    exome_data_files,
     exome_data_file_by_id,
+    exome_data_files,
     resource_to_exome_data_file_ids,
 )
+from app.config.expression import expression_data as _expression_data
 from app.config.gene_based_results import (
-    gene_based_data_files,
     gene_based_data_file_by_id,
+    gene_based_data_files,
     resource_to_gene_based_data_file_ids,
 )
-from app.config.datasets import datasets as _dataset_registry, build_harmonizer_config
-from app.config.coloc import coloc as _coloc_configs
-from app.config.summary_stats import data_files as _sumstats_data_files
-from app.config.expression import expression_data as _expression_data
-from app.config.chromatin_peaks import chromatin_peaks_data as _chromatin_peaks_data
-from app.config.open_chromatin import open_chromatin_data as _open_chromatin_data  # noqa: F401 - imported to fail fast if the profile config is missing
-from app.config.variant_effect import variant_effect_data as _variant_effect_data  # noqa: F401 - imported to fail fast if the profile config is missing
-from app.config.mpra import mpra_data as _mpra_data  # noqa: F401 - imported to fail fast if the profile config is missing
 from app.config.gene_disease import gene_disease as _gene_disease_config
+from app.config.mpra import (
+    mpra_data as _mpra_data,  # noqa: F401 - imported to fail fast if the profile config is missing
+)
+from app.config.open_chromatin import (
+    open_chromatin_data as _open_chromatin_data,  # noqa: F401 - imported to fail fast if the profile config is missing
+)
+from app.config.summary_stats import data_files as _sumstats_data_files
+from app.config.variant_effect import (
+    variant_effect_data as _variant_effect_data,  # noqa: F401 - imported to fail fast if the profile config is missing
+)
 
 # build coloc partner index from explicit pairs
 _coloc_partners: dict[str, set[str]] = {}

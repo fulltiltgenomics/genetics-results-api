@@ -1,37 +1,39 @@
-import time
 import logging
+import time
 from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel
-from app.dependencies import (
-    get_request_util,
-    get_data_access,
-    get_gene_name_mapping,
-    get_credible_set_stats_service,
-)
-from app.core.responses import (
-    TimedStreamingResponse,
-    TimedJSONResponse,
-    columns_header,
-    range_response,
-)
-from app.core.streams import (
-    filter_stream_by_cs_id,
-    filter_stream_by_coding,
-    filter_coding_rows,
-)
-from app.core.variant import Variant
+
+import app.config.common as config_common
+import app.config.credible_sets as config_credible_sets
 from app.core.exceptions import (
     GeneNotFoundException,
     NotFoundException,
     ParseException,
 )
+from app.core.responses import (
+    TimedJSONResponse,
+    TimedStreamingResponse,
+    columns_header,
+    range_response,
+)
+from app.core.streams import (
+    filter_coding_rows,
+    filter_stream_by_coding,
+    filter_stream_by_cs_id,
+)
+from app.core.variant import Variant
+from app.dependencies import (
+    get_credible_set_stats_service,
+    get_data_access,
+    get_gene_name_mapping,
+    get_request_util,
+)
 from app.services import config_util
 from app.services.data_access import DataAccess
-from app.services.request_util import RequestUtil
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
-import app.config.credible_sets as config_credible_sets
-import app.config.common as config_common
+from app.services.request_util import RequestUtil
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +203,7 @@ async def credible_sets_by_phenotype(
             )
         except NotFoundException as e:
             raise HTTPException(status_code=404, detail=str(e))
-        except Exception as e:
+        except Exception:
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1213,7 +1215,7 @@ async def get_credible_set_stats(
     If a data file ID is provided, returns stats for that file.
     If a resource name is provided, returns combined stats for all data files in that resource.
     """
-    from fastapi.responses import PlainTextResponse, JSONResponse
+    from fastapi.responses import JSONResponse, PlainTextResponse
 
     try:
         result = stats_service.get_stats(id_or_resource, format)

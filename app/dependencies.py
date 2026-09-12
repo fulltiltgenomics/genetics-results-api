@@ -12,25 +12,27 @@ from fastapi import HTTPException, Request
 import app.config.common as config
 from app.core.auth import get_sandbox_principal, get_verified_user
 from app.core.service_container import container
-from app.services.gcloud_tabix_base import ensure_gcs_token  # noqa: F401 - re-exported for router dependencies
+from app.services.gcloud_tabix_base import (
+    ensure_gcs_token,  # noqa: F401 - re-exported for router dependencies
+)
 
 if TYPE_CHECKING:
-    from app.services.request_util import RequestUtil
-    from app.services.search_service import SearchIndex
-    from app.services.ld_service import LDService
+    from app.services.credible_set_stats_service import CredibleSetStatsService
     from app.services.data_access import DataAccess
+    from app.services.data_access_chromatin_peaks import DataAccessChromatinPeaks
     from app.services.data_access_coloc import DataAccessColoc
     from app.services.data_access_expression import DataAccessExpression
-    from app.services.data_access_chromatin_peaks import DataAccessChromatinPeaks
+    from app.services.data_access_mpra import DataAccessMpra
     from app.services.data_access_open_chromatin import DataAccessOpenChromatin
     from app.services.data_access_variant_effect import DataAccessVariantEffect
-    from app.services.data_access_mpra import DataAccessMpra
-    from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
-    from app.services.gene_group_service import GeneGroupService
     from app.services.gene_disease_data import GeneDiseaseData
+    from app.services.gene_group_service import GeneGroupService
+    from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
+    from app.services.ld_service import LDService
     from app.services.phenotype_markdown_service import PhenotypeMarkdownService
-    from app.services.credible_set_stats_service import CredibleSetStatsService
+    from app.services.request_util import RequestUtil
     from app.services.rsid_db import RsidDB
+    from app.services.search_service import SearchIndex
     from app.services.sumstats_data_access import SumstatsDataAccess
     from app.services.variant_annotation_service import VariantAnnotationService
     from app.services.variant_set_service import VariantSetService

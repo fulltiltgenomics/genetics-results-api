@@ -2,7 +2,6 @@
 Tests for rsID to variants endpoint.
 """
 
-import pytest
 import requests
 
 

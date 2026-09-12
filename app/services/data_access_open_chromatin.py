@@ -1,21 +1,23 @@
-from abc import abstractmethod
 import asyncio
 import logging
+import re
+from abc import abstractmethod
+from typing import AsyncGenerator, List
+
+from asyncstdlib.heapq import merge
+
 from app.config.open_chromatin import open_chromatin_data
-from app.config.sort_keys import create_sort_key, SORT_CONFIG_OPEN_CHROMATIN
+from app.config.sort_keys import SORT_CONFIG_OPEN_CHROMATIN, create_sort_key
 from app.core.streams import (
     chunk_iterator,
     start_iterators,
     tsv_line_iterator_prepend_resource,
 )
-from asyncstdlib.heapq import merge
 from app.services.base_data_access import (
-    BaseFactory,
     BaseDataAccess,
     BaseDataAccessObject,
+    BaseFactory,
 )
-from typing import AsyncGenerator, List
-import re
 
 logger = logging.getLogger(__name__)
 

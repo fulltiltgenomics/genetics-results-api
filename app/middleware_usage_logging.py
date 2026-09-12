@@ -5,9 +5,9 @@ Emits structured JSON logs for each request, which can be routed to BigQuery
 via a GCP log sink filter on log_type="endpoint_access".
 """
 
-from datetime import datetime, timezone
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Optional
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send

@@ -1,19 +1,20 @@
-import time
 import logging
+import time
 from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
-from app.dependencies import get_data_access_coloc
-from app.core.responses import range_response
-from app.core.variant import Variant
+
+import app.config.coloc as coloc_config
+import app.config.common as config_common
 from app.core.exceptions import (
     DataException,
     NotFoundException,
     ParseException,
 )
+from app.core.responses import range_response
+from app.core.variant import Variant
+from app.dependencies import get_data_access_coloc
 from app.services.data_access_coloc import DataAccessColoc
-import app.config.coloc as coloc_config
-
-import app.config.common as config_common
 
 logger = logging.getLogger(__name__)
 

@@ -1,8 +1,9 @@
 import logging
 from typing import AsyncGenerator
+
+from app.config.mpra import mpra_data
 from app.services.data_access_mpra import DataAccessObjectMpra
 from app.services.gcloud_tabix_base import GCloudTabixBase
-from app.config.mpra import mpra_data
 
 logger = logging.getLogger(__name__)
 

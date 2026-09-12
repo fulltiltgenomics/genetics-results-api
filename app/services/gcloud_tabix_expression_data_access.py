@@ -1,8 +1,9 @@
 import logging
 from typing import AsyncGenerator
+
+from app.config.expression import expression_data
 from app.services.data_access_expression import DataAccessObjectExpression
 from app.services.gcloud_tabix_base import GCloudTabixBase
-from app.config.expression import expression_data
 
 logger = logging.getLogger(__name__)
 

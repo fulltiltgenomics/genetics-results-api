@@ -4,6 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
+import app.config.common as config_common
 from app.config.hla import (
     HLA_CHROM,
     HLA_DATA_TYPE,
@@ -18,7 +19,6 @@ from app.core.responses import range_response
 from app.dependencies import get_sumstats_data_access
 from app.services.gcloud_tabix_base import validate_path_component
 from app.services.sumstats_data_access import SumstatsDataAccess
-import app.config.common as config_common
 
 logger = logging.getLogger(__name__)
 

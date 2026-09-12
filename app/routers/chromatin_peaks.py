@@ -1,14 +1,16 @@
-import time
 import logging
+import time
 from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
-from app.dependencies import get_data_access_chromatin_peaks, get_gene_name_mapping
-from app.core.responses import range_response
-from app.core.exceptions import GeneNotFoundException, NotFoundException
-from app.services.data_access_chromatin_peaks import DataAccessChromatinPeaks
-from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
+
 import app.config.chromatin_peaks as config
 import app.config.common as config_common
+from app.core.exceptions import GeneNotFoundException, NotFoundException
+from app.core.responses import range_response
+from app.dependencies import get_data_access_chromatin_peaks, get_gene_name_mapping
+from app.services.data_access_chromatin_peaks import DataAccessChromatinPeaks
+from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 
 logger = logging.getLogger(__name__)
 

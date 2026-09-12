@@ -7,8 +7,8 @@ import asyncio
 import pytest
 import requests
 from helpers.validators import (
-    validate_tsv_response,
     validate_json_response,
+    validate_tsv_response,
 )
 
 

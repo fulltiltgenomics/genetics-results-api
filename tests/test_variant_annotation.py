@@ -4,7 +4,7 @@ Tests for the variant annotation endpoint.
 
 import pytest
 import requests
-from helpers.validators import validate_tsv_response, validate_json_response
+from helpers.validators import validate_json_response, validate_tsv_response
 
 BASE_PATH = "/api/v1/variant_annotation"
 

@@ -2,9 +2,10 @@
 Validation helpers for API response testing.
 """
 
-import requests
 from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin, urlencode
+from urllib.parse import urlencode, urljoin
+
+import requests
 
 
 def validate_tsv_response(response_text: str, min_data_lines: int = 0) -> Dict[str, Any]:

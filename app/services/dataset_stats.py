@@ -14,8 +14,9 @@ from typing import Any
 
 import fsspec
 
+from app.config.datasets import build_harmonizer_config
+from app.config.datasets import datasets as _registry
 from app.core.gcs_retry import with_gcs_retry
-from app.config.datasets import datasets as _registry, build_harmonizer_config
 from app.services.data_access import DataAccess
 from app.services.metadata_harmonizer import MetadataHarmonizer
 

@@ -1,15 +1,17 @@
 import logging
 import time
 from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+
 from app.config.gene_disease import gene_disease
-from app.dependencies import get_gene_disease_data
-from app.services.gene_disease_data import GeneDiseaseData
 from app.core.responses import (
-    TimedStreamingResponse,
     TimedJSONResponse,
+    TimedStreamingResponse,
     verified_columns_header,
 )
+from app.dependencies import get_gene_disease_data
+from app.services.gene_disease_data import GeneDiseaseData
 
 logger = logging.getLogger(__name__)
 

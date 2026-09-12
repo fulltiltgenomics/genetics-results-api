@@ -5,7 +5,7 @@ Provides a unified schema for metadata from FinnGen, eQTL Catalogue, and Open Ta
 """
 
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Literal
 
 logger = logging.getLogger(__name__)

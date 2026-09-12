@@ -1,22 +1,33 @@
-from abc import abstractmethod
+import asyncio
 import json
+import logging
+from abc import abstractmethod
+from typing import Any, AsyncGenerator, List, Literal
 
 import fsspec
-from app.config.datasets import build_harmonizer_config, get_dataset
+from asyncstdlib.heapq import merge
+
 from app.config.credible_sets import (
     data_file_by_id as cs_data_file_by_id,
-    variant_columns as cs_variant_columns,
+)
+from app.config.credible_sets import (
     qtl_columns as cs_qtl_columns,
 )
+from app.config.credible_sets import (
+    variant_columns as cs_variant_columns,
+)
+from app.config.datasets import build_harmonizer_config, get_dataset
 from app.config.exome_results import (
     exome_data_file_by_id,
+)
+from app.config.exome_results import (
     variant_columns as exome_variant_columns,
 )
 from app.config.gene_based_results import gene_based_data_file_by_id
 from app.config.sort_keys import (
-    create_sort_key,
     SORT_CONFIG_CS,
     SORT_CONFIG_CS_QTL,
+    create_sort_key,
 )
 from app.core.exceptions import NotFoundException
 from app.core.gcs_retry import with_gcs_retry
@@ -28,15 +39,11 @@ from app.core.streams import (
 )
 from app.core.variant import Variant
 from app.services.base_data_access import (
-    BaseFactory,
     BaseDataAccess,
     BaseDataAccessObject,
+    BaseFactory,
 )
 from app.services.metadata_harmonizer import MetadataHarmonizer
-from asyncstdlib.heapq import merge
-from typing import Any, AsyncGenerator, Literal, List
-import asyncio
-import logging
 
 # merge all config dicts
 data_file_by_id = {**cs_data_file_by_id, **exome_data_file_by_id, **gene_based_data_file_by_id}

@@ -5,18 +5,18 @@ from typing import AsyncGenerator
 import aiohttp.client_exceptions
 from asyncstdlib.heapq import merge
 
-from app.config.summary_stats import get_data_files_by_resource_and_type
 from app.config.sort_keys import (
-    create_sort_key,
     SORT_CONFIG_HLA,
     SORT_CONFIG_SUMSTATS,
+    create_sort_key,
 )
+from app.config.summary_stats import get_data_files_by_resource_and_type
 from app.core.exceptions import NotFoundException
 from app.core.streams import (
-    tsv_line_iterator_sumstats,
-    union_output_columns,
     chunk_iterator,
     start_iterators,
+    tsv_line_iterator_sumstats,
+    union_output_columns,
 )
 from app.core.variant import Variant
 from app.services.gcloud_tabix_base import GCloudTabixBase, validate_path_component

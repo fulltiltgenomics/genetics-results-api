@@ -3,8 +3,10 @@ Router for rsID to variant conversion.
 """
 
 import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+
 from app.dependencies import get_rsid_db, is_public
 
 RSID_PATTERN = re.compile(r"^rs\d+$", re.IGNORECASE)

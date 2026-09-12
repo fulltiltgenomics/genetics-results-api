@@ -5,8 +5,8 @@ Set CONFIG_PROFILE environment variable to select which data profile to use.
 Each profile is a package under app.config.profiles/ containing data path definitions.
 """
 
-import os
 import importlib
+import os
 
 CONFIG_PROFILE = os.environ.get("CONFIG_PROFILE", "daly")
 

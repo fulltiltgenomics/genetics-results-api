@@ -1,17 +1,19 @@
-import time
 import logging
+import time
 from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
-from app.dependencies import get_data_access_open_chromatin
-from app.core.responses import range_response
-from app.core.exceptions import NotFoundException
-from app.core.variant import var_re
-from app.services.data_access_open_chromatin import (
-    DataAccessOpenChromatin,
-    DataAccessObjectOpenChromatin,
-)
-import app.config.open_chromatin as config
+
 import app.config.common as config_common
+import app.config.open_chromatin as config
+from app.core.exceptions import NotFoundException
+from app.core.responses import range_response
+from app.core.variant import var_re
+from app.dependencies import get_data_access_open_chromatin
+from app.services.data_access_open_chromatin import (
+    DataAccessObjectOpenChromatin,
+    DataAccessOpenChromatin,
+)
 
 logger = logging.getLogger(__name__)
 

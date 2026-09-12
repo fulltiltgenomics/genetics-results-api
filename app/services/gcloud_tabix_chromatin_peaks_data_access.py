@@ -1,8 +1,9 @@
 import logging
 from typing import AsyncGenerator
+
+from app.config.chromatin_peaks import chromatin_peaks_data
 from app.services.data_access_chromatin_peaks import DataAccessObjectChromatinPeaks
 from app.services.gcloud_tabix_base import GCloudTabixBase
-from app.config.chromatin_peaks import chromatin_peaks_data
 
 logger = logging.getLogger(__name__)
 

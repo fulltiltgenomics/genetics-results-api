@@ -1,44 +1,45 @@
 import logging
 from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
-from app.dependencies import auth_required, is_public
-from app.core.query_params import reject_unknown_query_params
-from app.middleware import setup_middleware
-from app.services import config_util
-from app.core.logging_config import setup_logging
+from fastapi.routing import APIRoute
+
 from app.core.auth import warn_if_wildcard_allow_list
+from app.core.logging_config import setup_logging
+from app.core.query_params import reject_unknown_query_params
 from app.core.sandbox_token import require_sandbox_config
 from app.core.service_container import container
+from app.dependencies import auth_required, is_public
+from app.middleware import setup_middleware
 from app.routers import (
     auth,
-    metadata,
-    credible_sets,
-    colocalization,
-    datasets,
-    expression,
-    genes,
-    gene_groups,
-    gene_disease,
-    gene_based,
     chromatin_peaks,
-    open_chromatin,
-    variant_effect,
-    mpra,
-    hla,
+    colocalization,
+    credible_sets,
+    datasets,
     exome_results,
+    expression,
+    gene_based,
+    gene_disease,
+    gene_groups,
+    genes,
+    hla,
     ld,
-    search,
+    metadata,
+    mpra,
+    open_chromatin,
     phenotype,
     resources,
     rsid,
+    search,
     summary_stats,
     variant_annotation,
+    variant_effect,
     variant_set,
 )
-
+from app.services import config_util
 
 setup_logging()
 logger = logging.getLogger(__name__)

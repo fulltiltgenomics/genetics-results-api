@@ -10,8 +10,8 @@ from fastapi.responses import JSONResponse
 
 from app.config import common as common_config
 from app.dependencies import get_data_access
-from app.services.data_access import DataAccess
 from app.services import config_util, dataset_stats
+from app.services.data_access import DataAccess
 
 logger = logging.getLogger(__name__)
 

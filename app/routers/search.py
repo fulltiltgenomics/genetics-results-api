@@ -1,7 +1,9 @@
 import logging
 from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
+
 from app.core.responses import (
     ColumnDeclarationError,
     columns_header,
