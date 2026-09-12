@@ -15,6 +15,7 @@ gene_disease = {
     },
     "monarch": {
         "file": "gs://finngen-commons/results_api_data/gene_disease/monarch-causal_gene_to_disease_association.all.tsv",
+        "uuid_from": ["subject", "object", "primary_knowledge_source"],
         "columns": {
             "uuid": "uuid",
             "gene_symbol": "subject_label",
