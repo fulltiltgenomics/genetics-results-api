@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from typing import AsyncGenerator
@@ -231,16 +232,23 @@ class SumstatsDataAccess(GCloudTabixBase):
             c.encode() for c in unified_columns
         ]
 
-        # phase 2: open each tabix stream and align its rows to the shared schema
+        # phase 2: open each tabix stream and align its rows to the shared schema.
+        # Opened concurrently: opening loads the file's index, and awaiting the
+        # files one by one would serialise those loads however parallel the loader is
+        raw_streams = await asyncio.gather(
+            *(
+                self._stream_range(gs_path, chrs, starts, ends, in_chunk_size)
+                for _, _, gs_path, _ in contributions
+            ),
+            return_exceptions=True,
+        )
         line_iterators = []
-        for df_config, phenotype, gs_path, file_header in contributions:
-            try:
-                raw_stream = await self._stream_range(
-                    gs_path, chrs, starts, ends, in_chunk_size
-                )
-            except Exception as e:
+        for (df_config, phenotype, gs_path, file_header), raw_stream in zip(
+            contributions, raw_streams
+        ):
+            if isinstance(raw_stream, BaseException):
                 logger.warning(
-                    f"Skipping {phenotype} for {df_config['id']}: tabix failed: {e}"
+                    f"Skipping {phenotype} for {df_config['id']}: tabix failed: {raw_stream}"
                 )
                 continue
 

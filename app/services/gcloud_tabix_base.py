@@ -83,7 +83,9 @@ _INDEX_CACHE_BYTES = int(
 )
 _index_cache: "OrderedDict[str, TabixIndex]" = OrderedDict()
 _index_cache_bytes = 0
-_index_cache_lock = asyncio.Lock()
+# one load per file at a time, but different files load concurrently: a single lock
+# around fetch+parse serialised a 260-file PheWAS into ~75 s of index loading
+_index_inflight: dict[str, "asyncio.Task[TabixIndex]"] = {}
 
 
 def _index_cache_get(file_path: str) -> "TabixIndex | None":
@@ -569,34 +571,48 @@ class GCloudTabixBase:
 
         Indexes are cached in-process; on a cold miss the raw .tbi is read from the
         on-disk tbi cache if present (htslib used the same location), otherwise
-        fetched from GCS and persisted there.
+        fetched from GCS and persisted there. Concurrent callers for the same file
+        share one load; callers for different files do not wait on each other.
         """
         idx = _index_cache_get(file_path)
         if idx is not None:
             return idx
-        async with _index_cache_lock:
-            idx = _index_cache_get(file_path)
-            if idx is not None:
-                return idx
-            cache_dir = self._get_tbi_cache_dir(file_path)
-            tbi_disk = os.path.join(cache_dir, file_path.rsplit("/", 1)[-1] + ".tbi")
-            raw = None
+        task = _index_inflight.get(file_path)
+        if task is None:
+            task = asyncio.ensure_future(self._load_index(file_path))
+            _index_inflight[file_path] = task
+            task.add_done_callback(lambda _: _index_inflight.pop(file_path, None))
+        return await task
+
+    async def _load_index(self, file_path: str) -> TabixIndex:
+        # same slot as fetch-and-filter below: a raw .tbi plus its pickled parse is
+        # ~8 MB in flight per file, and a fan-out would otherwise start them all
+        async with _get_files_semaphore():
+            return await self._load_index_now(file_path)
+
+    async def _load_index_now(self, file_path: str) -> TabixIndex:
+        cache_dir = self._get_tbi_cache_dir(file_path)
+        tbi_disk = os.path.join(cache_dir, file_path.rsplit("/", 1)[-1] + ".tbi")
+        raw = None
+        try:
+            with open(tbi_disk, "rb") as fh:
+                raw = fh.read()
+        except OSError:
+            pass
+        if raw is None:
+            raw = await self._fetch_full(file_path + ".tbi")
             try:
-                with open(tbi_disk, "rb") as fh:
-                    raw = fh.read()
+                with open(tbi_disk, "wb") as fh:
+                    fh.write(raw)
+                self._maybe_cleanup_tbi_cache()
             except OSError:
                 pass
-            if raw is None:
-                raw = await self._fetch_full(file_path + ".tbi")
-                try:
-                    with open(tbi_disk, "wb") as fh:
-                        fh.write(raw)
-                    self._maybe_cleanup_tbi_cache()
-                except OSError:
-                    pass
-            idx = parse_tabix_index(raw)
-            _index_cache_put(file_path, idx)
-            return idx
+        # ~0.2 s of GIL-bound struct unpacking per index; in the filter pool it runs
+        # across cores and off the event loop instead of stalling every other request
+        loop = asyncio.get_running_loop()
+        idx = await loop.run_in_executor(_get_filter_pool(), parse_tabix_index, raw)
+        _index_cache_put(file_path, idx)
+        return idx
 
     def _gcs_url(self, gs_path: str) -> str:
         return gs_path.replace("gs://", "https://storage.googleapis.com/")

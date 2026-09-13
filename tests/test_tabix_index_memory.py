@@ -223,3 +223,72 @@ def test_files_in_flight_are_capped_across_a_primed_fan_out(monkeypatch):
         pool.shutdown()
     assert len(results) == 20 and all(r == [] for r in results)
     assert high[0] == 3
+
+
+class _SlowFetchAccess(GCloudTabixBase):
+    """Every .tbi fetch takes a fixed time and records how many run at once."""
+
+    def __init__(self, raw: bytes, active: list, high: list, fetches: list):
+        super().__init__()
+        self._raw = raw
+        self._active = active
+        self._high = high
+        self._fetches = fetches
+
+    async def _fetch_full(self, gs_path):
+        self._fetches.append(gs_path)
+        self._active[0] += 1
+        self._high[0] = max(self._high[0], self._active[0])
+        await asyncio.sleep(0.05)
+        self._active[0] -= 1
+        return self._raw
+
+
+@pytest.fixture
+def cold_disk_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(GCloudTabixBase, "TBI_CACHE_ROOT", str(tmp_path))
+
+
+def test_indexes_for_different_files_load_concurrently(
+    clean_index_cache, cold_disk_cache, monkeypatch
+):
+    raw = _tbi([b"1"], [({4681: [(0, 100 << 16)]}, [0])])
+    active, high, fetches = [0], [0], []
+    pool = ThreadPoolExecutor(2)
+    monkeypatch.setattr(gcloud_tabix_base, "_get_filter_pool", lambda: pool)
+
+    async def run():
+        access = _SlowFetchAccess(raw, active, high, fetches)
+        return await asyncio.gather(
+            *(access._get_index(f"gs://b/f{i}.gz") for i in range(8))
+        )
+
+    try:
+        indexes = asyncio.run(run())
+    finally:
+        pool.shutdown()
+    assert len(fetches) == 8 and high[0] == 8
+    assert all(list(i.names) == [b"1"] for i in indexes)
+    assert not gcloud_tabix_base._index_inflight
+
+
+def test_concurrent_loads_of_one_file_share_a_single_fetch(
+    clean_index_cache, cold_disk_cache, monkeypatch
+):
+    raw = _tbi([b"1"], [({4681: [(0, 100 << 16)]}, [0])])
+    active, high, fetches = [0], [0], []
+    pool = ThreadPoolExecutor(2)
+    monkeypatch.setattr(gcloud_tabix_base, "_get_filter_pool", lambda: pool)
+
+    async def run():
+        access = _SlowFetchAccess(raw, active, high, fetches)
+        first = await asyncio.gather(*(access._get_index("gs://b/same.gz") for _ in range(5)))
+        again = await access._get_index("gs://b/same.gz")
+        return first, again
+
+    try:
+        first, again = asyncio.run(run())
+    finally:
+        pool.shutdown()
+    assert fetches == ["gs://b/same.gz.tbi"]
+    assert all(i is first[0] for i in first) and again is first[0]
