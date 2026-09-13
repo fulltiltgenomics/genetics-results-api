@@ -278,14 +278,14 @@ data_files = [
             "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets/202606/Open_Targets_26.06_credible_sets.tsv.gz",
         },
     },
-    # nmr_meta_finemap (EstBB-UKBB NMR metabolic trait credible sets) is REGISTERED in
+    # nmr_ukbb_est (EstBB-UKBB NMR metabolic trait credible sets) is REGISTERED in
     # datasets.yaml for this profile but has no entry here, because the munged files have only
     # been staged into the daly bucket — startup_checks tabix-header-checks every all_cs_file
     # and would fail this deployment's startup over an object nobody outside FinnGen can
     # upload. The registry entry alone still lists the dataset in /datasets with no products.
     # To finish it: run genetics-results-munge scripts/munge_nmr_meta.sh, upload the combined
     # file, credible_set_stats.tsv and individual/*.SUSIE.munged.tsv to
-    # gs://finngen-commons/results_api_data/credible_sets/nmr_meta/2026/, upload
-    # nmr_meta_pheno.json beside the other mapping files, then copy the daly entry here and
+    # gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026/, upload
+    # nmr_ukbb_est_pheno.json beside the other mapping files, then copy the daly entry here and
     # set this profile's metadata_file in datasets.yaml.
 ]
