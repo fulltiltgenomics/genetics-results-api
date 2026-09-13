@@ -286,6 +286,6 @@ data_files = [
     # To finish it: run genetics-results-munge scripts/munge_nmr_meta.sh, upload the combined
     # file, credible_set_stats.tsv and individual/*.SUSIE.munged.tsv to
     # gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026/, upload
-    # nmr_meta_pheno.json beside the other mapping files, then copy the daly entry here and
+    # nmr_ukbb_est_pheno.json beside the other mapping files, then copy the daly entry here and
     # set this profile's metadata_file in datasets.yaml.
 ]

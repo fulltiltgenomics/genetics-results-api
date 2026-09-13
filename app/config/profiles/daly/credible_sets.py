@@ -268,7 +268,7 @@ data_files = [
     {
         "id": "nmr_ukbb_est",
         "dataset_id": "nmr_ukbb_est",
-        "resource": "nmr_meta",
+        "resource": "nmr_ukbb_est",
         "data_source": "gcloud",
         "example_pheno_or_study": "LDL_C",
         "gencode_version": 49,
