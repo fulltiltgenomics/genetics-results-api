@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from app.config import ld as ld_config
 from app.core.responses import TimedJSONResponse
 from app.dependencies import get_ld_service
-from app.services.ld_service import LDUpstreamError, LDService
+from app.services.ld_service import LDService, LDUpstreamError
 
 logger = logging.getLogger(__name__)
 

@@ -5,13 +5,13 @@ from typing import AsyncGenerator, Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel
 
+import app.config.common as config_common
 from app.core.exceptions import GeneNotFoundException, NotFoundException, ParseException
 from app.core.responses import range_response
 from app.core.variant import Variant
 from app.dependencies import get_gene_name_mapping, get_variant_annotation_service
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 from app.services.variant_annotation_service import VariantAnnotationService
-import app.config.common as config_common
 
 logger = logging.getLogger(__name__)
 

@@ -24,7 +24,7 @@ gene_based_data_files = [
     {
         "id": "schema_gene_based",
         "dataset_id": "schema_gene_based",
-        "resource": "schema",
+        "resource": "schema2",
         "data_source": "gcloud",
         "example_pheno_or_study": "schizophrenia",
         "gencode_version": 39,
@@ -37,7 +37,7 @@ gene_based_data_files = [
     {
         "id": "bipex_gene_based",
         "dataset_id": "bipex_gene_based",
-        "resource": "bipex",
+        "resource": "bipex2",
         "data_source": "gcloud",
         "example_pheno_or_study": "bipolar_disorder",
         "gencode_version": 39,
@@ -50,7 +50,7 @@ gene_based_data_files = [
     {
         "id": "ibd_ibd_gene_based",
         "dataset_id": "ibd_gene_based",
-        "resource": "ibd",
+        "resource": "ibd_exome_2026",
         "data_source": "gcloud",
         "example_pheno_or_study": "inflammatory_bowel_disease",
         "gencode_version": 45,
@@ -63,7 +63,7 @@ gene_based_data_files = [
     {
         "id": "ibd_uc_gene_based",
         "dataset_id": "ibd_gene_based",
-        "resource": "ibd",
+        "resource": "ibd_exome_2026",
         "data_source": "gcloud",
         "example_pheno_or_study": "ulcerative_colitis",
         "gencode_version": 45,
@@ -76,7 +76,7 @@ gene_based_data_files = [
     {
         "id": "ibd_cd_gene_based",
         "dataset_id": "ibd_gene_based",
-        "resource": "ibd",
+        "resource": "ibd_exome_2026",
         "data_source": "gcloud",
         "example_pheno_or_study": "crohns_disease",
         "gencode_version": 45,

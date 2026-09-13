@@ -1,22 +1,24 @@
-import time
 import logging
+import time
 from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
-from app.dependencies import (
-    get_request_util,
-    get_data_access_expression,
-    get_gene_name_mapping,
-)
-from app.core.responses import range_response
+
+import app.config.common as config_common
+import app.config.expression as config
 from app.core.exceptions import (
     GeneNotFoundException,
     NotFoundException,
 )
+from app.core.responses import range_response
+from app.dependencies import (
+    get_data_access_expression,
+    get_gene_name_mapping,
+    get_request_util,
+)
 from app.services.data_access_expression import DataAccessExpression
-from app.services.request_util import RequestUtil
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
-import app.config.expression as config
-import app.config.common as config_common
+from app.services.request_util import RequestUtil
 
 logger = logging.getLogger(__name__)
 

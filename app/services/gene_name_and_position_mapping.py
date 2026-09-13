@@ -1,13 +1,15 @@
 import concurrent.futures
-from typing import Literal
-from app.config.genes import genes
-from app.core.file_utils import read_file
-from app.core.gcs_retry import with_gcs_retry
+import logging
 from collections import defaultdict as dd
+from typing import Literal
+
 import fsspec
 import polars as pl
-import logging
+
+from app.config.genes import genes
 from app.core.exceptions import DataException, GeneNotFoundException
+from app.core.file_utils import read_file
+from app.core.gcs_retry import with_gcs_retry
 
 logger = logging.getLogger(__name__)
 

@@ -16,7 +16,6 @@ import pytest
 from app.routers.gene_groups import normalize_gene_symbols
 from app.services.search_service import SearchIndex
 
-
 # minimal HGNC complete-set-style TSV: BRCA1 has a previous symbol (RNF53) and
 # an alias (PPP1R53); TP53 has alias P53 / previous LFS1; symbol-only gene PCSK9.
 HGNC_TSV = """hgnc_id\tsymbol\tname\talias_symbol\tprev_symbol\tensembl_gene_id

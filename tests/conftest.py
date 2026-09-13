@@ -1,11 +1,12 @@
-import pytest
-import requests
+import os
+import socket
 
 # Add the project root to Python path so we can import app modules
 import sys
-import os
-import socket
 from pathlib import Path
+
+import pytest
+import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -121,6 +122,7 @@ def server_url(request):
 
     import threading
     import time
+
     import uvicorn
 
     # the tabix services cache fetched .tbi/.csi here; run_server.py creates it too

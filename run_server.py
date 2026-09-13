@@ -1,9 +1,10 @@
 import glob
 import os
 import sys
-import uvicorn
-from app.core.logging_config import setup_logging
 
+import uvicorn
+
+from app.core.logging_config import setup_logging
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:

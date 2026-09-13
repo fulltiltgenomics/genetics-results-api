@@ -7,9 +7,9 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.responses import Response
 
+from app.core.exceptions import NotFoundException
 from app.dependencies import get_phenotype_markdown_service
 from app.services.phenotype_markdown_service import PhenotypeMarkdownService
-from app.core.exceptions import NotFoundException
 
 logger = logging.getLogger(__name__)
 

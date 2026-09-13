@@ -18,7 +18,6 @@ from fastapi import HTTPException
 from app.routers.gene_groups import gene_group_members
 from app.services.gene_group_service import GeneGroupService
 
-
 # hierarchy: 100 (root "Receptors") -> 110 ("GPCRs") -> 170 ("5-HT1 receptors")
 #            100 -> 120 ("Ion channels")
 # HTR1A's leaf is the deep child 170 -> it must still surface under root 100

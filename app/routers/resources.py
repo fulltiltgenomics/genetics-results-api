@@ -5,12 +5,12 @@ Router for listing available data resources.
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-import app.config.credible_sets as credible_sets_config
-import app.config.coloc as coloc_config
-import app.config.datasets as datasets_config
-import app.config.expression as expression_config
 import app.config.chromatin_peaks as chromatin_peaks_config
+import app.config.coloc as coloc_config
+import app.config.credible_sets as credible_sets_config
+import app.config.datasets as datasets_config
 import app.config.exome_results as exome_results_config
+import app.config.expression as expression_config
 import app.config.gene_based_results as gene_based_config
 import app.config.gene_disease as gene_disease_config
 

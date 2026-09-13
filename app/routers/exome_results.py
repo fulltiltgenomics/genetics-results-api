@@ -1,29 +1,31 @@
-import time
 import logging
+import time
 from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
-from app.dependencies import (
-    get_request_util,
-    get_data_access,
-    get_gene_name_mapping,
-)
-from app.core.responses import (
-    TimedStreamingResponse,
-    TimedJSONResponse,
-    columns_header,
-    range_response,
-)
-from app.core.variant import Variant
+
+import app.config.common as config_common
+import app.config.exome_results as config_exome_results
 from app.core.exceptions import (
     GeneNotFoundException,
     NotFoundException,
     ParseException,
 )
+from app.core.responses import (
+    TimedJSONResponse,
+    TimedStreamingResponse,
+    columns_header,
+    range_response,
+)
+from app.core.variant import Variant
+from app.dependencies import (
+    get_data_access,
+    get_gene_name_mapping,
+    get_request_util,
+)
 from app.services.data_access import DataAccess
-from app.services.request_util import RequestUtil
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
-import app.config.exome_results as config_exome_results
-import app.config.common as config_common
+from app.services.request_util import RequestUtil
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +47,12 @@ _EXAMPLE_JSON_PROPERTIES = {
     "beta": {"type": "number"},
     "se": {"type": "number"},
     "af_overall": {"type": "number"},
-    "af_cases": {"type": "number"},
-    "af_controls": {"type": "number"},
+    "af_cases": {"type": ["number", "null"]},
+    "af_controls": {"type": ["number", "null"]},
     "ac": {"type": "integer"},
     "an": {"type": "integer"},
-    "n_cases": {"type": "integer"},
-    "n_controls": {"type": "integer"},
+    "n_cases": {"type": ["integer", "null"]},
+    "n_controls": {"type": ["integer", "null"]},
     "trait": {"type": "string"},
     "trait_original": {"type": "string"},
 }

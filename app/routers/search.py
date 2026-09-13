@@ -1,7 +1,9 @@
 import logging
 from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
+
 from app.core.responses import (
     ColumnDeclarationError,
     columns_header,
@@ -70,6 +72,7 @@ def _verified_search_columns(
                                 "n_controls": {"type": ["integer", "string"], "description": "Phenotype results only, int or 'NA'"},
                                 "has_summary_stats": {"type": "boolean", "description": "Phenotype results only; whether summary stats are available for (resource, data_type)"},
                                 "has_credible_sets": {"type": "boolean", "description": "Phenotype results only; whether credible sets are available for (resource, data_type)"},
+                                "hgnc_id": {"type": "string", "description": "Gene results only"},
                                 "symbol": {"type": "string", "description": "Gene results only"},
                                 "aliases": {"type": "array", "description": "Gene results only"},
                                 "ensembl_id": {"type": "string", "description": "Gene results only"},

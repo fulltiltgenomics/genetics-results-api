@@ -15,8 +15,8 @@ import asyncio
 
 from app.core.streams import (
     mapped_output_columns,
-    union_output_columns,
     tsv_line_iterator_sumstats,
+    union_output_columns,
 )
 
 # the two real FinnGen schemas involved in the bug

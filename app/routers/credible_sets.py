@@ -1,38 +1,40 @@
-import time
 import logging
+import time
 from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel
-from app.dependencies import (
-    get_request_util,
-    get_data_access,
-    get_gene_name_mapping,
-    get_credible_set_stats_service,
-)
-from app.core.responses import (
-    TimedStreamingResponse,
-    TimedJSONResponse,
-    columns_header,
-    range_response,
-)
-from app.core.streams import (
-    filter_stream_by_cs_id,
-    filter_stream_by_coding,
-    filter_coding_rows,
-)
-from app.core.variant import Variant
+
+import app.config.common as config_common
+import app.config.credible_sets as config_credible_sets
 from app.core.exceptions import (
     GeneNotFoundException,
     NotFoundException,
     ParseException,
 )
+from app.core.responses import (
+    TimedJSONResponse,
+    TimedStreamingResponse,
+    columns_header,
+    range_response,
+)
+from app.core.streams import (
+    filter_coding_rows,
+    filter_stream_by_coding,
+    filter_stream_by_cs_id,
+)
+from app.core.variant import Variant
+from app.dependencies import (
+    get_credible_set_stats_service,
+    get_data_access,
+    get_gene_name_mapping,
+    get_request_util,
+)
 from app.services import config_util
-from app.services.data_access import DataAccess
 from app.services.credible_set_stats_service import CredibleSetStatsService
-from app.services.request_util import RequestUtil
+from app.services.data_access import DataAccess
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
-import app.config.credible_sets as config_credible_sets
-import app.config.common as config_common
+from app.services.request_util import RequestUtil
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +86,7 @@ def _parse_data_types(data_types: str | None) -> set[str] | None:
                                 "alt": {"type": "string"},
                                 "mlog10p": {"type": "number"},
                                 "beta": {"type": "number"},
-                                "se": {"type": "number"},
+                                "se": {"type": ["number", "null"]},
                                 "pip": {"type": "number"},
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
@@ -202,7 +204,7 @@ async def credible_sets_by_phenotype(
             )
         except NotFoundException as e:
             raise HTTPException(status_code=404, detail=str(e))
-        except Exception as e:
+        except Exception:
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -270,8 +272,9 @@ async def credible_sets_by_phenotype_leads(
         )
 
     # tsv: re-serialize the accumulated leads (the source file can't be passed through verbatim
-    # since the non-lead rows are dropped). emit the full cs schema header for stable columns.
-    header = list(config_credible_sets.cs_header_schema.keys())
+    # since the non-lead rows are dropped). the columns are the ones the rows were keyed by, which
+    # json and X-Columns advertise; the schema is a validating superset and would add columns
+    # (resource, version) the rows never carry.
 
     def _fmt(value) -> str:
         return "NA" if value is None else str(value)
@@ -314,7 +317,7 @@ async def credible_sets_by_phenotype_leads(
                                 "alt": {"type": "string"},
                                 "mlog10p": {"type": "number"},
                                 "beta": {"type": "number"},
-                                "se": {"type": "number"},
+                                "se": {"type": ["number", "null"]},
                                 "pip": {"type": "number"},
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
@@ -464,7 +467,7 @@ async def credible_sets_by_id(
                                 "alt": {"type": "string"},
                                 "mlog10p": {"type": "number"},
                                 "beta": {"type": "number"},
-                                "se": {"type": "number"},
+                                "se": {"type": ["number", "null"]},
                                 "pip": {"type": "number"},
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
@@ -604,7 +607,7 @@ async def credible_sets_by_region(
                                 "alt": {"type": "string"},
                                 "mlog10p": {"type": "number"},
                                 "beta": {"type": "number"},
-                                "se": {"type": "number"},
+                                "se": {"type": ["number", "null"]},
                                 "pip": {"type": "number"},
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
@@ -842,7 +845,7 @@ async def credible_sets_by_variant_post(
                                 "alt": {"type": "string"},
                                 "mlog10p": {"type": "number"},
                                 "beta": {"type": "number"},
-                                "se": {"type": "number"},
+                                "se": {"type": ["number", "null"]},
                                 "pip": {"type": "number"},
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
@@ -1009,7 +1012,7 @@ async def credible_sets_by_gene(
                                 "alt": {"type": "string"},
                                 "mlog10p": {"type": "number"},
                                 "beta": {"type": "number"},
-                                "se": {"type": "number"},
+                                "se": {"type": ["number", "null"]},
                                 "pip": {"type": "number"},
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
@@ -1214,7 +1217,7 @@ async def get_credible_set_stats(
     If a data file ID is provided, returns stats for that file.
     If a resource name is provided, returns combined stats for all data files in that resource.
     """
-    from fastapi.responses import PlainTextResponse, JSONResponse
+    from fastapi.responses import JSONResponse, PlainTextResponse
 
     try:
         result = stats_service.get_stats(id_or_resource, format)

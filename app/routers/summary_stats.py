@@ -1,10 +1,11 @@
-import time
 import logging
+import time
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel
 
+import app.config.common as config_common
 from app.config.summary_stats import get_available_resources_and_types
 from app.core.exceptions import NotFoundException, ParseException
 from app.core.responses import range_response
@@ -13,7 +14,6 @@ from app.dependencies import get_request_util, get_sumstats_data_access
 from app.services.gcloud_tabix_base import validate_path_component
 from app.services.request_util import RequestUtil
 from app.services.sumstats_data_access import SumstatsDataAccess
-import app.config.common as config_common
 
 logger = logging.getLogger(__name__)
 

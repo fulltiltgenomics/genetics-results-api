@@ -1,8 +1,13 @@
-from abc import abstractmethod
 import asyncio
 import logging
+import re
+from abc import abstractmethod
+from typing import AsyncGenerator, List
+
+from asyncstdlib.heapq import merge
+
 from app.config.chromatin_peaks import chromatin_peaks_data
-from app.config.sort_keys import create_sort_key, SORT_CONFIG_CHROMATIN_PEAKS
+from app.config.sort_keys import SORT_CONFIG_CHROMATIN_PEAKS, create_sort_key
 from app.core.exceptions import NotFoundException
 from app.core.streams import (
     chunk_iterator,
@@ -10,14 +15,11 @@ from app.core.streams import (
     tsv_line_iterator_chromatin_peaks,
     tsv_line_iterator_chromatin_peaks_by_gene,
 )
-from asyncstdlib.heapq import merge
 from app.services.base_data_access import (
-    BaseFactory,
     BaseDataAccess,
     BaseDataAccessObject,
+    BaseFactory,
 )
-from typing import AsyncGenerator, List
-import re
 
 logger = logging.getLogger(__name__)
 

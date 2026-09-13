@@ -1,8 +1,9 @@
 import logging
 from typing import AsyncGenerator
+
+from app.config.open_chromatin import open_chromatin_data
 from app.services.data_access_open_chromatin import DataAccessObjectOpenChromatin
 from app.services.gcloud_tabix_base import GCloudTabixBase
-from app.config.open_chromatin import open_chromatin_data
 
 logger = logging.getLogger(__name__)
 

@@ -1,8 +1,10 @@
 """Authentication status endpoint."""
 
 import logging
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+
 from app.core.auth import get_authenticated_user
 from app.dependencies import is_public
 

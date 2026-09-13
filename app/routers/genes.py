@@ -1,15 +1,17 @@
 import logging
 from typing import Any, Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
-from app.dependencies import get_gene_name_mapping
-from app.core.variant import Variant
+
 from app.core.exceptions import (
     ParseException,
 )
 from app.core.responses import verified_columns_header
+from app.core.variant import Variant
+from app.dependencies import get_gene_name_mapping
 from app.services.gene_name_and_position_mapping import (
     GENES_IN_REGION_COLUMNS,
     NEAREST_GENES_COLUMNS,
@@ -62,8 +64,8 @@ def _tsv_value(value: Any) -> str:
                                 "gene_type": {"type": "string"},
                                 "hgnc_symbol": {"type": "string"},
                                 "hgnc_name": {"type": "string"},
-                                "hgnc_alias_symbol": {"type": "string"},
-                                "hgnc_prev_symbol": {"type": "string"},
+                                "hgnc_alias_symbol": {"type": ["string", "null"]},
+                                "hgnc_prev_symbol": {"type": ["string", "null"]},
                                 "exon_starts": {
                                     "type": "array",
                                     "items": {"type": "integer"},
@@ -190,7 +192,7 @@ async def genes_in_region(
                                 "distance": {"type": "integer"},
                                 "hgnc_symbol": {"type": "string"},
                                 "hgnc_name": {"type": "string"},
-                                "hgnc_alias_symbol": {"type": "string"},
+                                "hgnc_alias_symbol": {"type": ["string", "null"]},
                                 "hgnc_prev_symbol": {"type": ["string", "null"]},
                             },
                         },
@@ -323,7 +325,7 @@ class NearestGenesRequest(BaseModel):
                                 "distance": {"type": "integer"},
                                 "hgnc_symbol": {"type": "string"},
                                 "hgnc_name": {"type": "string"},
-                                "hgnc_alias_symbol": {"type": "string"},
+                                "hgnc_alias_symbol": {"type": ["string", "null"]},
                                 "hgnc_prev_symbol": {"type": ["string", "null"]},
                                 "variant": {"type": "string"},
                             },

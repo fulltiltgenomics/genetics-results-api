@@ -266,6 +266,22 @@ data_files = [
         },
     },
     {
+        "id": "nmr_ukbb_est",
+        "dataset_id": "nmr_ukbb_est",
+        "resource": "nmr_ukbb_est",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "LDL_C",
+        "gencode_version": 49,
+        # published SuSiE credible sets for the 249 Nightingale NMR metabolic traits. No
+        # all_cs_qtl_file: the traits are metabolites, so there is no gene to index them by.
+        "cs": {
+            "prefix": "gs://daly-genetics-results/credible_sets/nmr_ukbb_est/2026/individual/",
+            "suffix_95": ".SUSIE.munged.tsv",
+            "all_cs_file": "gs://daly-genetics-results/credible_sets/nmr_ukbb_est/2026/nmr_ukbb_est_credible_sets.tsv.gz",
+            "stats_file": "gs://daly-genetics-results/credible_sets/nmr_ukbb_est/2026/credible_set_stats.tsv",
+        },
+    },
+    {
         "id": "open_targets",
         "dataset_id": "open_targets",
         "resource": "open_targets",

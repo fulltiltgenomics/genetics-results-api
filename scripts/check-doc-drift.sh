@@ -46,6 +46,9 @@ check '^app/services/startup_checks\.py$' "$DOC_SPEC" \
 check '^pyproject\.toml$' "$DOC_SPEC" \
     'pyproject.toml -> docs/project-spec.md (Tech Stack: Python version, dependency claims, why PyJWT stays pinned)'
 
+check '^scripts/(lint-staged|install-git-hooks)\.sh$' '^(docs/project-spec\.md|README\.md)$' \
+    'lint gate (scripts/lint-staged.sh, install-git-hooks.sh) -> README.md + docs/project-spec.md (which commits it blocks, the ruff rule set and pinned version, how ruff is resolved in a worktree)'
+
 if [ "$found" -eq 1 ]; then
     printf '\n  Update the doc in this commit, or note why it does not apply.\n' >&2
     printf '  Not blocking. Mappings live in CLAUDE.md > Documentation ownership.\n\n' >&2

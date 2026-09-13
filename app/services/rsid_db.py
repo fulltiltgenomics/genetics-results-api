@@ -1,7 +1,8 @@
-import re
 import asyncio
 import logging
+import re
 import tempfile
+
 from app.core.exceptions import ParseException
 from app.core.variant import Variant
 from app.services.gcloud_tabix_base import GCloudTabixBase, ensure_gcs_token

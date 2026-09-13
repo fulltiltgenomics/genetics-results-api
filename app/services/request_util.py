@@ -1,7 +1,8 @@
 import logging
 from typing import Literal
-from app.config.expression import expression_data
+
 from app.config.common import max_range_size_json, max_range_size_stream
+from app.config.expression import expression_data
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class RequestUtil:
             start = int(start_str)
             end = int(end_str)
         except Exception:
-            raise ValueError(f"Range should be in the format chr:start-end")
+            raise ValueError("Range should be in the format chr:start-end")
         if chr < 1 or chr > 23:
             raise ValueError(f"Invalid chromosome: {chr}")
         if start < 1 or end < 1:

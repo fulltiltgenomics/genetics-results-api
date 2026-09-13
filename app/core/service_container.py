@@ -6,7 +6,7 @@ import asyncio
 import logging
 import threading
 from enum import Enum
-from typing import TypeVar, Callable, Any
+from typing import Any, Callable, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +189,9 @@ def _register_services():
 
     # gene name mapping
     def create_gene_name_mapping():
-        from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
+        from app.services.gene_name_and_position_mapping import (
+            GeneNameAndPositionMapping,
+        )
         return GeneNameAndPositionMapping()
 
     # gene group / lineage service

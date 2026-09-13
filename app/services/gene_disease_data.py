@@ -3,6 +3,7 @@ import logging
 from urllib.parse import urlparse
 
 import polars as pl
+
 from app.config.gene_disease import gene_disease
 from app.core.exceptions import DataException
 from app.core.gcs_retry import with_gcs_retry
@@ -37,7 +38,14 @@ def _read_tsv(path: str) -> pl.DataFrame:
             source = io.BytesIO(blob.download_as_bytes(timeout=_GCS_READ_TIMEOUT_SECONDS))
         else:
             source = path
-        return pl.read_csv(source, separator="\t", null_values=["", "NA"])
+        # every column is read as text. These are curated free-text tables whose only
+        # numeric-looking columns are identifiers: GenCC's submitted_as_submission_id is an
+        # integer for most submitters and a UUID for some, and type inference over the first
+        # rows picks i64 and then fails on the first UUID. Nothing served from here is
+        # numeric, so there is nothing to infer.
+        return pl.read_csv(
+            source, separator="\t", null_values=["", "NA"], infer_schema_length=0
+        )
 
     return with_gcs_retry(_read)
 
@@ -78,11 +86,14 @@ class GeneDiseaseData:
 
             monarch_config = gene_disease["monarch"]
             logger.info(f"Loading Monarch data from {monarch_config['file']}")
+            # Monarch ships no per-row identifier, so one is composed from the columns the
+            # profile names. Those columns have to separate every row its file distinguishes:
+            # a file that combines the KG's causal and non-causal gene-disease exports carries
+            # the same gene, disease and source under two predicates, and a key without
+            # `predicate` would hand both rows one identifier.
             monarch_df = _read_tsv(monarch_config["file"]).with_columns(
                 pl.concat_str(
-                    pl.col("subject"),
-                    pl.col("object"),
-                    pl.col("primary_knowledge_source"),
+                    [pl.col(column) for column in monarch_config["uuid_from"]],
                     separator="|",
                 ).alias("uuid")
             )
