@@ -7,6 +7,7 @@ import threading
 import time
 import zlib
 from asyncio.unix_events import subprocess
+from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta
 from typing import AsyncGenerator
@@ -71,10 +72,51 @@ _TBI_CLEANUP_INTERVAL = 600  # only check every 10 minutes
 _TABIX_MAX_ATTEMPTS = 3
 _TABIX_RETRY_BASE_DELAY = 0.5
 
-# parsed .tbi indexes are reused across requests for the lifetime of the process;
-# the index is small and the files are effectively immutable per version
-_index_cache: dict[str, "TabixIndex"] = {}
+# parsed .tbi indexes are reused across requests; the files are immutable per version.
+# LRU by resident bytes, not by count: one R14 GWAS index is ~5 MiB, and a PheWAS
+# touches hundreds of phenotype files, so an unbounded dict was what took results-api
+# to 13 GiB and kept it there. On a miss the raw .tbi is re-read from the on-disk
+# cache and re-parsed (~0.2 s). Override with TABIX_INDEX_CACHE_BYTES; 0 disables
+# the bound.
+_INDEX_CACHE_BYTES = int(
+    os.environ.get("TABIX_INDEX_CACHE_BYTES", str(2 * 1024 * 1024 * 1024))
+)
+_index_cache: "OrderedDict[str, TabixIndex]" = OrderedDict()
+_index_cache_bytes = 0
 _index_cache_lock = asyncio.Lock()
+
+
+def _index_cache_get(file_path: str) -> "TabixIndex | None":
+    idx = _index_cache.get(file_path)
+    if idx is not None:
+        _index_cache.move_to_end(file_path)
+    return idx
+
+
+def _index_cache_put(file_path: str, idx: "TabixIndex") -> None:
+    global _index_cache_bytes
+    _index_cache[file_path] = idx
+    _index_cache_bytes += idx.nbytes
+    while _INDEX_CACHE_BYTES and _index_cache_bytes > _INDEX_CACHE_BYTES and len(_index_cache) > 1:
+        _, evicted = _index_cache.popitem(last=False)
+        _index_cache_bytes -= evicted.nbytes
+
+
+# Cap on files whose compressed blocks are fetched and filtered at the same moment,
+# across all requests. A request still fans out over every file it names; this only
+# bounds how many are mid-flight, and with them the fetched-but-unfiltered buffers:
+# a point query costs ~70 KiB per variant per file, so hundreds of variants across
+# hundreds of files primed at once held gigabytes ahead of the filter pool. Override
+# with TABIX_MAX_FILES_IN_FLIGHT.
+_MAX_FILES_IN_FLIGHT = int(os.environ.get("TABIX_MAX_FILES_IN_FLIGHT", "32"))
+_files_semaphore: "asyncio.Semaphore | None" = None
+
+
+def _get_files_semaphore() -> "asyncio.Semaphore":
+    global _files_semaphore
+    if _files_semaphore is None:
+        _files_semaphore = asyncio.Semaphore(_MAX_FILES_IN_FLIGHT)
+    return _files_semaphore
 
 # Global cap on concurrent in-flight GCS range fetches across ALL data-access
 # objects and overlapping requests. Each fetch uses at most one socket, so this
@@ -529,11 +571,11 @@ class GCloudTabixBase:
         on-disk tbi cache if present (htslib used the same location), otherwise
         fetched from GCS and persisted there.
         """
-        idx = _index_cache.get(file_path)
+        idx = _index_cache_get(file_path)
         if idx is not None:
             return idx
         async with _index_cache_lock:
-            idx = _index_cache.get(file_path)
+            idx = _index_cache_get(file_path)
             if idx is not None:
                 return idx
             cache_dir = self._get_tbi_cache_dir(file_path)
@@ -553,7 +595,7 @@ class GCloudTabixBase:
                 except OSError:
                     pass
             idx = parse_tabix_index(raw)
-            _index_cache[file_path] = idx
+            _index_cache_put(file_path, idx)
             return idx
 
     def _gcs_url(self, gs_path: str) -> str:
@@ -698,7 +740,7 @@ class GCloudTabixBase:
             "region_intervals": region_intervals,
         }
 
-        async def _iterator() -> AsyncGenerator[bytes, None]:
+        async def _fetch_and_filter() -> list[list[bytes]]:
             # fetch every range's blocks; _fetch_blocks bounds total concurrency via
             # the process-wide fetch semaphore, so this never opens more than
             # _GCS_MAX_CONNECTIONS sockets even across overlapping requests
@@ -715,12 +757,20 @@ class GCloudTabixBase:
             n = min(len(items), _FILTER_WORKERS)
             size = -(-len(items) // n)  # ceil division
             sub_batches = [items[k : k + size] for k in range(0, len(items), size)]
-            results = await asyncio.gather(
+            return await asyncio.gather(
                 *(
                     loop.run_in_executor(pool, filter_batch, sb, spec)
                     for sb in sub_batches
                 )
             )
+
+        async def _iterator() -> AsyncGenerator[bytes, None]:
+            # the slot covers fetch and filter only: once the matching records are
+            # in hand the fetched blocks are gone, and yielding happens outside it
+            # so a slow consumer (the heap merge waiting on other files) cannot
+            # pin a slot
+            async with _get_files_semaphore():
+                results = await _fetch_and_filter()
             for batch in results:
                 for chunk in batch:
                     if chunk:

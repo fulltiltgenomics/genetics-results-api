@@ -11,8 +11,12 @@ returned records are exactly those `tabix -R` would emit for the same regions.
 """
 
 import struct
+import sys
 import zlib
-from dataclasses import dataclass, field
+from array import array
+from bisect import bisect_left
+from dataclasses import dataclass
+from itertools import accumulate
 
 # bgzf blocks are at most 64 KiB; padding a range end by this guarantees the final
 # (partial-virtual-offset) block is fetched whole and can be fully decompressed.
@@ -23,10 +27,36 @@ _TBX_VCF = 2
 _FLAG_ZERO_BASED = 0x10000
 
 
+# a parsed R14 GWAS index held as Python tuples/dicts/ints measured 52.5 MiB against a
+# 1.8 MB .tbi; as flat arrays the same index is 4.9 MiB. Bins are kept sorted by id
+# with their chunks in one contiguous pair of arrays, so a lookup is a bisect on
+# ``bin_ids`` and a slice of ``cbeg``/``cend``.
 @dataclass
 class _Ref:
-    bins: dict[int, list[tuple[int, int]]] = field(default_factory=dict)
-    linear: list[int] = field(default_factory=list)
+    bin_ids: array  # 'I', sorted
+    bin_off: array  # 'I', len(bin_ids) + 1; chunks of bin i are [bin_off[i], bin_off[i+1])
+    cbeg: array  # 'Q', virtual offsets
+    cend: array  # 'Q'
+    linear: array  # 'Q', per 16 kb window
+
+    @property
+    def nbytes(self) -> int:
+        return sum(
+            len(a) * a.itemsize
+            for a in (self.bin_ids, self.bin_off, self.cbeg, self.cend, self.linear)
+        )
+
+    def chunks(self, bin_id: int) -> tuple[array, array]:
+        """The (cbeg, cend) arrays of one bin, both empty when the bin is absent."""
+        i = bisect_left(self.bin_ids, bin_id)
+        if i == len(self.bin_ids) or self.bin_ids[i] != bin_id:
+            return _EMPTY_Q, _EMPTY_Q
+        return self.cbeg[self.bin_off[i] : self.bin_off[i + 1]], self.cend[
+            self.bin_off[i] : self.bin_off[i + 1]
+        ]
+
+
+_EMPTY_Q = array("Q")
 
 
 @dataclass
@@ -40,6 +70,11 @@ class TabixIndex:
     name_to_tid: dict[bytes, int]
     names: list[bytes]  # tid -> sequence name
     refs: list[_Ref]
+
+    @property
+    def nbytes(self) -> int:
+        """Approximate resident size, for the in-process index cache's byte budget."""
+        return sum(r.nbytes for r in self.refs) + sum(len(n) for n in self.names)
 
     def tid_for_chrom(self, chrom: int) -> int | None:
         """Resolve a numeric chromosome (X=23, Y=24, MT=25) to a tid, tolerating
@@ -84,7 +119,8 @@ class TabixIndex:
             if ref.linear and li < len(ref.linear):
                 min_off = ref.linear[li]
             for b in _reg2bins(beg0, end):
-                for cbeg, cend in ref.bins.get(b, ()):
+                cbegs, cends = ref.chunks(b)
+                for cbeg, cend in zip(cbegs, cends):
                     if cend <= min_off:
                         continue
                     spans.append((cbeg >> 16, cend >> 16, cbeg & 0xFFFF))
@@ -117,27 +153,35 @@ def parse_tabix_index(raw_tbi: bytes) -> TabixIndex:
     off += l_nm
     names = [n for n in names_blob.split(b"\x00") if n]
     name_to_tid = {name: tid for tid, name in enumerate(names)}
+    view = memoryview(data)
 
     refs: list[_Ref] = []
     for _ in range(n_ref):
-        ref = _Ref()
         (n_bin,) = struct.unpack_from("<i", data, off)
         off += 4
+        # the file lists bins in arbitrary order; collect (id, byte offset, n_chunk)
+        # then lay the chunk pairs out in id order
+        bins: list[tuple[int, int, int]] = []
         for _ in range(n_bin):
             bin_id, n_chunk = struct.unpack_from("<Ii", data, off)
             off += 8
-            chunks = []
-            for _ in range(n_chunk):
-                cbeg, cend = struct.unpack_from("<QQ", data, off)
-                off += 16
-                chunks.append((cbeg, cend))
-            ref.bins[bin_id] = chunks
+            bins.append((bin_id, off, n_chunk))
+            off += 16 * n_chunk
+        bins.sort()
+        bin_ids = array("I", (b for b, _, _ in bins))
+        bin_off = array("I", [0])
+        bin_off.extend(accumulate(n for _, _, n in bins))
+        pairs = array("Q")
+        pairs.frombytes(b"".join(view[at : at + 16 * n] for _, at, n in bins))
+        _to_native(pairs)
         (n_intv,) = struct.unpack_from("<i", data, off)
         off += 4
+        linear = array("Q")
         if n_intv:
-            ref.linear = list(struct.unpack_from(f"<{n_intv}Q", data, off))
+            linear.frombytes(data[off : off + 8 * n_intv])
+            _to_native(linear)
             off += 8 * n_intv
-        refs.append(ref)
+        refs.append(_Ref(bin_ids, bin_off, pairs[0::2], pairs[1::2], linear))
 
     return TabixIndex(
         preset=fmt & 0xFFFF,
@@ -150,6 +194,12 @@ def parse_tabix_index(raw_tbi: bytes) -> TabixIndex:
         names=names,
         refs=refs,
     )
+
+
+def _to_native(a: array) -> None:
+    """tbi integers are little-endian; ``array.frombytes`` reads native order."""
+    if sys.byteorder != "little":
+        a.byteswap()
 
 
 def filter_records(buf: bytes, skip: int, spec: dict) -> bytes:
