@@ -17,6 +17,7 @@ from app.config.sort_keys import (
 from app.core.exceptions import DataException
 from app.core.streams import (
     chunk_iterator,
+    coloc_simple_projection,
     get_dataset_mapping,
     start_iterators,
     tsv_line_iterator,
@@ -206,6 +207,7 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
             dataset_mapping = get_dataset_mapping()
             resource_bytes = resource.encode()
             phenotype_bytes = phenotype_or_study.encode()
+            simple_projection = coloc_simple_projection(header)
 
             # First apply variant filter using standard iterator
             base_iterators = [
@@ -318,24 +320,11 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
                                 # Query is on neither side or both sides (shouldn't happen due to earlier filter)
                                 continue
 
-                            # Now filter row to remove "1" columns and rename "2" columns
-                            # Build list of indices to keep (matching the simple header)
-                            # Keep: resource(0->0), version(1->1), then filter coloc columns
-                            filtered_row = [
-                                row_copy[0],
-                                row_copy[1],
-                            ]  # resource, version
-
-                            # Filter header columns and build corresponding row
-                            for i, col in enumerate(header):
-                                col_idx = (
-                                    4 + i
-                                )  # offset by resource1, version1, resource2, version2
-                                # Skip columns with "1" suffix or "1_" pattern
-                                if b"1_" in col or col.endswith(b"1"):
-                                    continue
-                                filtered_row.append(row_copy[col_idx])
-
+                            # resource, version, then the coloc columns offset by the
+                            # four resource/version columns the base iterator prepends
+                            filtered_row = [row_copy[0], row_copy[1]] + [
+                                row_copy[4 + idx] for idx, _ in simple_projection
+                            ]
                             yield filtered_row
                         else:
                             yield row
@@ -348,27 +337,9 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
 
             # build header based on simple flag
             if simple:
-                # simple format: filter out "1" columns and rename "2" columns
-                def should_keep_col(col: bytes) -> bool:
-                    """Keep columns that don't have '1' suffix or '1_' pattern."""
-                    if b"1_" in col:
-                        return False
-                    if col.endswith(b"1"):
-                        return False
-                    return True
-
-                def rename_col(col: bytes) -> bytes:
-                    # replace "2_" with "_" (e.g., "trait2_original" -> "trait_original")
-                    if b"2_" in col:
-                        col = col.replace(b"2_", b"_")
-                    # replace "2" at the end (e.g., "dataset2" -> "dataset", "hit2" -> "hit")
-                    elif col.endswith(b"2"):
-                        col = col[:-1]
-                    return col
-
-                header_filtered = [col for col in header if should_keep_col(col)]
-                header_renamed = [rename_col(col) for col in header_filtered]
-                header_with_resources = [b"resource", b"version"] + header_renamed
+                header_with_resources = [b"resource", b"version"] + [
+                    name for _, name in simple_projection
+                ]
             else:
                 header_with_resources = [
                     b"resource1",
@@ -600,32 +571,10 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
             for iterator in chunk_iterators
         ]
         if simple:
-            # for non-query side, use singular names (resource, version, dataset, trait, etc.)
-            # filter out columns with "1" suffix and rename columns with "2" suffix to remove the "2"
-            def should_keep_col(col: bytes) -> bool:
-                """Keep columns that don't have '1' suffix or '1_' pattern."""
-                if b"1_" in col:
-                    return False
-                if col.endswith(b"1"):
-                    return False
-                return True
-
-            def rename_col(col: bytes) -> bytes:
-                # replace "2_" with "_" (e.g., "trait2_original" -> "trait_original")
-                if b"2_" in col:
-                    col = col.replace(b"2_", b"_")
-                # replace "2" at the end (e.g., "dataset2" -> "dataset", "hit2" -> "hit")
-                elif col.endswith(b"2"):
-                    col = col[:-1]
-                return col
-
-            # filter out columns with "1" suffix, then rename "2" suffix columns
-            header_filtered = [col for col in header if should_keep_col(col)]
-            header_renamed = [rename_col(col) for col in header_filtered]
-            header_with_resources = [
-                b"resource",
-                b"version",
-            ] + header_renamed
+            # the non-query side keeps singular names (resource, version, dataset, trait, ...)
+            header_with_resources = [b"resource", b"version"] + [
+                name for _, name in coloc_simple_projection(header)
+            ]
             # SORT_CONFIG_COLOC won't work here since we removed trait1 and trait2 becomes trait
             # create a modified sort config that only uses trait (no trait1)
             sort_config_modified = [

@@ -35,6 +35,7 @@ router = APIRouter()
                             "author": "FinnGen Consortium",
                             "publication_date": "2025-09-01",
                             "trait_type": "binary",
+                            "data_type": "gwas",
                             "products": {
                                 "credible_sets": True,
                                 "summary_stats": True,
@@ -73,9 +74,12 @@ async def list_datasets(
     ),
     data_access: DataAccess = Depends(get_data_access),
 ):
-    """Return the dataset catalog from the registry, enriched with the set of
-    products each dataset supports (credible sets, summary stats, coloc
-    comparisons) and aggregate sample-size statistics."""
+    """Return the dataset catalog from the registry, enriched with the products
+    each dataset supports (one key per product config the dataset carries) and
+    aggregate sample-size statistics.
+
+    `qtl_types`, `n_phenotypes`, `n_samples`, `pseudo_credible_sets` and `collection`
+    are present only for datasets that define them."""
     registry = config_util.get_datasets()
 
     results = []
