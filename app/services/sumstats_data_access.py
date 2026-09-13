@@ -20,7 +20,11 @@ from app.core.streams import (
     union_output_columns,
 )
 from app.core.variant import Variant
-from app.services.gcloud_tabix_base import GCloudTabixBase, validate_path_component
+from app.services.gcloud_tabix_base import (
+    GCloudTabixBase,
+    _get_fetch_semaphore,
+    validate_path_component,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +53,18 @@ class SumstatsDataAccess(GCloudTabixBase):
             return os.path.exists(path)
         headers = await self.storage._headers()
         url = path.replace("gs://", "https://storage.googleapis.com/")
-        try:
-            response = await self.session.get(url, headers=headers)
-            return response.status != 404
-        except aiohttp.client_exceptions.ClientResponseError as e:
-            if e.status == 404:
-                return False
-            raise
+        # HEAD, inside the context manager, under the fetch semaphore: a bare GET here
+        # started streaming the whole multi-hundred-MB object into a response nothing
+        # read or released, and 256 of those pinned every connector slot until every
+        # later GCS request timed out
+        async with _get_fetch_semaphore():
+            try:
+                async with self.session.head(url, headers=headers) as response:
+                    return response.status != 404
+            except aiohttp.client_exceptions.ClientResponseError as e:
+                if e.status == 404:
+                    return False
+                raise
 
     def _get_file_path(self, data_file_config: dict, phenotype: str) -> str:
         if "file" in data_file_config:
@@ -193,6 +202,7 @@ class SumstatsDataAccess(GCloudTabixBase):
         schema_configs = []  # (column_mapping, file_header) per contributing config
         seen_config_ids = set()
 
+        candidates = []  # (df_config, phenotype, gs_path), in config order
         for df_config in data_file_configs:
             # single-file configs only serve their configured phenotype
             if "file" in df_config:
@@ -200,26 +210,32 @@ class SumstatsDataAccess(GCloudTabixBase):
                 effective_phenotypes = [configured_phenotype] if configured_phenotype in phenotypes else []
             else:
                 effective_phenotypes = phenotypes
-
             for phenotype in effective_phenotypes:
-                gs_path = self._get_file_path(df_config, phenotype)
+                candidates.append((df_config, phenotype, self._get_file_path(df_config, phenotype)))
 
-                if not await self._check_file_exists(gs_path):
-                    logger.info(f"Phenotype file not found: {gs_path}")
-                    continue
+        # one round trip per candidate, so a PheWAS over hundreds of phenotypes against
+        # several configs is thousands of them; concurrently they cost one round trip
+        exists = await asyncio.gather(
+            *(self._check_file_exists(gs_path) for _, _, gs_path in candidates)
+        )
 
-                try:
-                    file_header = self.get_file_header(df_config, phenotype)
-                except Exception as e:
-                    logger.warning(
-                        f"Skipping {phenotype} for {df_config['id']}: header fetch failed: {e}"
-                    )
-                    continue
+        for (df_config, phenotype, gs_path), found in zip(candidates, exists):
+            if not found:
+                logger.info(f"Phenotype file not found: {gs_path}")
+                continue
 
-                contributions.append((df_config, phenotype, gs_path, file_header))
-                if df_config["id"] not in seen_config_ids:
-                    seen_config_ids.add(df_config["id"])
-                    schema_configs.append((df_config["column_mapping"], file_header))
+            try:
+                file_header = self.get_file_header(df_config, phenotype)
+            except Exception as e:
+                logger.warning(
+                    f"Skipping {phenotype} for {df_config['id']}: header fetch failed: {e}"
+                )
+                continue
+
+            contributions.append((df_config, phenotype, gs_path, file_header))
+            if df_config["id"] not in seen_config_ids:
+                seen_config_ids.add(df_config["id"])
+                schema_configs.append((df_config["column_mapping"], file_header))
 
         if not contributions:
             raise NotFoundException(
