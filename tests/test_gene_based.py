@@ -164,13 +164,13 @@ class TestGeneBasedResultsByPhenotype:
         "resource,phenotype",
         [
             ("genebass", "categorical_41210_both_sexes_S068_"),
-            ("schema", "schizophrenia"),
-            ("bipex", "bipolar_disorder"),
+            ("schema2", "schizophrenia"),
+            ("bipex2", "bipolar_disorder"),
             # the burden files spell the IBD traits out; only the exome variant
             # files use the IBD/UC/CD short codes
-            ("ibd", "inflammatory_bowel_disease"),
-            ("ibd", "ulcerative_colitis"),
-            ("ibd", "crohns_disease"),
+            ("ibd_exome_2026", "inflammatory_bowel_disease"),
+            ("ibd_exome_2026", "ulcerative_colitis"),
+            ("ibd_exome_2026", "crohns_disease"),
         ],
     )
     @pytest.mark.parametrize("format", ["tsv", "json"])
