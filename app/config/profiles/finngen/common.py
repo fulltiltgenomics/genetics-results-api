@@ -39,12 +39,12 @@ dataset_to_resource = {
     "UKB_Finucane": ("ukbb", "1"),
     # NOT the ukbb resource despite the UKBB prefix: the GWAS is an EstBB + UK Biobank
     # meta-analysis, and only its fine-mapping is UKBB-only
-    "UKBB_EUR_NMR_2026": ("nmr_meta", "2026"),
+    "nmr_ukbb_est": ("nmr_meta", "2026"),
     "Open_Targets_26.06": ("open_targets", "26.06"),
     "GTEx_v10": ("gtex", "v10"),
     "HPA_24.1": ("hpa", "24.1"),
     "genebass": ("genebass", "v1"),
-    "IBD_exome_2026": ("ibd_exome_2026", "2026"),
+    "IBD_exome": ("ibd_exome_2026", "2026"),
     # external pseudo credible sets share the ext_pseudo combined file; these map
     # each combined-file `dataset` column value to its resource so per-row
     # attribution keeps the right rows in shared-file range/variant credible-set
