@@ -85,7 +85,7 @@ def _parse_data_types(data_types: str | None) -> set[str] | None:
                                 "alt": {"type": "string"},
                                 "mlog10p": {"type": "number"},
                                 "beta": {"type": "number"},
-                                "se": {"type": "number"},
+                                "se": {"type": ["number", "null"]},
                                 "pip": {"type": "number"},
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
@@ -271,8 +271,9 @@ async def credible_sets_by_phenotype_leads(
         )
 
     # tsv: re-serialize the accumulated leads (the source file can't be passed through verbatim
-    # since the non-lead rows are dropped). emit the full cs schema header for stable columns.
-    header = list(config_credible_sets.cs_header_schema.keys())
+    # since the non-lead rows are dropped). the columns are the ones the rows were keyed by, which
+    # json and X-Columns advertise; the schema is a validating superset and would add columns
+    # (resource, version) the rows never carry.
 
     def _fmt(value) -> str:
         return "NA" if value is None else str(value)
@@ -315,7 +316,7 @@ async def credible_sets_by_phenotype_leads(
                                 "alt": {"type": "string"},
                                 "mlog10p": {"type": "number"},
                                 "beta": {"type": "number"},
-                                "se": {"type": "number"},
+                                "se": {"type": ["number", "null"]},
                                 "pip": {"type": "number"},
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
@@ -465,7 +466,7 @@ async def credible_sets_by_id(
                                 "alt": {"type": "string"},
                                 "mlog10p": {"type": "number"},
                                 "beta": {"type": "number"},
-                                "se": {"type": "number"},
+                                "se": {"type": ["number", "null"]},
                                 "pip": {"type": "number"},
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
@@ -605,7 +606,7 @@ async def credible_sets_by_region(
                                 "alt": {"type": "string"},
                                 "mlog10p": {"type": "number"},
                                 "beta": {"type": "number"},
-                                "se": {"type": "number"},
+                                "se": {"type": ["number", "null"]},
                                 "pip": {"type": "number"},
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
@@ -843,7 +844,7 @@ async def credible_sets_by_variant_post(
                                 "alt": {"type": "string"},
                                 "mlog10p": {"type": "number"},
                                 "beta": {"type": "number"},
-                                "se": {"type": "number"},
+                                "se": {"type": ["number", "null"]},
                                 "pip": {"type": "number"},
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},
@@ -1010,7 +1011,7 @@ async def credible_sets_by_gene(
                                 "alt": {"type": "string"},
                                 "mlog10p": {"type": "number"},
                                 "beta": {"type": "number"},
-                                "se": {"type": "number"},
+                                "se": {"type": ["number", "null"]},
                                 "pip": {"type": "number"},
                                 "cs_id": {"type": "string"},
                                 "cs_size": {"type": "integer"},

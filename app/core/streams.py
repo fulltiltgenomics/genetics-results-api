@@ -438,6 +438,35 @@ def tsv_line_iterator_coloc(
     return tsv_line_iterator_base(stream, filter_fn, transform_fn)
 
 
+def _coloc_simple_name(col: bytes) -> bytes | None:
+    """None for a side-1 column, the unsuffixed name for a side-2 column, else col unchanged."""
+    if b"1_" in col or col.endswith(b"1"):
+        return None
+    if b"2_" in col:
+        return col.replace(b"2_", b"_")
+    if col.endswith(b"2"):
+        return col[:-1]
+    return col
+
+
+def coloc_simple_projection(header: list[bytes]) -> list[tuple[int, bytes]]:
+    """The columns of a coloc header that survive the simple format, as (index, output name).
+
+    The simple format drops side-1 columns and strips the suffix from side-2 columns. A
+    side-2 column whose stripped name is already a pair-level column (nsnps2 -> nsnps)
+    is dropped as well: keeping both puts the same name in the TSV header twice, and a
+    JSON row keyed by name then silently holds only the trait-2 value in place of the
+    pair-level one.
+    """
+    names = [_coloc_simple_name(col) for col in header]
+    pair_level = {col for col, name in zip(header, names) if name == col}
+    return [
+        (idx, name)
+        for idx, (col, name) in enumerate(zip(header, names))
+        if name is not None and (name == col or name not in pair_level)
+    ]
+
+
 def tsv_line_iterator_coloc_by_trait(
     stream: AsyncIterator[bytes],
     header: list[bytes],
@@ -468,6 +497,7 @@ def tsv_line_iterator_coloc_by_trait(
         except ValueError:
             return None
 
+    simple_projection = coloc_simple_projection(header)
     paired_column_indices: list[tuple[int, int]] = [(dataset1_index, dataset2_index)]
     for left, right in [
         (b"data_type1", b"data_type2"),
@@ -541,20 +571,7 @@ def tsv_line_iterator_coloc_by_trait(
                 resource1, resource2 = resource2, resource1
                 version1, version2 = version2, version1
 
-            # use singular names (resource, version instead of resource2, version2)
-            # also filter out all columns with "1" suffix (trait1, dataset1, cs1_id, etc.)
-            def should_keep_col(col_name: bytes) -> bool:
-                """Keep columns that don't have '1' suffix or '1_' pattern."""
-                if b"1_" in col_name:
-                    return False
-                if col_name.endswith(b"1"):
-                    return False
-                return True
-
-            # filter out columns with "1" suffix
-            filtered_s = [
-                val for idx, val in enumerate(s) if should_keep_col(header[idx])
-            ]
+            filtered_s = [s[idx] for idx, _ in simple_projection]
             return [resource2, version2] + filtered_s
         else:
             return [resource1, version1, resource2, version2] + s

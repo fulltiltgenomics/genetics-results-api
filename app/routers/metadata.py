@@ -63,7 +63,7 @@ router = APIRouter()
                             "phenotype_code": "QTD000001",
                             "phenotype_string": "Alasoo_2018 - macrophage - naive",
                             "n_samples": 84,
-                            "n_cases": 0,
+                            "n_cases": 84,
                             "n_controls": 0,
                             "trait_type": "quantitative",
                             "author": "Alasoo_2018",
@@ -95,7 +95,7 @@ async def resource_metadata(
     - phenotype_code: Phenotype or study identifier
     - phenotype_string: Human-readable phenotype name
     - n_samples: Total number of samples
-    - n_cases: Number of cases (0 for quantitative traits)
+    - n_cases: Number of cases (equals n_samples for quantitative traits)
     - n_controls: Number of controls (0 for quantitative traits)
     - trait_type: "binary" or "quantitative"
     - author: Study author or consortium name
