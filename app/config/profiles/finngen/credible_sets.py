@@ -278,14 +278,20 @@ data_files = [
             "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets/202606/Open_Targets_26.06_credible_sets.tsv.gz",
         },
     },
-    # nmr_ukbb_est (EstBB-UKBB NMR metabolic trait credible sets) is REGISTERED in
-    # datasets.yaml for this profile but has no entry here, because the munged files have only
-    # been staged into the daly bucket — startup_checks tabix-header-checks every all_cs_file
-    # and would fail this deployment's startup over an object nobody outside FinnGen can
-    # upload. The registry entry alone still lists the dataset in /datasets with no products.
-    # To finish it: run genetics-results-munge scripts/munge_nmr_meta.sh, upload the combined
-    # file, credible_set_stats.tsv and individual/*.SUSIE.munged.tsv to
-    # gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026/, upload
-    # nmr_ukbb_est_pheno.json beside the other mapping files, then copy the daly entry here and
-    # set this profile's metadata_file in datasets.yaml.
+    {
+        "id": "nmr_ukbb_est",
+        "dataset_id": "nmr_ukbb_est",
+        "resource": "nmr_ukbb_est",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "LDL_C",
+        "gencode_version": 49,
+        # published SuSiE credible sets for the 249 Nightingale NMR metabolic traits. No
+        # all_cs_qtl_file: the traits are metabolites, so there is no gene to index them by.
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026/individual/",
+            "suffix_95": ".SUSIE.munged.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026/nmr_ukbb_est_credible_sets.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026/credible_set_stats.tsv",
+        },
+    },
 ]
