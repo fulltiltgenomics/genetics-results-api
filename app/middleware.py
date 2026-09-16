@@ -326,11 +326,13 @@ async def _reject(
     # `code`/`limit`/`observed` are additive and shared with the per-execution limits in
     # app/core/sandbox_budget.py, so every sandbox rejection says which control was hit; the cap
     # itself and its detail string are unchanged
+    # the routed endpoint may say what "narrower" means for it (app/core/limits.narrow_hint);
+    # a whole-phenotype table has no smaller region to ask for, only a different endpoint
+    hint = getattr(scope.get("endpoint"), "narrow_hint", None) or (
+        "Narrow the request — a smaller region, fewer ids — and aggregate in the sandbox."
+    )
     await _send_json(send, 429 if 200 <= status < 300 else status, {
-        "detail": (
-            f"Response exceeds the per-execution byte limit ({observed} > {limit}). "
-            "Narrow the request — a smaller region, fewer ids — and aggregate in the sandbox."
-        ),
+        "detail": f"Response exceeds the per-execution byte limit ({observed} > {limit}). {hint}",
         "code": "sandbox_response_bytes",
         "limit": limit,
         "observed": observed,

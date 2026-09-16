@@ -13,6 +13,7 @@ from app.config.gene_based_results import (
     resource_to_gene_based_data_file_ids,
 )
 from app.core.exceptions import GeneNotFoundException, NotFoundException
+from app.core.limits import narrow_hint
 from app.core.responses import (
     TimedJSONResponse,
     TimedStreamingResponse,
@@ -253,6 +254,10 @@ async def gene_based(
         422: {"description": "Invalid format parameter"},
         500: {"description": "Internal server error"},
     },
+)
+@narrow_hint(
+    "A whole-phenotype burden table has no smaller form; for one gene's row in this trait, "
+    "significant or not, query /gene_based/{gene}?traits=<code>[,<code>...] instead."
 )
 async def gene_based_results_by_phenotype(
     request: Request,

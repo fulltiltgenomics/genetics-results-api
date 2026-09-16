@@ -137,6 +137,11 @@ def client():
     async def blob(n: int = 10):
         return JSONResponse({"payload": "x" * n})
 
+    @api.get("/hinted")
+    @limits.narrow_hint("Ask the other endpoint instead.")
+    async def hinted(n: int = 10):
+        return JSONResponse({"payload": "x" * n})
+
     @api.get("/stream")
     async def stream(chunks: int = 10, size: int = 1000):
         async def produce():
@@ -346,3 +351,22 @@ def test_a_relaxed_response_is_not_buffered_or_rewritten(client):
     resp = _get(client, "/rows", INTERNAL_SECRET, n=3)
     assert resp.content == b'[{"i":0},{"i":1},{"i":2}]'
     assert (b"content-length", b"25") in [(k.lower(), v) for k, v in resp.headers]
+
+
+def test_an_endpoint_with_a_narrow_hint_says_what_narrower_means(client, monkeypatch):
+    monkeypatch.setattr(limits, "SANDBOX_MAX_RESPONSE_BYTES", 1000)
+    resp = _get(client, "/hinted", _mint(), n=5000)
+
+    assert resp.status_code == 429
+    detail = resp.json()["detail"]
+    assert "byte limit" in detail
+    assert detail.endswith("Ask the other endpoint instead.")
+    # the generic advice is replaced, not appended to
+    assert "smaller region" not in detail
+
+
+def test_an_endpoint_without_a_hint_keeps_the_generic_advice(client, monkeypatch):
+    monkeypatch.setattr(limits, "SANDBOX_MAX_RESPONSE_BYTES", 1000)
+    resp = _get(client, "/blob", _mint(), n=5000)
+
+    assert "smaller region" in resp.json()["detail"]

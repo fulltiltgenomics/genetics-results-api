@@ -135,3 +135,20 @@ def caps_for_scope(scope) -> Caps:
     """The caps this ASGI request runs under. See the module docstring for the rule."""
     principal = (scope.get("state") or {}).get("sandbox_principal")
     return sandbox_caps() if principal is not None else RELAXED
+
+
+def narrow_hint(text: str):
+    """Mark an endpoint with what a sandbox caller should do instead when its response is
+    over the byte cap.
+
+    The cap's generic advice — a smaller region, fewer ids — is wrong for a whole-phenotype
+    table, whose only narrower form is a different endpoint. Read by
+    `SandboxResponseCapMiddleware` off the routed endpoint and appended to the 429 detail;
+    an endpoint without one gets the generic text.
+    """
+
+    def decorate(func):
+        setattr(func, "narrow_hint", text)
+        return func
+
+    return decorate
