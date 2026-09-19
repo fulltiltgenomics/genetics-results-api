@@ -1,9 +1,9 @@
 """Daly profile: gene-based results data paths.
 
 `file` is the gene-locus-indexed file that /gene_based/{gene} queries across all
-traits of the dataset. For genebass that file holds the mlog10p_burden > 4 hits
-only — the unfiltered results are 343M rows, too many to sort into one tabixed
-file. `prefix`/`suffix` point at the per-trait copies, which are unfiltered for
+traits of the dataset. For genebass and brava that file holds the mlog10p_burden > 4
+hits only — genebass's unfiltered results are 343M rows, too many to sort into one
+tabixed file. `prefix`/`suffix` point at the per-trait copies, which are unfiltered for
 every dataset and back /gene_based_results_by_phenotype.
 """
 
@@ -83,6 +83,19 @@ gene_based_data_files = [
         "gene_based": {
             "file": "gs://daly-genetics-results/exome_results/ibd/IBD_exome_CD_gene_results.munged.tsv.gz",
             "prefix": "gs://daly-genetics-results/exome_results/ibd/gene_burden_per_trait/",
+            "suffix": ".tsv.gz",
+        },
+    },
+    {
+        "id": "brava_gene_based",
+        "dataset_id": "brava_gene_based",
+        "resource": "brava",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "AFib",
+        "gencode_version": 39,
+        "gene_based": {
+            "file": "gs://daly-genetics-results/exome_results/brava/BRaVa_gene_results.mlog10p_gt4.tsv.gz",
+            "prefix": "gs://daly-genetics-results/exome_results/brava/gene_burden_per_trait/",
             "suffix": ".tsv.gz",
         },
     },

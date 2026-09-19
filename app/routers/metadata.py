@@ -202,5 +202,18 @@ async def trait_name_mapping(
                     trait_map[trait_id] = f"{description}: {coding_description}"
                 else:
                     trait_map[trait_id] = description
+        elif "pheweb" in config_util.get_harmonizer_types_for_resource(resource):
+            # covers datasets registered with the `pheweb` harmonizer specifically, not
+            # every pheweb-shaped resource: quantitative_pheweb (e.g. nmr_ukbb_est) reads
+            # the same phenocode/phenostring/num_samples keys but is deliberately excluded
+            # here, since widening the match would add its trait names to this endpoint
+            # for the first time -- a behaviour change nobody asked for. `phenocode` is
+            # taken verbatim, ancestry/sex strata included ("AFib|EUR"), matching the
+            # harmonized phenotype_code and the per-trait result file names.
+            for row in meta:
+                code = row.get("phenocode")
+                name = (row.get("phenostring") or "").strip()
+                if code and name:
+                    trait_map[code] = name
         metadata.extend(meta)
     return JSONResponse(trait_map)

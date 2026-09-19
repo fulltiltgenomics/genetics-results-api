@@ -1,7 +1,8 @@
 """
 Service for harmonizing phenotype metadata across different resources.
 
-Provides a unified schema for metadata from FinnGen, eQTL Catalogue, and Open Targets.
+Provides a unified schema for the per-resource metadata shapes; the `metadata_harmonizer`
+of a dataset's registry entry selects which one reads its file.
 """
 
 import logging
@@ -64,6 +65,8 @@ class MetadataHarmonizer:
             return self._harmonize_finngen_drugs(raw_metadata, harm_config)
         elif harm_type == "quantitative_pheweb":
             return self._harmonize_quantitative_pheweb(raw_metadata, harm_config)
+        elif harm_type == "pheweb":
+            return self._harmonize_pheweb(raw_metadata, harm_config)
         elif harm_type == "eqtl_catalogue":
             return self._harmonize_eqtl_catalogue(raw_metadata, harm_config)
         elif harm_type == "open_targets":
@@ -235,6 +238,66 @@ class MetadataHarmonizer:
                 )
             except Exception as e:
                 logger.error(f"Error harmonizing quantitative pheweb item: {e}")
+                continue
+
+        return harmonized
+
+    def _harmonize_pheweb(
+        self, raw_metadata: list[dict], config: dict
+    ) -> list[HarmonizedMetadata]:
+        """Harmonize a pheweb-shaped JSON holding binary and quantitative traits together.
+
+        Trait type comes from which sample-size keys an item carries, not from `category`:
+        in BRaVa's file `category` is the sex stratum (Both/Female), so the
+        `category.startswith("Quantitative")` rule the FinnGen Kanta harmonizer uses would
+        call every trait binary here. `phenocode` is kept verbatim, strata suffix included
+        ('AFib|EUR'), because that is also how the per-trait result files are named.
+        """
+        harmonized = []
+
+        author = config.get("author", "")
+        pub_date = config.get("publication_date", "")
+        version = config.get("version_label", "")
+        resource = config.get("resource", "")
+
+        def safe_int_or_na(value):
+            if value in ("NA", "", None):
+                return "NA"
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                return "NA"
+
+        for item in raw_metadata:
+            try:
+                n_cases = safe_int_or_na(item.get("num_cases"))
+                n_controls = safe_int_or_na(item.get("num_controls"))
+                n_samples = safe_int_or_na(item.get("num_samples"))
+                if n_samples == "NA" and n_cases != "NA" and n_controls != "NA":
+                    n_samples = n_cases + n_controls
+
+                # keyed on presence, not on successful parsing, so an unparseable count
+                # stays binary instead of silently reclassifying to quantitative
+                trait_type = (
+                    "binary" if ("num_cases" in item or "num_controls" in item) else "quantitative"
+                )
+
+                harmonized.append(
+                    HarmonizedMetadata(
+                        phenotype_code=item.get("phenocode", ""),
+                        phenotype_string=item.get("phenostring", ""),
+                        n_samples=n_samples,
+                        n_cases=n_cases,
+                        n_controls=n_controls,
+                        trait_type=trait_type,
+                        author=author,
+                        date=pub_date,
+                        resource=resource,
+                        version=version,
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error harmonizing pheweb item: {e}")
                 continue
 
         return harmonized

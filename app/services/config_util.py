@@ -129,6 +129,18 @@ def get_metadata_dataset_ids_for_resource(
     return dataset_ids
 
 
+def get_harmonizer_types_for_resource(resource: str) -> set[str]:
+    """The `metadata_harmonizer` values of every dataset feeding this resource's metadata."""
+    types = set()
+    for dataset_id in get_metadata_dataset_ids_for_resource(
+        resource, include_coloc_partners=True
+    ):
+        harm_config = build_harmonizer_config(dataset_id)
+        if harm_config:
+            types.add(harm_config["metadata"]["type"])
+    return types
+
+
 def get_resources(data_type: str | None = None) -> list[str]:
     """Get a list of unique resources from the config, optionally filtered by data type."""
     if data_type is None:

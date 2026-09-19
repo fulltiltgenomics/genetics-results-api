@@ -47,6 +47,7 @@ dataset_to_resource = {
     "GTEx_v10": ("gtex", "v10"),
     "HPA_24.1": ("hpa", "v24.1"),
     "genebass": ("genebass", "NA"),
+    "BRaVa": ("brava", "NA"),
     "IBD_exome": ("ibd_exome_2026", "2026"),
     # external pseudo credible sets share the ext_pseudo combined file; these map
     # each combined-file `dataset` column value to its resource so per-row
