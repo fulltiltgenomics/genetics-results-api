@@ -3,7 +3,7 @@
 hgnc_file = "gs://daly-genetics-results/mapping_files/hgnc_complete_set.txt"
 
 rsid_db = {
-    "file": "gs://daly-genetics-results/gnomad/gnomad.genomes.exomes.v4.0.rsid.tsv.gz",
+    "file": "gs://daly-genetics-results/gnomad/gnomad.genomes.exomes.v4.0.rsid.v2.tsv.gz",
 }
 
 gnomad = {
