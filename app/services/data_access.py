@@ -239,14 +239,7 @@ class DataAccessFactory(BaseFactory):
             raise ValueError(f"Data file '{data_file_id}' not found in configuration")
         return data_file_by_id[data_file_id]
 
-    def get_implementation_class(self, data_source: str) -> type:
-        """Get the implementation class for the data source."""
-        if data_source == "gcloud":
-            from app.services.gcloud_tabix_data_access import GCloudTabixDataAccess
-
-            return GCloudTabixDataAccess
-        else:
-            raise ValueError(f"Unknown data source '{data_source}'")
+    implementations = {"gcloud": "app.services.gcloud_tabix_data_access:GCloudTabixDataAccess"}
 
 
 class DataAccess(BaseDataAccess[DataAccessObject]):
@@ -279,19 +272,7 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
             if data_type in df
         ]
 
-        async def _warm(data_file_id: str, data_type: str) -> None:
-            try:
-                access = await self._get_resource_access(data_file_id, data_type)
-                if hasattr(access, "warm"):
-                    await access.warm()
-            # swallowed by design, not omission: warm_all prefetches, it does not gate.
-            # verify_all_data_files() decides reachability (see Warm.ASYNC in the container).
-            except Exception as e:
-                logger.warning(
-                    f"Warm failed for {data_file_id}/{data_type}: {e}"
-                )
-
-        await asyncio.gather(*(_warm(did, dt) for did, dt in targets))
+        await self._warm_each("data files", self._get_resource_access, targets)
 
     async def check_phenotype_exists(
         self, resource: str, phenotype: str, interval: Literal[95, 99] | None = None, data_type: str = "cs"

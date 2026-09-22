@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from abc import abstractmethod
 from typing import AsyncGenerator, List
@@ -88,18 +87,7 @@ class DataAccessFactoryVariantEffect(BaseFactory):
                 f"Variant effect data access object for dataset '{dataset_id}' not found in configuration"
             )
 
-    def get_implementation_class(self, data_source: str) -> type:
-        """Get the implementation class for the data source."""
-        if data_source == "gcloud":
-            from app.services.gcloud_tabix_variant_effect_data_access import (
-                GCloudTabixDataAccessVariantEffect,
-            )
-
-            return GCloudTabixDataAccessVariantEffect
-        else:
-            raise ValueError(
-                f"Unknown data source '{data_source}' for variant effect data"
-            )
+    implementations = {"gcloud": "app.services.gcloud_tabix_variant_effect_data_access:GCloudTabixDataAccessVariantEffect"}
 
 
 class DataAccessVariantEffect(BaseDataAccess[DataAccessObjectVariantEffect]):
@@ -125,17 +113,7 @@ class DataAccessVariantEffect(BaseDataAccess[DataAccessObjectVariantEffect]):
         """Construct and warm (header + .tbi prefetch) every variant-effect data
         access object concurrently, so the first request pays no cold-start cost."""
 
-        async def _warm(dataset_id: str) -> None:
-            try:
-                access = await self._get_dataset_access(dataset_id)
-                if hasattr(access, "warm"):
-                    await access.warm()
-            # swallowed by design, not omission: warm_all prefetches, it does not gate.
-            # verify_all_data_files() decides reachability (see Warm.ASYNC in the container).
-            except Exception as e:
-                logger.warning(f"Variant-effect warm failed for {dataset_id}: {e}")
-
-        await asyncio.gather(*(_warm(c["dataset_id"]) for c in variant_effect_data))
+        await self._warm_each("variant effect", self._get_dataset_access, ((c["dataset_id"],) for c in variant_effect_data))
 
     async def _stream_datasets(
         self,

@@ -1,5 +1,10 @@
+import asyncio
+import importlib
+import logging
 from abc import ABC, abstractmethod
-from typing import Any, Generic, TypeVar
+from typing import Any, Callable, Generic, Iterable, TypeVar
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")  # The DAO type
 
@@ -41,21 +46,20 @@ class BaseFactory(ABC):
         """
         pass
 
-    @abstractmethod
+    # data_source -> "module.path:ClassName", imported on first use rather than at module
+    # load: each gcloud_tabix_* module imports its DAO from the module that defines the
+    # factory, so a top-level import here would be circular
+    implementations: dict[str, str] = {}
+
     def get_implementation_class(self, data_source: str) -> type:
-        """
-        Get the implementation class for the given data source.
-
-        Args:
-            data_source: The data source type (e.g., "gcloud", "local")
-
-        Returns:
-            The class to instantiate for this data source
-
-        Raises:
-            ValueError: If data source is unknown
-        """
-        pass
+        """The class to instantiate for `data_source`; ValueError if this factory has none."""
+        try:
+            module_name, class_name = self.implementations[data_source].split(":")
+        except KeyError:
+            raise ValueError(
+                f"Unknown data source '{data_source}' for {type(self).__name__}"
+            ) from None
+        return getattr(importlib.import_module(module_name), class_name)
 
     async def create(self, identifier: str, *args, **kwargs) -> Any:
         """
@@ -111,3 +115,22 @@ class BaseDataAccess(Generic[T]):
                 *factory_args, **factory_kwargs
             )
         return self._resource_access_objects[key]
+
+    async def _warm_each(
+        self, label: str, get_access: Callable, keys: Iterable[tuple]
+    ) -> None:
+        """Construct and warm (header + .tbi prefetch) one access object per key,
+        concurrently, so the first request pays no cold-start cost. `get_access` is the
+        subclass's own getter and each key is its argument tuple."""
+
+        async def warm(key: tuple) -> None:
+            try:
+                access = await get_access(*key)
+                if hasattr(access, "warm"):
+                    await access.warm()
+            # swallowed by design, not omission: warm_all prefetches, it does not gate.
+            # verify_all_data_files() decides reachability (see Warm.ASYNC in the container).
+            except Exception as e:
+                logger.warning(f"{label}: warm failed for {'/'.join(map(str, key))}: {e}")
+
+        await asyncio.gather(*(warm(k) for k in keys))

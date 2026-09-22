@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from abc import abstractmethod
 from typing import AsyncGenerator, List
@@ -88,16 +87,7 @@ class DataAccessFactoryMpra(BaseFactory):
                 f"MPRA data access object for dataset '{dataset_id}' not found in configuration"
             )
 
-    def get_implementation_class(self, data_source: str) -> type:
-        """Get the implementation class for the data source."""
-        if data_source == "gcloud":
-            from app.services.gcloud_tabix_mpra_data_access import (
-                GCloudTabixDataAccessMpra,
-            )
-
-            return GCloudTabixDataAccessMpra
-        else:
-            raise ValueError(f"Unknown data source '{data_source}' for mpra data")
+    implementations = {"gcloud": "app.services.gcloud_tabix_mpra_data_access:GCloudTabixDataAccessMpra"}
 
 
 class DataAccessMpra(BaseDataAccess[DataAccessObjectMpra]):
@@ -121,17 +111,7 @@ class DataAccessMpra(BaseDataAccess[DataAccessObjectMpra]):
         """Construct and warm (header + .tbi prefetch) every mpra data access object
         concurrently, so the first request pays no cold-start cost."""
 
-        async def _warm(dataset_id: str) -> None:
-            try:
-                access = await self._get_dataset_access(dataset_id)
-                if hasattr(access, "warm"):
-                    await access.warm()
-            # swallowed by design, not omission: warm_all prefetches, it does not gate.
-            # verify_all_data_files() decides reachability (see Warm.ASYNC in the container).
-            except Exception as e:
-                logger.warning(f"MPRA warm failed for {dataset_id}: {e}")
-
-        await asyncio.gather(*(_warm(c["dataset_id"]) for c in mpra_data))
+        await self._warm_each("MPRA", self._get_dataset_access, ((c["dataset_id"],) for c in mpra_data))
 
     async def _stream_datasets(
         self,

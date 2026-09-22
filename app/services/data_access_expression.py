@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from abc import abstractmethod
 from typing import AsyncGenerator, List, Literal
@@ -53,16 +52,7 @@ class DataAccessFactoryExpression(BaseFactory):
                 f"Expression data access object for resource '{resource}' not found in configuration"
             )
 
-    def get_implementation_class(self, data_source: str) -> type:
-        """Get the implementation class for the data source."""
-        if data_source == "gcloud":
-            from app.services.gcloud_tabix_expression_data_access import (
-                GCloudTabixDataAccessExpression,
-            )
-
-            return GCloudTabixDataAccessExpression
-        else:
-            raise ValueError(f"Unknown data source '{data_source}' for expression data")
+    implementations = {"gcloud": "app.services.gcloud_tabix_expression_data_access:GCloudTabixDataAccessExpression"}
 
 
 class DataAccessExpression(BaseDataAccess[DataAccessObjectExpression]):
@@ -82,17 +72,7 @@ class DataAccessExpression(BaseDataAccess[DataAccessObjectExpression]):
         """Construct and warm (header + .tbi prefetch) every expression data access
         object concurrently, so the first request pays no cold-start cost."""
 
-        async def _warm(resource: str) -> None:
-            try:
-                access = await self._get_resource_access(resource)
-                if hasattr(access, "warm"):
-                    await access.warm()
-            # swallowed by design, not omission: warm_all prefetches, it does not gate.
-            # verify_all_data_files() decides reachability (see Warm.ASYNC in the container).
-            except Exception as e:
-                logger.warning(f"Expression warm failed for {resource}: {e}")
-
-        await asyncio.gather(*(_warm(c["resource"]) for c in expression_data))
+        await self._warm_each("expression", self._get_resource_access, ((c["resource"],) for c in expression_data))
 
     async def stream_range(
         self,

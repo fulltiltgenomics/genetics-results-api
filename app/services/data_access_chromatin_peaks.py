@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import re
 from abc import abstractmethod
@@ -131,18 +130,7 @@ class DataAccessFactoryChromatinPeaks(BaseFactory):
                 f"Chromatin peaks data access object for resource '{resource}' not found in configuration"
             )
 
-    def get_implementation_class(self, data_source: str) -> type:
-        """Get the implementation class for the data source."""
-        if data_source == "gcloud":
-            from app.services.gcloud_tabix_chromatin_peaks_data_access import (
-                GCloudTabixDataAccessChromatinPeaks,
-            )
-
-            return GCloudTabixDataAccessChromatinPeaks
-        else:
-            raise ValueError(
-                f"Unknown data source '{data_source}' for chromatin peaks data"
-            )
+    implementations = {"gcloud": "app.services.gcloud_tabix_chromatin_peaks_data_access:GCloudTabixDataAccessChromatinPeaks"}
 
 
 class DataAccessChromatinPeaks(BaseDataAccess[DataAccessObjectChromatinPeaks]):
@@ -162,17 +150,7 @@ class DataAccessChromatinPeaks(BaseDataAccess[DataAccessObjectChromatinPeaks]):
         """Construct and warm (header + .tbi prefetch) every chromatin-peaks data
         access object concurrently, so the first request pays no cold-start cost."""
 
-        async def _warm(resource: str) -> None:
-            try:
-                access = await self._get_resource_access(resource)
-                if hasattr(access, "warm"):
-                    await access.warm()
-            # swallowed by design, not omission: warm_all prefetches, it does not gate.
-            # verify_all_data_files() decides reachability (see Warm.ASYNC in the container).
-            except Exception as e:
-                logger.warning(f"Chromatin-peaks warm failed for {resource}: {e}")
-
-        await asyncio.gather(*(_warm(c["resource"]) for c in chromatin_peaks_data))
+        await self._warm_each("chromatin peaks", self._get_resource_access, ((c["resource"],) for c in chromatin_peaks_data))
 
     async def stream_by_peak_id(
         self,

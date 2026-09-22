@@ -86,16 +86,7 @@ class DataAccessFactoryColoc(BaseFactory):
                 f"Coloc data access object for name '{name}' not found in configuration"
             )
 
-    def get_implementation_class(self, data_source: str) -> type:
-        """Get the implementation class for the data source."""
-        if data_source == "gcloud":
-            from app.services.gcloud_tabix_coloc_data_access import (
-                GCloudTabixDataAccessColoc,
-            )
-
-            return GCloudTabixDataAccessColoc
-        else:
-            raise ValueError(f"Unknown data source '{data_source}'")
+    implementations = {"gcloud": "app.services.gcloud_tabix_coloc_data_access:GCloudTabixDataAccessColoc"}
 
 
 class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
@@ -113,17 +104,7 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
         """Construct and warm (headers + .tbi prefetch) every coloc data access
         object concurrently, so the first request pays no cold-start cost."""
 
-        async def _warm(name: str) -> None:
-            try:
-                access = await self._get_resource_access(name)
-                if hasattr(access, "warm"):
-                    await access.warm()
-            # swallowed by design, not omission: warm_all prefetches, it does not gate.
-            # verify_all_data_files() decides reachability (see Warm.ASYNC in the container).
-            except Exception as e:
-                logger.warning(f"Coloc warm failed for {name}: {e}")
-
-        await asyncio.gather(*(_warm(c["name"]) for c in coloc))
+        await self._warm_each("coloc", self._get_resource_access, ((c["name"],) for c in coloc))
 
     # TODO can we manage the data with polars fast enough? this is very complex
     async def stream_coloc_by_variant(
@@ -538,9 +519,8 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
             )
             start = int(credible_set_id.split(":")[1].split("-")[0])
             end = int(credible_set_id.split(":")[1].split("-")[1].split("_")[0])
-            cs_number = int(
-                credible_set_id.split(":")[1].split("-")[1].split("_")[1]
-            )  # checking if format is correct
+            # the suffix is parsed only to reject a malformed id
+            int(credible_set_id.split(":")[1].split("-")[1].split("_")[1])
         except ValueError:
             raise DataException(f"Invalid credible set id: {credible_set_id}")
 
