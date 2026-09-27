@@ -126,6 +126,38 @@ data_files = [
         },
     },
     {
+        "id": "finngen_somascan",
+        "dataset_id": "finngen_somascan",
+        "resource": "finngen",
+        "data_source": "gcloud",
+        # per-trait files are named by aptamer id (trait_original), not by protein
+        "example_pheno_or_study": "seq.5231.79",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://daly-genetics-results/credible_sets/finngen_somascan/20251024/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
+            "suffix_95": ".SUSIE.munged.tsv",
+            "all_cs_file": "gs://daly-genetics-results/credible_sets/finngen_somascan/20251024/FinnGen_SomaScan_credible_sets.tsv.gz",
+            "all_cs_qtl_file": "gs://daly-genetics-results/credible_sets/finngen_somascan/20251024/FinnGen_SomaScan_credible_sets.qtl.tsv.gz",
+            "stats_file": "gs://daly-genetics-results/credible_sets/finngen_somascan/20251024/credible_set_stats.tsv",
+        },
+    },
+    {
+        "id": "decode_pqtl_2021",
+        "dataset_id": "decode_pqtl_2021",
+        "resource": "decode",
+        "data_source": "gcloud",
+        # pseudo credible sets (LD clumps, no stats_file); per-trait files are named by
+        # aptamer id (trait_original) like the FinnGen SomaScan ones, trait is the gene symbol
+        "example_pheno_or_study": "seq.16828.8",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://daly-genetics-results/credible_sets/decode_pseudo/",
+            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
+            "all_cs_file": "gs://daly-genetics-results/credible_sets/decode_pseudo/deCODE_pQTL_2021_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+            "all_cs_qtl_file": "gs://daly-genetics-results/credible_sets/decode_pseudo/deCODE_pQTL_2021_pseudo_credible_sets.mlog10p_2.r2_0.6.qtl.tsv.gz",
+        },
+    },
+    {
         "id": "ukbb_pqtl",
         "dataset_id": "ukbb_pqtl",
         "resource": "ukbb",
