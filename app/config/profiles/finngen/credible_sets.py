@@ -142,6 +142,22 @@ data_files = [
         },
     },
     {
+        "id": "decode_pqtl_2021",
+        "dataset_id": "decode_pqtl_2021",
+        "resource": "decode",
+        "data_source": "gcloud",
+        # pseudo credible sets (LD clumps, no stats_file); per-trait files are named by
+        # aptamer id (trait_original) like the FinnGen SomaScan ones, trait is the gene symbol
+        "example_pheno_or_study": "seq.16828.8",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/decode_pseudo/",
+            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/decode_pseudo/deCODE_pQTL_2021_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/decode_pseudo/deCODE_pQTL_2021_pseudo_credible_sets.mlog10p_2.r2_0.6.qtl.tsv.gz",
+        },
+    },
+    {
         "id": "ukbb_pqtl",
         "dataset_id": "ukbb_pqtl",
         "resource": "ukbb",

@@ -60,6 +60,9 @@ dataset_to_resource = {
     "PGC_SCZ_2022": ("pgc", "2022"),
     "GP2": ("gp2", "2025"),
     "IIBDGC": ("ibd_gwas", "2026"),
+    # the deCODE pQTL pseudo credible sets have their own file, so this entry is not a
+    # shared-file row filter; it is what resolves the `dataset` column to a resource
+    "deCODE_pQTL_2021": ("decode", "2021"),
 }
 
 dataset_mapping_files = [
