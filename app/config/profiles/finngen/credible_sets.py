@@ -126,6 +126,22 @@ data_files = [
         },
     },
     {
+        "id": "finngen_somascan",
+        "dataset_id": "finngen_somascan",
+        "resource": "finngen",
+        "data_source": "gcloud",
+        # per-trait files are named by aptamer id (trait_original), not by protein
+        "example_pheno_or_study": "seq.5231.79",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_somascan/20251024/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
+            "suffix_95": ".SUSIE.munged.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_somascan/20251024/FinnGen_SomaScan_credible_sets.tsv.gz",
+            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_somascan/20251024/FinnGen_SomaScan_credible_sets.qtl.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_somascan/20251024/credible_set_stats.tsv",
+        },
+    },
+    {
         "id": "ukbb_pqtl",
         "dataset_id": "ukbb_pqtl",
         "resource": "ukbb",
