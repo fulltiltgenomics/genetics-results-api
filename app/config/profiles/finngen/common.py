@@ -13,58 +13,6 @@ gnomad = {
     "version": "4.0",
 }
 
-# TODO migrate dataset_to_resource to datasets.yaml — the YAML has pattern-based
-# dataset_to_resource_rules but not the exact BQ dataset name -> (resource, version)
-# mapping that dataset_mapping.py needs. Keep hardcoded until YAML schema supports it.
-# Until then resource and version are copied from the registry entry that owns each
-# `dataset` value (genetics-results-db's BQ_DATASETS_BY_DATASET_ID is the link), so a
-# registry change has to be mirrored here by hand.
-dataset_to_resource = {
-    "FinnGen_ATACseq": ("finngen", "batch1-5"),
-    "FinnGen_snRNAseq": ("finngen", "batch1-5"),
-    "FinnGen_Olink": ("finngen", "3K"),
-    "FinnGen_Olink_3K": ("finngen", "3K"),
-    "FinnGen_Olink_5K": ("finngen", "5K"),
-    "FinnGen_SomaScan": ("finngen", "batch1-2"),
-    "FinnGen_R14": ("finngen", "R14"),
-    "FinnGen_R13_MVP_UKBB": ("finngen_mvp_ukbb", "R13"),
-    "FinnGen_R13_MVP_UKBB_labs": ("finngen_mvp_ukbb", "R13"),
-    "FinnGen_R13_UKBB": ("finngen_ukbb", "R13"),
-    "FinnGen_R13_UKBB_labs": ("finngen_ukbb", "R13"),
-    "FinnGen_R12": ("finngen", "R12"),
-    "FinnGen_kanta": ("finngen", "R14"),
-    "FinnGen_drugs": ("finngen", "R12"),
-    "FinnGen_NMR": ("finngen", "NA"),
-    "FinnLiver": ("finnliver", "NA"),
-    "GeneRisk": ("generisk", "NA"),
-    "INTERVAL": ("interval", "NA"),
-    "UKB_PPP": ("ukbb", "PPP"),
-    "UKB_Finucane": ("ukbb", "NA"),
-    # NOT the ukbb resource despite the UKBB prefix: the GWAS is an EstBB + UK Biobank
-    # meta-analysis, and only its fine-mapping is UKBB-only
-    "nmr_ukbb_est": ("nmr_ukbb_est", "2026"),
-    "Open_Targets_26.06": ("open_targets", "26.06"),
-    "GTEx_v10": ("gtex", "v10"),
-    "HPA_24.1": ("hpa", "v24.1"),
-    "genebass": ("genebass", "NA"),
-    "BRaVa": ("brava", "2026"),
-    "IBD_exome": ("ibd_exome_2026", "2026"),
-    # external pseudo credible sets share the ext_pseudo combined file; these map
-    # each combined-file `dataset` column value to its resource so per-row
-    # attribution keeps the right rows in shared-file range/variant credible-set
-    # queries (without an entry the rows resolve to "unknown" and are dropped).
-    # PGC's combined value can't distinguish pgc_scz (wave3) from pgc_bip (2024);
-    # the resource is what matters for filtering, the version is best-effort metadata.
-    "COVID19_HGI": ("covid_hgi", "R7"),
-    "PGC": ("pgc", "wave3"),
-    "PGC_SCZ_2022": ("pgc", "2022"),
-    "GP2": ("gp2", "2025"),
-    "IIBDGC": ("ibd_gwas", "2026"),
-    # the deCODE pQTL pseudo credible sets have their own file, so this entry is not a
-    # shared-file row filter; it is what resolves the `dataset` column to a resource
-    "deCODE_pQTL_2021": ("decode", "2021"),
-}
-
 dataset_mapping_files = [
     (
         "gs://finngen-commons/results_api_data/mapping_files/eqtl_catalogue_r8_dataset_metadata.tsv",

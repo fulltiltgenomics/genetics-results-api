@@ -30,6 +30,7 @@ router = APIRouter()
                     "example": [
                         {
                             "dataset_id": "finngen_gwas",
+                            "dataset": "FinnGen_R14",
                             "resource": "finngen",
                             "version": "R13",
                             "description": "FinnGen R13 core GWAS ...",
@@ -158,6 +159,11 @@ def _catalogue(
         qtl_types = entry.get("qtl_types") or qtl_type_map.get(entry.get("data_type", ""))
         if qtl_types:
             item["qtl_types"] = qtl_types
+        # the `dataset` column value of this dataset's rows - the literal a `WHERE dataset =`
+        # filter needs, which the registry id is not; a list where one entry appears under
+        # two labels across views. Absent for data that carries no label
+        if entry.get("dataset") is not None:
+            item["dataset"] = entry["dataset"]
         if entry.get("n_samples") is not None:
             item["n_samples"] = entry["n_samples"]
         if entry.get("n_phenotypes") is not None:

@@ -10,6 +10,29 @@ See docs/datasets-yaml-schema.md for full field documentation.
 from app.config.yaml_loader import datasets
 
 
+def _dataset_to_resource(registry: dict[str, dict]) -> dict[str, tuple[str, str]]:
+    """`dataset` column value -> (resource, version), from each entry's `dataset` field.
+
+    The label is what the munged files carry in their `dataset` column, so this is how a row
+    is attributed to a resource; rows whose label has no entry resolve to "unknown" and are
+    dropped from shared-file range queries. Where several entries share a label (pgc_scz +
+    pgc_bip are both "PGC"; finngen_kanta and finngen_kanta_r12 are both "FinnGen_kanta") the
+    first entry in registry order wins, so the version is the current release's and the
+    resource - the part that matters for filtering - is the same either way.
+    """
+    mapping: dict[str, tuple[str, str]] = {}
+    for entry in registry.values():
+        labels = entry.get("dataset")
+        if labels is None:
+            continue
+        for label in labels if isinstance(labels, list) else [labels]:
+            mapping.setdefault(label, (entry["resource"], str(entry.get("version"))))
+    return mapping
+
+
+dataset_to_resource = _dataset_to_resource(datasets)
+
+
 def get_dataset(dataset_id: str) -> dict | None:
     """Return registry entry for a dataset_id, or None if not found."""
     return datasets.get(dataset_id)
