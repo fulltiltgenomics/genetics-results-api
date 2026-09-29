@@ -68,7 +68,18 @@ def _load_and_harmonize(dataset_id: str, entry: dict) -> list[dict] | None:
     if not config:
         return None
 
-    metadata_file = entry["metadata_file"]
+    metadata_file = config["metadata"]["metadata_file"]
+    if metadata_file.startswith("catalog://"):
+        from app.services.data_access import _read_metadata_file
+
+        raw = _read_metadata_file(metadata_file)
+        if not raw:
+            return None
+        harmonized = MetadataHarmonizer().harmonize_metadata(
+            entry.get("resource", dataset_id), raw, config
+        )
+        return [h.to_dict() for h in harmonized]
+
     compression = (
         "gzip"
         if metadata_file.endswith(".gz") or metadata_file.endswith(".bgz")
@@ -108,7 +119,7 @@ def get_dataset_stats(
         return None
 
     entry = _registry.get(dataset_id)
-    if not entry or not entry.get("metadata_file"):
+    if not entry or not build_harmonizer_config(dataset_id):
         _misses.add(dataset_id)
         return None
 
@@ -127,3 +138,9 @@ def clear_cache() -> None:
     """Clear the stats cache (useful for tests)."""
     _stats_cache.clear()
     _misses.clear()
+
+
+def invalidate(dataset_id: str) -> None:
+    """Forget one dataset's stats so the next request recomputes them (its source changed)."""
+    _stats_cache.pop(dataset_id, None)
+    _misses.discard(dataset_id)

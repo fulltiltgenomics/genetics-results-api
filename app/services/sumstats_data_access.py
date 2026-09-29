@@ -41,6 +41,8 @@ class SumstatsDataAccess(GCloudTabixBase):
         # defer GCloudTabixBase init — it creates aiohttp objects that need an event loop
         self._initialized = False
         self._header_cache: dict[str, list[bytes]] = {}
+        # whole unindexed objects, widened, keyed by path (an HLA run is ~5 KB)
+        self._unindexed_cache: dict[str, tuple[list[bytes], list[list[bytes]]]] = {}
 
     def _ensure_initialized(self):
         if not self._initialized:
@@ -66,24 +68,79 @@ class SumstatsDataAccess(GCloudTabixBase):
                     return False
                 raise
 
-    def _get_file_path(self, data_file_config: dict, phenotype: str) -> str:
+    def _get_file_path(self, data_file_config: dict, phenotype: str) -> str | None:
+        """The object a (config, phenotype) reads; None when a catalog has no such run."""
         if "file" in data_file_config:
             return data_file_config["file"]
         # phenotype comes straight from the request; without this it can traverse out of the
         # configured prefix (and out of the bucket) into any object the workload SA can read
         validate_path_component(phenotype)
+        if "catalog" in data_file_config:
+            from app.services.custom_gwas_catalog import get_catalog
+
+            catalog = get_catalog(data_file_config["catalog"])
+            if data_file_config.get("catalog_product") == "hla":
+                return catalog.hla_path(phenotype)
+            return catalog.sumstats_path(phenotype)
         return f"{data_file_config['prefix']}{phenotype}{data_file_config['suffix']}"
 
     def get_file_header(self, data_file_config: dict, phenotype: str) -> list[bytes]:
         """Get and cache the raw file header for a data file config."""
         self._ensure_initialized()
-        cache_key = data_file_config["id"]
+        gs_path = self._get_file_path(data_file_config, phenotype)
+        # a prefix/suffix config's files share one header; a catalog's do not (the
+        # pipeline writes case/control frequencies for binary traits only), so those
+        # are cached per object
+        cache_key = gs_path if "catalog" in data_file_config else data_file_config["id"]
         if cache_key in self._header_cache:
             return self._header_cache[cache_key]
-        gs_path = self._get_file_path(data_file_config, phenotype)
         header = self._get_header(gs_path)
         self._header_cache[cache_key] = header
         return header
+
+    async def _unindexed_file(
+        self, data_file_config: dict, gs_path: str
+    ) -> tuple[list[bytes], list[list[bytes]]]:
+        """Read a whole unindexed object and apply the config's widening transform."""
+        cached = self._unindexed_cache.get(gs_path)
+        if cached is not None:
+            return cached
+        from app.services.custom_gwas_hla import UNINDEXED_TRANSFORMS, parse_gzip_tsv
+
+        transform = UNINDEXED_TRANSFORMS[data_file_config["unindexed"]]
+        header, rows = transform(*parse_gzip_tsv(await self._fetch_full(gs_path)))
+        self._unindexed_cache[gs_path] = (header, rows)
+        return header, rows
+
+    async def _stream_unindexed(
+        self,
+        data_file_config: dict,
+        gs_path: str,
+        chrs: list[int],
+        starts: list[int],
+        ends: list[int],
+    ) -> AsyncGenerator[bytes, None]:
+        """The rows of an unindexed object inside the regions, as one chunk of lines
+        (the same shape a tabix range read yields: data lines only)."""
+        header, rows = await self._unindexed_file(data_file_config, gs_path)
+        chr_idx = header.index(b"chrom")
+        pos_idx = header.index(b"pos")
+        regions = list(zip(chrs, starts, ends))
+
+        def _inside(row: list[bytes]) -> bool:
+            try:
+                chrom, pos = int(row[chr_idx]), int(row[pos_idx])
+            except (ValueError, IndexError):
+                return False
+            return any(c == chrom and s <= pos <= e for c, s, e in regions)
+
+        payload = b"".join(b"\t".join(r) + b"\n" for r in rows if _inside(r))
+
+        async def _gen() -> AsyncGenerator[bytes, None]:
+            if payload:
+                yield payload
+
+        return _gen()
 
 
     async def stream_sumstats(
@@ -211,7 +268,11 @@ class SumstatsDataAccess(GCloudTabixBase):
             else:
                 effective_phenotypes = phenotypes
             for phenotype in effective_phenotypes:
-                candidates.append((df_config, phenotype, self._get_file_path(df_config, phenotype)))
+                gs_path = self._get_file_path(df_config, phenotype)
+                if gs_path is None:
+                    logger.info(f"Phenotype {phenotype} not in catalog {df_config['id']}")
+                    continue
+                candidates.append((df_config, phenotype, gs_path))
 
         # one round trip per candidate, so a PheWAS over hundreds of phenotypes against
         # several configs is thousands of them; concurrently they cost one round trip
@@ -225,7 +286,10 @@ class SumstatsDataAccess(GCloudTabixBase):
                 continue
 
             try:
-                file_header = self.get_file_header(df_config, phenotype)
+                if df_config.get("unindexed"):
+                    file_header, _ = await self._unindexed_file(df_config, gs_path)
+                else:
+                    file_header = self.get_file_header(df_config, phenotype)
             except Exception as e:
                 logger.warning(
                     f"Skipping {phenotype} for {df_config['id']}: header fetch failed: {e}"
@@ -253,8 +317,10 @@ class SumstatsDataAccess(GCloudTabixBase):
         # files one by one would serialise those loads however parallel the loader is
         raw_streams = await asyncio.gather(
             *(
-                self._stream_range(gs_path, chrs, starts, ends, in_chunk_size)
-                for _, _, gs_path, _ in contributions
+                self._stream_unindexed(df_config, gs_path, chrs, starts, ends)
+                if df_config.get("unindexed")
+                else self._stream_range(gs_path, chrs, starts, ends, in_chunk_size)
+                for df_config, _, gs_path, _ in contributions
             ),
             return_exceptions=True,
         )

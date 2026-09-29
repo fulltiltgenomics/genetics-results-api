@@ -73,6 +73,8 @@ class MetadataHarmonizer:
             return self._harmonize_open_targets(raw_metadata, harm_config)
         elif harm_type == "genebass":
             return self._harmonize_genebass(raw_metadata, harm_config)
+        elif harm_type == "custom_gwas":
+            return self._harmonize_custom_gwas(raw_metadata, harm_config)
         else:
             logger.warning(f"Unknown harmonization type: {harm_type}")
             return []
@@ -300,6 +302,55 @@ class MetadataHarmonizer:
                 logger.error(f"Error harmonizing pheweb item: {e}")
                 continue
 
+        return harmonized
+
+    def _harmonize_custom_gwas(
+        self, raw_metadata: list[dict], config: dict
+    ) -> list[HarmonizedMetadata]:
+        """Harmonize the rows a custom GWAS catalog builds from each run's metadata.json.
+
+        Trait type comes from the pipeline's `pheno_coding` (`binary`, or `continuous` /
+        `quantitative` for a quantitative trait, which REGENIE records with every sample
+        as a case and no controls). A run whose metadata could not be read keeps "NA"
+        sizes rather than 0, since 0 would read as a measured count. `date` is the day
+        the run was written, falling back to the config's `publication_date`.
+        """
+        harmonized = []
+        author = config.get("author", "")
+        pub_date = config.get("publication_date", "")
+        version = config.get("version_label", "")
+        resource = config.get("resource", "")
+
+        for item in raw_metadata:
+            coding = (item.get("pheno_coding") or "").lower()
+            trait_type = "binary" if coding == "binary" else "quantitative"
+            n_cases = item.get("num_cases")
+            n_controls = item.get("num_controls")
+            if not isinstance(n_cases, int):
+                n_cases = "NA"
+            if not isinstance(n_controls, int):
+                n_controls = "NA"
+            if trait_type == "quantitative":
+                n_samples = n_cases
+                n_controls = 0 if n_cases != "NA" else "NA"
+            elif n_cases != "NA" and n_controls != "NA":
+                n_samples = n_cases + n_controls
+            else:
+                n_samples = "NA"
+            harmonized.append(
+                HarmonizedMetadata(
+                    phenotype_code=item.get("phenocode", ""),
+                    phenotype_string=item.get("phenostring") or item.get("phenocode", ""),
+                    n_samples=n_samples,
+                    n_cases=n_cases,
+                    n_controls=n_controls,
+                    trait_type=trait_type,
+                    author=author,
+                    date=item.get("date") or pub_date,
+                    resource=resource,
+                    version=version,
+                )
+            )
         return harmonized
 
     def _harmonize_eqtl_catalogue(

@@ -37,7 +37,7 @@ def _build_sumstats_header_schema(
     int_columns = {"chr", "pos"}
     float_columns = {
         "pval", "mlog10p", "beta", "se", "af", "af_cases", "af_controls",
-        "het_p", "fg_beta", "fg_se", "fg_pval", "fg_af",
+        "info", "het_p", "fg_beta", "fg_se", "fg_pval", "fg_af",
         "mvp_eur_beta", "mvp_eur_se", "mvp_eur_pval", "mvp_eur_af",
         "mvp_afr_beta", "mvp_afr_se", "mvp_afr_pval", "mvp_afr_af",
         "mvp_amr_beta", "mvp_amr_se", "mvp_amr_pval", "mvp_amr_af",

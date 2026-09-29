@@ -665,4 +665,62 @@ data_files = [
             "info": "info",
         },
     },
+
+    # sandbox custom GWAS, one entry per release, resolved through the release's bucket
+    # catalog rather than a prefix/suffix (see app/config/profiles/finngen/custom_gwas.py).
+    # Column sets differ between and within releases (R12 has no `info`, R13 no case/control
+    # frequencies, a continuous trait none either), so the headers are read per file and
+    # the mapping lists the union; a column a file lacks is served as NA
+    *[
+        {
+            "id": f"{release}_sumstats",
+            "dataset_id": f"{release}_gwas",
+            "resource": release,
+            "data_source": "gcloud",
+            "catalog": release,
+            "catalog_product": "sumstats",
+            "column_mapping": {
+                "chrom": "chr",
+                "pos": "pos",
+                "ref": "ref",
+                "alt": "alt",
+                "pval": "pval",
+                "mlogp": "mlog10p",
+                "beta": "beta",
+                "sebeta": "se",
+                "af_alt": "af",
+                "af_alt_cases": "af_cases",
+                "af_alt_controls": "af_controls",
+                "info": "info",
+            },
+        }
+        for release in ("finngen_custom_r14", "finngen_custom_r13", "finngen_custom_r12")
+    ],
+    {
+        # the R14 pipeline's HLA run on a custom phenotype: the same anchors and alleles as
+        # the core finngen_hla files, but written as a plain gzip with `ref='<absent>'` and
+        # the allele in `alt`, and no tabix index. `unindexed` makes SumstatsDataAccess read
+        # the whole (5 KB) object and `hla_allele` widens it into gene/allele columns
+        "id": "finngen_custom_r14_hla_sumstats",
+        "dataset_id": "finngen_custom_r14_hla",
+        "resource": "finngen_custom_r14",
+        "data_source": "gcloud",
+        "catalog": "finngen_custom_r14",
+        "catalog_product": "hla",
+        "unindexed": "hla_allele",
+        "column_mapping": {
+            "chrom": "chr",
+            "pos": "pos",
+            "gene": "gene",
+            "allele": "allele",
+            "pval": "pval",
+            "mlogp": "mlog10p",
+            "beta": "beta",
+            "sebeta": "se",
+            "af_alt": "af",
+            "af_alt_cases": "af_cases",
+            "af_alt_controls": "af_controls",
+            "info": "info",
+        },
+    },
 ]

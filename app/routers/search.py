@@ -161,6 +161,12 @@ async def search_autocomplete(
         default=False,
         description="If true, drop phenotype results that have no credible sets available",
     ),
+    resources: str | None = Query(
+        default=None,
+        description="Comma-separated resources to restrict phenotype results to. Required to "
+        "reach an on_request resource (a sandbox custom GWAS release such as "
+        "finngen_custom_r14), whose phenotypes a search without it never returns",
+    ),
     search_index: SearchIndex = Depends(get_search_index),
 ):
     """
@@ -195,6 +201,10 @@ async def search_autocomplete(
                     detail=f"Invalid types: {invalid}. Valid types: {valid_types}",
                 )
 
+        resource_list = (
+            [r.strip() for r in resources.split(",") if r.strip()] if resources else None
+        )
+
         # split query by comma and search for each term
         query_terms = [term.strip() for term in q.split(",") if term.strip()]
         if not query_terms:
@@ -204,7 +214,13 @@ async def search_autocomplete(
         seen_ids = set()
         results = []
         for term in query_terms:
-            term_results = search_index.search(query=term, limit=limit, types=type_list, gencode_version=gencode_version)
+            term_results = search_index.search(
+                query=term,
+                limit=limit,
+                types=type_list,
+                gencode_version=gencode_version,
+                resources=resource_list,
+            )
             for result in term_results:
                 # use code (phenotype) or symbol (gene) as unique identifier;
                 # include resource AND data_type so a phenotype shared across

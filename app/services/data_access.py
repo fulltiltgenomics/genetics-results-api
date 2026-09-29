@@ -70,6 +70,11 @@ def _read_metadata_file(metadata_file: str) -> list[dict[str, Any]]:
     than surfaced. The whole read happens inside the retried closure so a retry
     re-opens the file.
     """
+    if metadata_file.startswith("catalog://"):
+        from app.services.custom_gwas_catalog import get_catalog
+
+        return get_catalog(metadata_file[len("catalog://") :]).metadata_rows()
+
     compression = (
         "gzip" if metadata_file.endswith((".gz", ".bgz")) else None
     )
@@ -239,7 +244,10 @@ class DataAccessFactory(BaseFactory):
             raise ValueError(f"Data file '{data_file_id}' not found in configuration")
         return data_file_by_id[data_file_id]
 
-    implementations = {"gcloud": "app.services.gcloud_tabix_data_access:GCloudTabixDataAccess"}
+    implementations = {
+        "gcloud": "app.services.gcloud_tabix_data_access:GCloudTabixDataAccess",
+        "custom_gwas_finemap": "app.services.custom_gwas_finemap_data_access:CustomGwasFinemapDataAccess",
+    }
 
 
 class DataAccess(BaseDataAccess[DataAccessObject]):
@@ -407,6 +415,12 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
 
         _harmonized_metadata_cache[cache_key] = all_harmonized
         return all_harmonized
+
+    @staticmethod
+    def invalidate_metadata_cache(resource: str) -> None:
+        """Drop the cached harmonized metadata of one resource (its source changed)."""
+        for key in [k for k in _harmonized_metadata_cache if k[0] == resource]:
+            del _harmonized_metadata_cache[key]
 
     async def stream_phenotype(
         self,

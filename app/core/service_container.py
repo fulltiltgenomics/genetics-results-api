@@ -163,6 +163,26 @@ def _register_services():
         from app.services.data_access import DataAccess
         return DataAccess()
 
+    def create_custom_gwas_catalogs():
+        from app.services.custom_gwas_catalog import CustomGwasCatalogs
+
+        catalogs = CustomGwasCatalogs()
+
+        async def _on_change(catalog):
+            # a refresh found runs added or removed: everything derived from the listing
+            # (metadata, dataset stats, the search index's phenotypes) is rebuilt
+            from app.services import dataset_stats
+            from app.services.data_access import DataAccess
+
+            DataAccess.invalidate_metadata_cache(catalog.resource)
+            for dataset_id in (catalog.gwas_dataset_id, catalog.hla_dataset_id):
+                if dataset_id:
+                    dataset_stats.invalidate(dataset_id)
+            await asyncio.to_thread(container.get("search_index").reload_phenotypes)
+
+        catalogs.on_change(_on_change)
+        return catalogs
+
     def create_data_access_coloc():
         from app.services.data_access_coloc import DataAccessColoc
         return DataAccessColoc()
@@ -267,6 +287,7 @@ def _register_services():
     )
     container.register("search_index", create_search_index, Warm.THREAD)
     container.register("data_access", create_data_access, Warm.ASYNC)
+    container.register("custom_gwas_catalogs", create_custom_gwas_catalogs, Warm.ASYNC)
     container.register("data_access_coloc", create_data_access_coloc, Warm.ASYNC)
     container.register("data_access_expression", create_data_access_expression, Warm.ASYNC)
     container.register(

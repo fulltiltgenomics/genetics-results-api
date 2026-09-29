@@ -22,8 +22,27 @@ def build_harmonizer_config(dataset_id: str) -> dict | None:
     dataset has no metadata_file.
     """
     entry = datasets.get(dataset_id)
-    if not entry or not entry.get("metadata_file"):
+    if not entry:
         return None
+    if not entry.get("metadata_file"):
+        # a sandbox custom GWAS dataset has no metadata file: its rows come from the
+        # release's bucket catalog, addressed by the `catalog://` scheme that
+        # data_access._read_metadata_file resolves
+        from app.config.custom_gwas import release_for_dataset
+
+        release = release_for_dataset(dataset_id)
+        if release is None:
+            return None
+        return {
+            "metadata": {
+                "type": "custom_gwas",
+                "author": entry.get("author"),
+                "publication_date": entry.get("publication_date"),
+                "version_label": entry.get("version"),
+                "metadata_file": f"catalog://{release['id']}",
+                "resource": entry.get("resource"),
+            }
+        }
     return {
         "metadata": {
             "type": entry.get("metadata_harmonizer"),

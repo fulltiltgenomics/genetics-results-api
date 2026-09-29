@@ -174,6 +174,33 @@ def get_datasets() -> dict[str, dict]:
     return _dataset_registry
 
 
+def is_on_request(dataset_id: str) -> bool:
+    """Whether the registry marks the dataset `on_request`: served only when a request
+    names its resource, and kept out of every default listing and search."""
+    entry = _dataset_registry.get(dataset_id) or {}
+    return entry.get("on_request") is True
+
+
+def on_request_resources() -> set[str]:
+    """Resources every one of whose datasets is `on_request`.
+
+    A resource is the unit the search index and the catalogue gate on, so a resource
+    mixing on-request and ordinary datasets is refused at load rather than half-hidden.
+    """
+    by_resource: dict[str, set[bool]] = {}
+    for dataset_id, entry in _dataset_registry.items():
+        by_resource.setdefault(entry.get("resource", dataset_id), set()).add(
+            is_on_request(dataset_id)
+        )
+    mixed = sorted(r for r, flags in by_resource.items() if flags == {True, False})
+    if mixed:
+        raise ValueError(
+            f"resources mixing on_request and ordinary datasets: {mixed}; "
+            "the flag gates a whole resource"
+        )
+    return {r for r, flags in by_resource.items() if flags == {True}}
+
+
 def dataset_products(dataset_id: str) -> dict:
     """Determine which products a dataset supports (credible sets, summary stats, colocalization)."""
     products: dict = {}

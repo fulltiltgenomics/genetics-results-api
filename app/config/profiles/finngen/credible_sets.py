@@ -326,4 +326,23 @@ data_files = [
             "stats_file": "gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026/credible_set_stats.tsv",
         },
     },
+    # sandbox custom GWAS fine-mapping, read from the pipeline's own SuSiE outputs and
+    # translated to the served columns on the way out (custom_gwas_finemap_data_access.py).
+    # No combined file, so these resources answer per-phenotype queries only; the entry id
+    # is the dataset id because that is what dataset_products() keys on
+    *[
+        {
+            "id": f"{release}_gwas",
+            "dataset_id": f"{release}_gwas",
+            "resource": release,
+            "data_source": "custom_gwas_finemap",
+            "example_pheno_or_study": example,
+            "cs": {"catalog": release},
+        }
+        for release, example in (
+            ("finngen_custom_r14", "AIH"),
+            ("finngen_custom_r13", "ABSOLUTEINT"),
+            ("finngen_custom_r12", "AAGWASREFINEDSYC21APR2025"),
+        )
+    ],
 ]

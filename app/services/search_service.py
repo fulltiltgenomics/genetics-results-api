@@ -7,7 +7,11 @@ from rapidfuzz import fuzz, process
 
 from app.config.credible_sets import get_credible_set_resources_and_types
 from app.config.summary_stats import get_available_resources_and_types
-from app.services.config_util import get_datasets, get_resources_with_metadata
+from app.services.config_util import (
+    get_datasets,
+    get_resources_with_metadata,
+    on_request_resources,
+)
 
 if TYPE_CHECKING:
     from app.services.data_access import DataAccess
@@ -82,6 +86,10 @@ class SearchIndex:
         self.phenotypes = []
         self.genes = []
         self.search_items = []
+        # phenotypes of `on_request` resources (users' own sandbox GWAS runs): indexed, but
+        # searched only when the request names their resource, so they never stand next to
+        # release phenotypes in a default search
+        self.on_request_items = []
         # hgnc_id -> gene record, the single bridge from HGNC ids (used by
         # GeneGroupService) back to symbol/ensembl/coords already loaded here
         self.genes_by_hgnc_id: dict[str, dict] = {}
@@ -102,8 +110,43 @@ class SearchIndex:
             f"Search index initialized: {len(self.phenotypes)} phenotypes, {len(self.genes)} genes"
         )
 
-    def _load_phenotypes(self):
-        """Load phenotypes from all metadata files"""
+    def reload_phenotypes(self):
+        """Rebuild the phenotype half of the index (a metadata source changed).
+
+        Built into fresh lists and swapped in whole, so a search running on the loop
+        meanwhile sees either the old index or the new one, never a half-filled list.
+        """
+        phenotypes: list = []
+        search_items: list = []
+        on_request_items: list = []
+        self._load_phenotypes(phenotypes, search_items, on_request_items)
+        search_items.extend(
+            item for item in self.search_items if item["item"]["type"] == "gene"
+        )
+        self.phenotypes = phenotypes
+        self.search_items = search_items
+        self.on_request_items = on_request_items
+        logger.info(f"Search index phenotypes reloaded: {len(phenotypes)} phenotypes")
+
+    def _load_phenotypes(
+        self,
+        phenotypes: list | None = None,
+        search_items: list | None = None,
+        on_request_items: list | None = None,
+    ):
+        """Load phenotypes from all metadata files into the given lists (the index's own
+        by default; reload_phenotypes passes fresh ones to swap in whole)"""
+        if phenotypes is None:
+            phenotypes = self.phenotypes
+        if search_items is None:
+            search_items = self.search_items
+        if on_request_items is None:
+            # setdefault: tests build the index with __new__ and set only the older lists
+            on_request_items = self.__dict__.setdefault("on_request_items", [])
+        on_request = on_request_resources()
+
+        def _items_for(resource: str) -> list:
+            return on_request_items if resource in on_request else search_items
         if self._data_access is None:
             from app.services.data_access import DataAccess
             self._data_access = DataAccess()
@@ -161,7 +204,7 @@ class SearchIndex:
                                 name.lower(),
                             ],
                         }
-                        self.phenotypes.append(phenotype)
+                        phenotypes.append(phenotype)
                         # index code and name as SEPARATE search keys (mirrors how genes are
                         # indexed below). matching the query against a combined "{code} {name}"
                         # blob let a long phenotype name dilute the fuzzy score: e.g. WRatio of
@@ -169,11 +212,11 @@ class SearchIndex:
                         # under the 60 cutoff, so the main asthma endpoint was dropped entirely —
                         # while WRatio vs the name alone is 75. search() dedups by item id, so the
                         # best-scoring field wins.
-                        self.search_items.append(
+                        _items_for(resource).append(
                             {"item": phenotype, "search_key": code, "primary": code}
                         )
                         if name.lower() != code.lower():
-                            self.search_items.append(
+                            _items_for(resource).append(
                                 {"item": phenotype, "search_key": name, "primary": code}
                             )
 
@@ -208,13 +251,13 @@ class SearchIndex:
                         "has_credible_sets": (resource, data_type) in _CREDIBLE_SETS_PAIRS,
                         "search_strings": [code.lower(), name.lower()],
                     }
-                    self.phenotypes.append(phenotype)
+                    phenotypes.append(phenotype)
                     # separate code/name keys, as above (avoid blob-dilution of the fuzzy score)
-                    self.search_items.append(
+                    _items_for(resource).append(
                         {"item": phenotype, "search_key": code, "primary": code}
                     )
                     if name.lower() != code.lower():
-                        self.search_items.append(
+                        _items_for(resource).append(
                             {"item": phenotype, "search_key": name, "primary": code}
                         )
 
@@ -392,6 +435,7 @@ class SearchIndex:
         limit: int = 10,
         types: list[Literal["phenotypes", "genes"]] | None = None,
         gencode_version: int | None = None,
+        resources: list[str] | None = None,
     ) -> list[dict]:
         """
         Search for phenotypes and genes with fuzzy matching.
@@ -402,6 +446,8 @@ class SearchIndex:
             types: Filter by types (None = both)
             gencode_version: Optional gencode version for gene coordinates.
                 When provided and different from default, re-looks up coordinates.
+            resources: Restrict phenotype results to these resources. Naming an
+                `on_request` resource is the only way its phenotypes are searched at all.
 
         Returns:
             List of matching items with scores and match types
@@ -411,17 +457,29 @@ class SearchIndex:
 
         query = query.strip()
 
+        if resources:
+            wanted = set(resources)
+            candidates = [
+                item
+                for item in self.search_items
+                if item["item"]["type"] != "phenotype" or item["item"].get("resource") in wanted
+            ] + [
+                item for item in self.on_request_items if item["item"].get("resource") in wanted
+            ]
+        else:
+            candidates = self.search_items
+
         # filter search items by type
         if types:
             filtered_items = []
-            for search_item in self.search_items:
+            for search_item in candidates:
                 item_type = search_item["item"]["type"]
                 if (item_type == "phenotype" and "phenotypes" in types) or (
                     item_type == "gene" and "genes" in types
                 ):
                     filtered_items.append(search_item)
         else:
-            filtered_items = self.search_items
+            filtered_items = candidates
 
         if not filtered_items:
             return []

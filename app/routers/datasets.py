@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
 from app.config import common as common_config
+from app.config.datasets import build_harmonizer_config
 from app.dependencies import get_data_access
 from app.services import config_util, dataset_stats
 from app.services.data_access import DataAccess
@@ -80,11 +81,54 @@ async def list_datasets(
 
     `qtl_types`, `n_phenotypes`, `n_samples`, `pseudo_credible_sets` and `collection`
     are present only for datasets that define them."""
+    return JSONResponse(
+        content=_catalogue(resource, data_type, include_stats, False, data_access)
+    )
+
+
+@router.get(
+    "/datasets/on_request",
+    summary="The on-request datasets, whatever their resource",
+    responses={
+        200: {"description": "The datasets the general catalogue hides, in its item shape"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def list_on_request_datasets(
+    resource: str | None = Query(
+        default=None, description="Optional: filter to datasets for a specific resource"
+    ),
+    include_stats: bool = Query(default=False, description="Whether to include aggregate stats"),
+    data_access: DataAccess = Depends(get_data_access),
+):
+    """Exactly the datasets `/datasets` hides unless their resource is named — for a
+    deployment's chat backend to learn which such resources it serves, never a catalogue
+    for the model. A route of its own rather than a flag on `/datasets`, so a caller
+    reaching a results-api too old to know it gets 404 and not the whole catalogue."""
+    return JSONResponse(
+        content=_catalogue(resource, None, include_stats, True, data_access)
+    )
+
+
+def _catalogue(
+    resource: str | None,
+    data_type: str | None,
+    include_stats: bool,
+    on_request: bool,
+    data_access: DataAccess,
+) -> list[dict]:
     registry = config_util.get_datasets()
 
     results = []
     for dataset_id, entry in registry.items():
         if resource and entry.get("resource") != resource:
+            continue
+        # an on_request dataset (a sandbox custom GWAS release) is listed only to a
+        # request that asks for its resource by name, never in the general catalogue
+        flagged = config_util.is_on_request(dataset_id)
+        if on_request and not flagged:
+            continue
+        if not on_request and flagged and entry.get("resource") != resource:
             continue
         if data_type and entry.get("data_type") != data_type:
             continue
@@ -124,7 +168,7 @@ async def list_datasets(
             item["collection"] = True
             item["subdataset_id_field"] = entry.get("subdataset_id_field")
 
-        if include_stats and entry.get("metadata_file"):
+        if include_stats and build_harmonizer_config(dataset_id):
             stats = dataset_stats.get_dataset_stats(dataset_id, data_access)
             if stats:
                 item["stats"] = stats
@@ -132,7 +176,7 @@ async def list_datasets(
 
         results.append(item)
 
-    return JSONResponse(content=results)
+    return results
 
 
 @router.get(
