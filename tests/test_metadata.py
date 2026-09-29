@@ -54,6 +54,30 @@ class TestResourceMetadata:
             data = response.json()
             assert len(data) > 0, f"No metadata for resource: {resource}"
 
+    def test_resource_metadata_phenotype_filter(self, server_url, resources_with_metadata):
+        """`phenotypes` narrows a resource to the named codes, so one trait of a large
+        resource is reachable without paging through every row."""
+        if not resources_with_metadata:
+            pytest.skip("No resources with metadata available")
+        resource = resources_with_metadata[0]
+        rows = requests.get(
+            f"{server_url}/api/v1/resource_metadata/{resource}", params={"format": "json"}, timeout=30
+        ).json()
+        code = rows[-1]["phenotype_code"]
+        r = requests.get(
+            f"{server_url}/api/v1/resource_metadata/{resource}",
+            params={"format": "json", "phenotypes": f"{code},NO_SUCH_CODE"},
+            timeout=30,
+        )
+        assert r.status_code == 200
+        assert {row["phenotype_code"] for row in r.json()} == {code}
+        r = requests.get(
+            f"{server_url}/api/v1/resource_metadata/{resource}",
+            params={"phenotypes": "NO_SUCH_CODE"},
+            timeout=30,
+        )
+        assert r.status_code == 404
+
     def test_resource_metadata_invalid_resource(self, server_url, invalid_resource):
         """Test resource metadata with invalid resource returns 404."""
         response = requests.get(

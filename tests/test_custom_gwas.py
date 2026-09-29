@@ -95,6 +95,17 @@ class TestCatalogue:
         assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", row["date"]), row["date"]
         assert row["author"] == "FinnGen sandbox users"
 
+    def test_one_run_is_reachable_by_name(self, server_url, custom_resource, custom_phenotype):
+        """A release holds hundreds of runs; the chat reads one by `phenotypes` rather than
+        paging the whole table, where a row cap would cut an alphabetically late run."""
+        r = requests.get(
+            f"{server_url}/api/v1/resource_metadata/{custom_resource}",
+            params={"format": "json", "phenotypes": custom_phenotype},
+        )
+        assert r.status_code == 200
+        (row,) = r.json()
+        assert row["phenotype_code"] == custom_phenotype and row["date"]
+
     def test_default_search_never_returns_a_custom_run(self, server_url, custom_resource, custom_phenotype):
         r = requests.get(
             f"{server_url}/api/v1/search",

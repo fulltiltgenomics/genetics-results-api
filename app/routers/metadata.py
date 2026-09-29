@@ -86,6 +86,12 @@ async def resource_metadata(
     format: Literal["tsv", "json"] = Query(
         default="tsv", description="Response format"
     ),
+    phenotypes: str | None = Query(
+        default=None,
+        description="Optional comma-separated phenotype codes: only their rows are returned "
+        "(404 when none of them is in the resource)",
+        examples=["I9_CHD,T2D"],
+    ),
     data_access: DataAccess = Depends(get_data_access),
 ) -> Response:
     """
@@ -116,6 +122,14 @@ async def resource_metadata(
                 status_code=404,
                 detail=f"No metadata available for resource {resource}",
             )
+        if phenotypes:
+            wanted = {p.strip() for p in phenotypes.split(",") if p.strip()}
+            meta = [row for row in meta if row.get("phenotype_code") in wanted]
+            if not meta:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"None of the requested phenotypes is in resource {resource}",
+                )
 
         if format == "tsv":
 
