@@ -90,6 +90,11 @@ no-hit query (`genetics-results-suite-6uk`). `range_response`'s JSON branch ther
 One change in `app/core/responses.py` covers every JSON range endpoint — all 23 call sites
 across the 11 routers that use `range_response`.
 
+**`X-Dataset-Version`** rides the same way on `/variant_annotation/{source}`, GET and POST,
+TSV and JSON: the `version` of that source in the profile's `variant_annotation_sources`.
+The annotation file has no version column and the body is a bare array, so the header is the
+only place a client can read the release from. A source with no `version` sends no header.
+
 **Endpoints outside `range_response`** fall into two groups (`genetics-results-suite-8a1`).
 
 *They read a file, so they advertise its real header and declare nothing.* These are the

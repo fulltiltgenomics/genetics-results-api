@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 import app.config.common as config_common
 from app.core.exceptions import GeneNotFoundException, NotFoundException, ParseException
-from app.core.responses import range_response
+from app.core.responses import DATASET_VERSION_HEADER, range_response
 from app.core.variant import Variant
 from app.dependencies import get_gene_name_mapping, get_variant_annotation_service
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
@@ -65,6 +65,15 @@ def _validate_source(source: str, service: VariantAnnotationService) -> None:
         raise NotFoundException(
             f"Unknown annotation source '{source}'. Available: {', '.join(available)}"
         )
+
+
+def _with_version(
+    response: Response, source: str, service: VariantAnnotationService
+) -> Response:
+    version = service.get_version(source)
+    if version:
+        response.headers[DATASET_VERSION_HEADER] = version
+    return response
 
 
 @router.get(
@@ -129,7 +138,8 @@ async def get_variant_annotation(
     header_schema = _build_header_schema(header)
     stream = _prepend_header_stream(header, data_stream)
 
-    return await range_response(str(request.url), stream, header_schema, format, start_time)
+    response = await range_response(str(request.url), stream, header_schema, format, start_time)
+    return _with_version(response, source, service)
 
 
 class VariantAnnotationRequest(BaseModel):
@@ -187,4 +197,5 @@ async def post_variant_annotation(
     header_schema = _build_header_schema(header)
     stream = _prepend_header_stream(header, data_stream)
 
-    return await range_response(str(request.url), stream, header_schema, format, start_time)
+    response = await range_response(str(request.url), stream, header_schema, format, start_time)
+    return _with_version(response, source, service)

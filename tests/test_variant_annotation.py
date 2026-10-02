@@ -6,6 +6,9 @@ import pytest
 import requests
 from helpers.validators import validate_json_response, validate_tsv_response
 
+import app.config.common as config
+from app.core.responses import DATASET_VERSION_HEADER
+
 BASE_PATH = "/api/v1/variant_annotation"
 
 # columns expected in the response
@@ -126,6 +129,33 @@ class TestVariantAnnotationPost:
         data = response.json()
         validation = validate_json_response(data, min_items=1)
         assert validation["valid"], f"JSON validation failed: {validation['errors']}"
+
+
+class TestVariantAnnotationVersion:
+    """Every response names the release its rows come from, whichever route and format."""
+
+    @pytest.mark.parametrize("source", sorted(config.variant_annotation_sources))
+    @pytest.mark.parametrize("format", ["tsv", "json"])
+    def test_get_carries_the_configured_version(self, server_url, source, format):
+        response = requests.get(
+            f"{server_url}{BASE_PATH}/{source}",
+            params={"variant": TEST_VARIANT, "format": format},
+            timeout=30,
+        )
+        assert response.status_code == 200
+        expected = config.variant_annotation_sources[source]["version"]
+        assert response.headers[DATASET_VERSION_HEADER] == expected
+
+    def test_post_carries_the_configured_version(self, server_url):
+        response = requests.post(
+            f"{server_url}{BASE_PATH}/finngen",
+            json={"variants": [TEST_VARIANT]},
+            params={"format": "json"},
+            timeout=30,
+        )
+        assert response.status_code == 200
+        expected = config.variant_annotation_sources["finngen"]["version"]
+        assert response.headers[DATASET_VERSION_HEADER] == expected
 
 
 class TestVariantAnnotationErrors:

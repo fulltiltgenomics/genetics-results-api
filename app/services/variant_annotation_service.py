@@ -23,6 +23,9 @@ class VariantAnnotationService(GCloudTabixBase):
     def get_available_sources(self) -> list[str]:
         return list(self._sources.keys())
 
+    def get_version(self, source: str) -> str | None:
+        return self._sources[source].get("version")
+
     def get_header(self, source: str) -> list[bytes]:
         if source not in self._headers:
             self._headers[source] = self._cache_header(

@@ -47,9 +47,11 @@ variant_set_files = {
 variant_annotation_sources = {
     "finngen": {
         "file": "gs://finngen-commons/results_api_data/variant_annotations/R14_annotated_variants_v0.small.gz",
+        "version": "R14",
     },
     "gnomad": {
         "file": "gs://finngen-commons/gnomad/gnomad.genomes.exomes.v4.0.sites.v2.tsv.bgz",
+        "version": "4.0",
         # gnomad cpra layout differs from finngen: chr=0,pos=1,ref=2,alt=3
         "cpra_cols": [0, 1, 2, 3],
     },

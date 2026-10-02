@@ -62,6 +62,9 @@ class TimedJSONResponse(JSONResponse):
 
 
 COLUMNS_HEADER = "X-Columns"
+# the release a response's rows come from, for a route that serves one file per source.
+# A header for the reason `columns_header` gives: the JSON body is a bare array.
+DATASET_VERSION_HEADER = "X-Dataset-Version"
 
 
 def columns_header(columns: list[str]) -> dict[str, str]:
