@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from app.config import ld as ld_config
 from app.core.responses import TimedJSONResponse
 from app.dependencies import get_ld_service
-from app.services.ld_service import LDService, LDUpstreamError
+from app.services.ld_service import LDService, LDUpstreamError, LDVariantNotInPanel
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,7 @@ PANEL_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,32}$")
             },
         },
         401: {"description": "Not authenticated"},
+        404: {"description": "The panel does not carry the query variant"},
         422: {"description": "Invalid variant, window, threshold or panel"},
         502: {"description": "The upstream LD server failed or could not be reached"},
     },
@@ -63,7 +64,7 @@ async def variants_in_ld(
     ),
     window: int = Query(
         default=ld_config.ld_default_window,
-        description="Base pairs either side of the query variant",
+        description="Total span in base pairs, centred on the query variant",
     ),
     r2_threshold: float = Query(
         default=0.6, description="Minimum r² for a variant to be returned", ge=0.0, le=1.0
@@ -90,14 +91,14 @@ async def variants_in_ld(
             status_code=422,
             detail=f"Invalid panel '{panel}'. Expected a name of letters, digits, '.', '_' or '-'",
         )
-    if window < 1 or window > ld_config.ld_max_window:
+    if window < ld_config.ld_min_window or window > ld_config.ld_max_window:
         # refused rather than clamped: a silently narrowed window returns fewer variants and
         # reads as a sparse locus rather than as a limit
         raise HTTPException(
             status_code=422,
             detail=(
-                f"window {window} is outside 1..{ld_config.ld_max_window}. Ask for a smaller "
-                "region rather than a wider window."
+                f"window {window} is outside {ld_config.ld_min_window}.."
+                f"{ld_config.ld_max_window}, the bounds the LD server accepts."
             ),
         )
 
@@ -105,6 +106,10 @@ async def variants_in_ld(
         entries = await ld_service.variants_in_ld(
             variant, window=window, r2_threshold=r2_threshold, panel=panel
         )
+    except LDVariantNotInPanel as exc:
+        # an answer about the variant, not a failure: 404 so a caller stops retrying and can
+        # say why there is no LD rather than report an outage
+        raise HTTPException(status_code=404, detail=str(exc))
     except LDUpstreamError as exc:
         # 502 and not 4xx: nothing the caller sent is wrong, and a script that reads this as
         # its own fault will rewrite a correct request instead of backing off

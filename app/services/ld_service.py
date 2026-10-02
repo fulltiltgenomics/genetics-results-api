@@ -47,6 +47,14 @@ class LDUpstreamError(DataException):
         self.status = status
 
 
+class LDVariantNotInPanel(DataException):
+    """The upstream answered, and its answer is that the panel does not carry the variant.
+
+    Not an LDUpstreamError: nothing failed and retrying returns the same thing, so a caller
+    told "the LD server is unavailable" for this waits on an outage that is not happening.
+    """
+
+
 class LDService:
     """One aiohttp session, opened on first use and closed by the lifespan's cleanup pass.
 
@@ -91,6 +99,12 @@ class LDService:
                     # the upstream's body is not forwarded: it is a third party's text and
                     # goes to a caller that may be a model-authored script
                     body = (await resp.text())[:200]
+                    # the body is checked, not just the status: a moved upstream URL also
+                    # answers 404, and that one is a failure
+                    if resp.status == 404 and "variant not found" in body:
+                        raise LDVariantNotInPanel(
+                            f"{variant} is not in LD panel {panel}"
+                        )
                     logger.warning(
                         "LD upstream answered HTTP %s for variant=%s panel=%s: %s",
                         resp.status, variant, panel, body,
@@ -99,7 +113,7 @@ class LDService:
                         f"the LD server answered HTTP {resp.status}", status=resp.status
                     )
                 payload = await resp.json(content_type=None)
-        except LDUpstreamError:
+        except (LDUpstreamError, LDVariantNotInPanel):
             raise
         except aiohttp.ClientError as exc:
             logger.warning("LD upstream unreachable for variant=%s: %s", variant, exc)

@@ -23,7 +23,12 @@ from fastapi import FastAPI
 
 from app.dependencies import get_ld_service
 from app.routers import ld as ld_router
-from app.services.ld_service import LD_ENTRY_FIELDS, LDService, LDUpstreamError
+from app.services.ld_service import (
+    LD_ENTRY_FIELDS,
+    LDService,
+    LDUpstreamError,
+    LDVariantNotInPanel,
+)
 
 ENTRY = {
     "variation1": "12:49048170:A:C",
@@ -164,7 +169,7 @@ def test_a_panel_that_is_not_a_name_is_refused_but_an_unknown_name_is_not():
     assert call(service, "/api/v1/ld/12:49048170:A:C", "panel=sisu99").status_code == 200
 
 
-@pytest.mark.parametrize("window", ["0", "-1", "11000001"])
+@pytest.mark.parametrize("window", ["0", "-1", "99999", "5000001"])
 def test_a_window_outside_the_bound_is_refused_rather_than_clamped(window):
     """Clamping returns fewer variants and reads as a sparse locus rather than as a limit."""
     service = StubService()
@@ -186,6 +191,16 @@ def test_an_upstream_failure_is_502_and_not_the_callers_fault():
     )
     assert response.status_code == 502
     assert "could not be reached" in response.json()["detail"]
+
+
+def test_a_variant_the_panel_does_not_carry_is_404_and_not_an_outage():
+    """A 502 here sends the caller off to wait for a server that is working."""
+    response = call(
+        StubService(raises=LDVariantNotInPanel("12:2427715:G:A is not in LD panel sisu42")),
+        "/api/v1/ld/12:2427715:G:A",
+    )
+    assert response.status_code == 404
+    assert "not in LD panel" in response.json()["detail"]
 
 
 # --------------------------------------------------------------------------- the service
@@ -286,6 +301,23 @@ def test_the_upstreams_body_is_not_forwarded_to_the_caller():
     assert caught.value.status == 500
     assert "stack trace" not in str(caught.value)
     assert "HTTP 500" in str(caught.value)
+
+
+def test_the_upstreams_variant_not_found_is_its_own_error():
+    service, _session = service_with(
+        FakeResponse(status=404, text="<p>variant not found: 12:49048170:A:C</p>")
+    )
+    with pytest.raises(LDVariantNotInPanel) as caught:
+        fetch(service)
+    assert "12:49048170:A:C is not in LD panel sisu42" == str(caught.value)
+
+
+def test_a_404_that_is_not_about_the_variant_is_still_an_upstream_failure():
+    """A moved upstream URL answers 404 too, and that one is an outage."""
+    service, _session = service_with(FakeResponse(status=404, text="<h1>Not Found</h1>"))
+    with pytest.raises(LDUpstreamError) as caught:
+        fetch(service)
+    assert caught.value.status == 404
 
 
 @pytest.mark.parametrize("raised", [aiohttp.ClientError("dns"), TimeoutError()])

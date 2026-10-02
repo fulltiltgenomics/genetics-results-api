@@ -20,11 +20,13 @@ ld_upstream_url = os.environ.get("LD_UPSTREAM_URL", "https://api.finngen.fi/api/
 # already written against. A sandbox script has ~120s of wall clock in total.
 ld_upstream_timeout_seconds = float(os.environ.get("LD_UPSTREAM_TIMEOUT_SECONDS", "30"))
 
-# The pair path in the tool layer computes window = 2 * distance + 1 Mb over a distance capped
-# at 5 Mb, so 11 Mb is the largest window any current caller can ask for. Callers are refused
-# above it rather than having it clamped, because a silently narrowed window returns fewer
-# variants and looks like a sparse locus.
-ld_max_window = int(os.environ.get("LD_MAX_WINDOW", str(11_000_000)))
+# The upstream's own bounds: outside them it answers 400 "window must be between 100000 and
+# 5000000". They are repeated here so the refusal is a 422 that names the limit, rather than
+# a 502 a caller reads as an outage. An upstream that widens its bounds makes these too
+# strict, and narrowing them brings the 502 back. Callers are refused rather than clamped,
+# because a silently narrowed window returns fewer variants and looks like a sparse locus.
+ld_min_window = int(os.environ.get("LD_MIN_WINDOW", str(100_000)))
+ld_max_window = int(os.environ.get("LD_MAX_WINDOW", str(5_000_000)))
 
 ld_default_window = int(os.environ.get("LD_DEFAULT_WINDOW", str(1_500_000)))
 
