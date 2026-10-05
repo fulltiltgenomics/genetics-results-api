@@ -121,7 +121,7 @@ async def get_variant_annotation(
 
     try:
         if variant is not None:
-            var = Variant(variant)
+            var = Variant(variant, allow_y=True)
             data_stream = await service.stream_by_variants(source, [var])
         elif region is not None:
             chr_val, start, end = _parse_region(region)
@@ -186,7 +186,7 @@ async def post_variant_annotation(
     variants = []
     for vs in body.variants:
         try:
-            variants.append(Variant(vs.strip()))
+            variants.append(Variant(vs.strip(), allow_y=True))
         except ParseException as e:
             raise HTTPException(status_code=422, detail=f"Invalid variant '{vs}': {e}")
 

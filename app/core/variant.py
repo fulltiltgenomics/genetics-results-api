@@ -6,7 +6,7 @@ var_re = re.compile("-|_|:|\\|")
 
 
 class Variant(object):
-    def __init__(self, varstr: str) -> None:
+    def __init__(self, varstr: str, allow_y: bool = False) -> None:
         s = var_re.split(varstr)
         if len(s) != 4:
             raise ParseException(
@@ -14,12 +14,20 @@ class Variant(object):
             )
         try:
             chr = re.sub(r"^0", "", str(s[0]))
-            chr = chr.upper().replace("CHR", "").replace("X", "23").replace("Y", "24")
+            chr = chr.upper().replace("CHR", "").replace("X", "23")
+            # Y is opt-in: most served files carry no Y contig, and their endpoints
+            # refuse the variant rather than answer it with an empty result
+            if allow_y:
+                chr = chr.replace("Y", "24")
             chr_int = int(chr)
-            if chr_int < 1 or chr_int > 24:
+            if chr_int < 1 or chr_int > (24 if allow_y else 23):
                 raise ValueError
         except ValueError:
-            raise ParseException("supported chromosomes: 1-24,X,Y")
+            raise ParseException(
+                "supported chromosomes: 1-24,X,Y"
+                if allow_y
+                else "supported chromosomes: 1-23,X"
+            )
         try:
             pos = int(s[1])
         except ValueError:

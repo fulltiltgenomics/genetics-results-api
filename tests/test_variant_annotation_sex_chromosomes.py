@@ -9,6 +9,7 @@ Offline: the router runs in-process and the "GCS" range reads are local file rea
 import asyncio
 import importlib
 import json
+import pathlib
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlencode
@@ -16,7 +17,9 @@ from urllib.parse import urlencode
 import pytest
 from fastapi import FastAPI
 
+from app.core.exceptions import ParseException
 from app.core.responses import DATASET_VERSION_HEADER
+from app.core.variant import Variant
 from app.dependencies import get_gene_name_mapping, get_variant_annotation_service
 from app.routers import variant_annotation
 from app.services import gcloud_tabix_base
@@ -220,6 +223,23 @@ def test_an_unknown_chromosome_is_refused(api):
     for params in ({"variant": "25:1:A:T"}, {"region": "Z:1-100"}):
         status, _, _ = _request(app, "GET", "/variant_annotation/gnomad", params)
         assert status == 422
+
+
+@pytest.mark.parametrize("variant", ["Y:7000:C:G", "chrY:7000:C:G", "24:7000:C:G"])
+def test_the_shared_parser_still_refuses_y(variant):
+    """Every other endpoint parses its variants with the parser's defaults."""
+    with pytest.raises(ParseException, match="supported chromosomes: 1-23,X$"):
+        Variant(variant)
+
+
+def test_only_the_variant_annotation_router_opts_in_to_y():
+    app_dir = pathlib.Path(variant_annotation.__file__).parents[1]
+    opted_in = {
+        path.relative_to(app_dir).as_posix()
+        for path in app_dir.rglob("*.py")
+        if "allow_y=True" in path.read_text()
+    }
+    assert opted_in == {"routers/variant_annotation.py"}
 
 
 @pytest.mark.parametrize("profile", ["finngen", "daly"])
