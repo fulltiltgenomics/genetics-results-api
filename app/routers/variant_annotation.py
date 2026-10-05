@@ -51,7 +51,9 @@ def _parse_region(region: str) -> tuple[int, int, int]:
     try:
         chr_part, range_part = region.split(":")
         start_str, end_str = range_part.split("-")
-        chr_val = int(chr_part.replace("chr", "").replace("Chr", "").replace("CHR", ""))
+        chr_val = int(
+            chr_part.upper().replace("CHR", "").replace("X", "23").replace("Y", "24")
+        )
         return chr_val, int(start_str), int(end_str)
     except (ValueError, AttributeError):
         raise ParseException(

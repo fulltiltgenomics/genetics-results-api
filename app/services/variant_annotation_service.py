@@ -7,6 +7,10 @@ from app.services.gcloud_tabix_base import GCloudTabixBase
 
 logger = logging.getLogger(__name__)
 
+# a queried variant carries its chromosome as a number, while a source file may spell
+# the sex chromosomes either way; rows are matched on the numeric form
+_SEX_CHROM_CODES = {b"X": b"23", b"Y": b"24"}
+
 
 class VariantAnnotationService(GCloudTabixBase):
     # default cpra (chr/pos/ref/alt) column indices when a source omits "cpra_cols"
@@ -69,6 +73,18 @@ class VariantAnnotationService(GCloudTabixBase):
         variant_keys = {
             (v.chr_bytes, v.pos_bytes, v.ref_bytes, v.alt_bytes) for v in variants
         }
+
+        def wanted(line: bytes) -> bool:
+            fields = line.split(b"\t")
+            chrom = fields[chr_col].removeprefix(b"chr")
+            key = (
+                _SEX_CHROM_CODES.get(chrom, chrom),
+                fields[pos_col],
+                fields[ref_col],
+                fields[alt_col],
+            )
+            return key in variant_keys
+
         buffer = b""
 
         async for chunk in stream:
@@ -78,25 +94,10 @@ class VariantAnnotationService(GCloudTabixBase):
             for line in lines[:-1]:
                 if line.strip() == b"":
                     continue
-                fields = line.split(b"\t")
-                key = (
-                    fields[chr_col],
-                    fields[pos_col],
-                    fields[ref_col],
-                    fields[alt_col],
-                )
-                if key in variant_keys:
+                if wanted(line):
                     yield line + b"\n"
 
             buffer = lines[-1]
 
-        if buffer.strip() != b"":
-            fields = buffer.split(b"\t")
-            key = (
-                fields[chr_col],
-                fields[pos_col],
-                fields[ref_col],
-                fields[alt_col],
-            )
-            if key in variant_keys:
-                yield buffer + b"\n"
+        if buffer.strip() != b"" and wanted(buffer):
+            yield buffer + b"\n"

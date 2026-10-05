@@ -14,12 +14,12 @@ class Variant(object):
             )
         try:
             chr = re.sub(r"^0", "", str(s[0]))
-            chr = chr.upper().replace("CHR", "").replace("X", "23")
+            chr = chr.upper().replace("CHR", "").replace("X", "23").replace("Y", "24")
             chr_int = int(chr)
-            if chr_int < 1 or chr_int > 23:
+            if chr_int < 1 or chr_int > 24:
                 raise ValueError
         except ValueError:
-            raise ParseException("supported chromosomes: 1-23,X")
+            raise ParseException("supported chromosomes: 1-24,X,Y")
         try:
             pos = int(s[1])
         except ValueError:
