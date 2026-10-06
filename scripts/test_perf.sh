@@ -60,7 +60,8 @@ except Exception:
 if isinstance(data, list) and data:
     r = data[0]
     res = r.get("resource", "")
-    ph  = r.get("trait") or r.get("trait_original") or r.get("dataset", "")
+    # the *_by_id paths take the phenotype code, which is trait_original; trait is a display name
+    ph  = r.get("trait_original") or r.get("trait") or r.get("dataset", "")
     cs  = r.get("cs_id", "")
     if res and ph and cs:
         print(f"{res}\t{ph}\t{cs}")
