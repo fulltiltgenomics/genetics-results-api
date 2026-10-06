@@ -8,6 +8,9 @@ collected before raising, so one run reports every problem at once:
 
   - tabix header check (`tabix -H`) for every fixed/combined tabix-indexed file.
     This also proves the .tbi/.csi index loads, not just that the object exists.
+    For the credible-set files the header read back is also compared column by
+    column against the schema-derived header (see app.config.credible_sets), since
+    a cross-resource response is emitted positionally under the first file's header.
   - existence check (fsspec) for the non-tabix mapping files.
 
 Per-phenotype files addressed by `prefix` + <phenotype> + `suffix` are NOT
@@ -31,16 +34,21 @@ logger = logging.getLogger(__name__)
 _MAX_WORKERS = 32
 
 
-def _collect_tabix_files() -> list[tuple[str, str]]:
-    """Collect (label, gs_path) for every fixed/combined tabix-indexed file in config.
+TabixCheck = tuple[str, str, list[bytes] | None]
 
-    Per-phenotype prefix/suffix files are intentionally excluded (see module docstring).
-    Paths shared by several datasets (e.g. the EXT combined credible-set file) are
-    deduped so tabix runs once per unique file.
+
+def _collect_tabix_files() -> list[TabixCheck]:
+    """Collect (label, gs_path, expected_header) for every fixed/combined tabix file.
+
+    expected_header is None where only readability is checked. Per-phenotype
+    prefix/suffix files are intentionally excluded (see module docstring). Paths shared
+    by several datasets (e.g. the EXT combined credible-set file) are deduped so tabix
+    runs once per unique file.
     """
     import app.config.common as common
     from app.config.chromatin_peaks import chromatin_peaks_data
     from app.config.coloc import coloc
+    from app.config.credible_sets import cs_file_header, cs_qtl_file_header
     from app.config.credible_sets import data_files as cs_files
     from app.config.exome_results import exome_data_files
     from app.config.expression import expression_data
@@ -50,69 +58,75 @@ def _collect_tabix_files() -> list[tuple[str, str]]:
     from app.config.summary_stats import data_files as sumstats_files
     from app.config.variant_effect import variant_effect_data
 
-    files: list[tuple[str, str]] = []
+    files: list[TabixCheck] = []
 
     for df in cs_files:
         cfg = df.get("cs", {})
         if "all_cs_file" in cfg:
-            files.append((f"cs:{df['id']}", cfg["all_cs_file"]))
+            files.append((f"cs:{df['id']}", cfg["all_cs_file"], cs_file_header))
         if "all_cs_qtl_file" in cfg:
-            files.append((f"cs_qtl:{df['id']}", cfg["all_cs_qtl_file"]))
+            files.append(
+                (f"cs_qtl:{df['id']}", cfg["all_cs_qtl_file"], cs_qtl_file_header)
+            )
+
+    unchecked: list[tuple[str, str]] = []
 
     for df in exome_data_files:
         cfg = df.get("exome", {})
         if "all_exome_file" in cfg:
-            files.append((f"exome:{df['id']}", cfg["all_exome_file"]))
+            unchecked.append((f"exome:{df['id']}", cfg["all_exome_file"]))
 
     for df in gene_based_data_files:
         cfg = df.get("gene_based", {})
         if "file" in cfg:
-            files.append((f"gene_based:{df['id']}", cfg["file"]))
+            unchecked.append((f"gene_based:{df['id']}", cfg["file"]))
 
     for c in coloc:
         if "credset_file" in c:
-            files.append((f"coloc_credset:{c['name']}", c["credset_file"]))
+            unchecked.append((f"coloc_credset:{c['name']}", c["credset_file"]))
         if "coloc_file" in c:
-            files.append((f"coloc:{c['name']}", c["coloc_file"]))
+            unchecked.append((f"coloc:{c['name']}", c["coloc_file"]))
 
     # only the fixed single-file sumstats entries; prefix/suffix ones are per-phenotype
     for df in sumstats_files:
         if "file" in df:
-            files.append((f"sumstats:{df['id']}", df["file"]))
+            unchecked.append((f"sumstats:{df['id']}", df["file"]))
 
     for d in expression_data:
-        files.append((f"expression:{d['resource']}", d["file"]))
+        unchecked.append((f"expression:{d['resource']}", d["file"]))
 
     for d in chromatin_peaks_data:
-        files.append((f"chromatin_peaks:{d['resource']}", d["file"]))
+        unchecked.append((f"chromatin_peaks:{d['resource']}", d["file"]))
         if "file_by_gene" in d:
-            files.append(
+            unchecked.append(
                 (f"chromatin_peaks_by_gene:{d['resource']}", d["file_by_gene"])
             )
 
     for d in open_chromatin_data:
-        files.append((f"open_chromatin:{d['resource']}", d["file"]))
+        unchecked.append((f"open_chromatin:{d['resource']}", d["file"]))
 
     # variant_effect/mpra config is per-DATASET, not per-resource: the marderstein
     # resource ships two predictor files (chrombpnet, flare), so key on dataset_id
     for d in variant_effect_data:
-        files.append((f"variant_effect:{d['dataset_id']}", d["file"]))
+        unchecked.append((f"variant_effect:{d['dataset_id']}", d["file"]))
 
     for d in mpra_data:
-        files.append((f"mpra:{d['dataset_id']}", d["file"]))
+        unchecked.append((f"mpra:{d['dataset_id']}", d["file"]))
 
     for source, cfg in common.variant_annotation_sources.items():
-        files.append((f"variant_annotation:{source}", cfg["file"]))
+        unchecked.append((f"variant_annotation:{source}", cfg["file"]))
 
-    files.append(("gnomad", common.gnomad["file"]))
-    files.append(("rsid_db", common.rsid_db["file"]))
+    unchecked.append(("gnomad", common.gnomad["file"]))
+    unchecked.append(("rsid_db", common.rsid_db["file"]))
+
+    files.extend((label, path, None) for label, path in unchecked)
 
     seen: set[str] = set()
-    deduped: list[tuple[str, str]] = []
-    for label, path in files:
+    deduped: list[TabixCheck] = []
+    for label, path, expected in files:
         if path not in seen:
             seen.add(path)
-            deduped.append((label, path))
+            deduped.append((label, path, expected))
     return deduped
 
 
@@ -150,13 +164,44 @@ def _collect_mapping_files() -> list[tuple[str, str]]:
     return files
 
 
-def _check_tabix_header(tabix: GCloudTabixBase, label: str, gs_path: str) -> str | None:
-    """`tabix -H` one file (with the base class's built-in retry). Error string or None."""
+def _header_mismatch(actual: list[bytes], expected: list[bytes]) -> str | None:
+    """Describe the first way `actual` departs from `expected`, or None if identical.
+
+    Names the position and both column names so the operator can tell a renamed column
+    from a shifted one without opening the file.
+    """
+    for i, (a, e) in enumerate(zip(actual, expected)):
+        if a != e:
+            return f"column {i + 1} is {a.decode()!r}, expected {e.decode()!r}"
+    if len(actual) < len(expected):
+        missing = [c.decode() for c in expected[len(actual):]]
+        return f"missing trailing column(s) {missing}"
+    if len(actual) > len(expected):
+        extra = [c.decode() for c in actual[len(expected):]]
+        return f"unexpected trailing column(s) {extra}"
+    return None
+
+
+def _check_tabix_header(
+    tabix: GCloudTabixBase,
+    label: str,
+    gs_path: str,
+    expected_header: list[bytes] | None = None,
+) -> str | None:
+    """`tabix -H` one file (with the base class's built-in retry). Error string or None.
+
+    With `expected_header`, the header read back must match it exactly.
+    """
     try:
-        tabix._get_header(gs_path)
-        return None
+        header = tabix._get_header(gs_path)
     except Exception as e:
         return f"{label}: tabix header failed for {gs_path}: {e}"
+    if expected_header is None:
+        return None
+    mismatch = _header_mismatch(header, expected_header)
+    if mismatch:
+        return f"{label}: header mismatch in {gs_path}: {mismatch}"
+    return None
 
 
 def _check_exists(label: str, path: str) -> str | None:
@@ -174,7 +219,8 @@ def verify_all_data_files() -> None:
     """Verify every configured tabix file and mapping file is reachable.
 
     Runs all checks concurrently, collects every failure, and raises RuntimeError
-    listing them if any file is missing/unreadable. Returns normally otherwise.
+    listing them if any file is missing, unreadable or carries a header other than
+    the one its family expects. Returns normally otherwise.
     """
     tabix_files = _collect_tabix_files()
     mapping_files = _collect_mapping_files()
@@ -190,8 +236,8 @@ def verify_all_data_files() -> None:
     errors: list[str] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
         futures = [
-            pool.submit(_check_tabix_header, tabix, label, path)
-            for label, path in tabix_files
+            pool.submit(_check_tabix_header, tabix, label, path, expected)
+            for label, path, expected in tabix_files
         ] + [
             pool.submit(_check_exists, label, path)
             for label, path in mapping_files
@@ -204,7 +250,8 @@ def verify_all_data_files() -> None:
     if errors:
         errors.sort()
         raise RuntimeError(
-            f"{len(errors)} configured data file(s) missing or unreadable:\n  - "
+            f"{len(errors)} configured data file(s) missing, unreadable or "
+            "mis-headed:\n  - "
             + "\n  - ".join(errors)
         )
 

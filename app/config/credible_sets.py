@@ -56,6 +56,16 @@ cs_qtl_header_schema = {
     "trait_end": int,
 }
 
+# the api prepends these two when it emits rows; the rest of each schema, in order, is
+# the header the file itself must carry. merged responses emit rows positionally under
+# the FIRST file's header, so a file with a shifted or renamed column would silently
+# serve wrong values under right names: startup refuses any file whose header differs
+api_added_columns = ("resource", "version")
+cs_file_header = [c.encode() for c in cs_header_schema if c not in api_added_columns]
+cs_qtl_file_header = [
+    c.encode() for c in cs_qtl_header_schema if c not in api_added_columns
+]
+
 # column names for merging data across files
 variant_columns = {
     "chr": b"chr",

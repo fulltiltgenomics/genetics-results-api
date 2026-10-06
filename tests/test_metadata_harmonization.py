@@ -6,6 +6,8 @@ import pytest
 import requests
 from helpers.validators import validate_tsv_response
 
+from app.config.datasets import get_dataset
+
 
 class TestMetadataHarmonization:
     """Test /api/v1/resource_metadata endpoint."""
@@ -170,7 +172,8 @@ class TestMetadataHarmonization:
             assert item["trait_type"] == "binary"
         else:
             assert item["trait_type"] == "quantitative"
-        assert item["version"] == "26.06"
+        # the served version is whatever release the registry names, not a fixed string
+        assert item["version"] == get_dataset("open_targets")["version"]
         assert item["date"] != ""
 
     def test_metadata_sample_sizes(self, server_url):
