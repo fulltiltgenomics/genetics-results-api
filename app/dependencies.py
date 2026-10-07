@@ -29,7 +29,6 @@ if TYPE_CHECKING:
     from app.services.gene_group_service import GeneGroupService
     from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
     from app.services.ld_service import LDService
-    from app.services.phenotype_markdown_service import PhenotypeMarkdownService
     from app.services.request_util import RequestUtil
     from app.services.rsid_db import RsidDB
     from app.services.search_service import SearchIndex
@@ -236,11 +235,6 @@ def get_gene_group_service() -> "GeneGroupService":
 def get_gene_disease_data() -> "GeneDiseaseData":
     """Get GeneDiseaseData service instance."""
     return container.get("gene_disease_data")
-
-
-def get_phenotype_markdown_service() -> "PhenotypeMarkdownService":
-    """Get PhenotypeMarkdownService instance."""
-    return container.get("phenotype_markdown_service")
 
 
 def get_credible_set_stats_service() -> "CredibleSetStatsService":

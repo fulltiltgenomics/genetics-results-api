@@ -147,7 +147,6 @@ dataset_mapping_files = _profile.dataset_mapping_files
 dataset_display_names = _profile.dataset_display_names
 variant_set_files = _profile.variant_set_files
 variant_annotation_sources = _profile.variant_annotation_sources
-phenotype_markdown_template = _profile.phenotype_markdown_template
 
 # CORS settings: profile-specific origins + any extra from env var
 cors_origins = _profile.cors_origins

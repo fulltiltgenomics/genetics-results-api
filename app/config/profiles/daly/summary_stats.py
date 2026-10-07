@@ -278,7 +278,7 @@ data_files = [
         "dataset_id": "finngen_ukbb_pqtl",
         "resource": "finngen_ukbb",
         "data_source": "gcloud",
-        "prefix": "gs://finngen-production-library-green/omics/proteomics/pan_asset_pQTL_meta_ukbb-ppp_FG-batch1-5/sumstats/unfiltered/",
+        "prefix": "gs://daly-genetics-results/sumstats/finngen/pqtl_ukbb-ppp_meta_batch1-5/",
         "suffix": "_meta_out.tsv.gz",
         "column_mapping": {
             "CHR": "chr",

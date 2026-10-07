@@ -30,7 +30,6 @@ from app.routers import (
     metadata,
     mpra,
     open_chromatin,
-    phenotype,
     resources,
     rsid,
     search,
@@ -163,7 +162,6 @@ app.include_router(variant_effect.router, prefix="/api/v1", tags=["variant-effec
 app.include_router(mpra.router, prefix="/api/v1", tags=["mpra"])
 app.include_router(hla.router, prefix="/api/v1", tags=["hla"])
 app.include_router(exome_results.router, prefix="/api/v1", tags=["exome-results"])
-app.include_router(phenotype.router, prefix="/api/v1", tags=["phenotype"])
 app.include_router(resources.router, prefix="/api/v1", tags=["resources"])
 app.include_router(datasets.router, prefix="/api/v1", tags=["datasets"])
 app.include_router(rsid.router, prefix="/api/v1", tags=["rsid"])

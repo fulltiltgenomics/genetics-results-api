@@ -249,10 +249,6 @@ def _register_services():
         from app.services.datafetch import Datafetch
         return Datafetch()
 
-    def create_phenotype_markdown_service():
-        from app.services.phenotype_markdown_service import PhenotypeMarkdownService
-        return PhenotypeMarkdownService()
-
     def create_credible_set_stats_service():
         from app.services.credible_set_stats_service import CredibleSetStatsService
         return CredibleSetStatsService()
@@ -341,10 +337,6 @@ def _register_services():
     container.register(
         "datafetch", create_datafetch, Warm.NONE,
         "factory imports a module that is not in the tree",
-    )
-    container.register(
-        "phenotype_markdown_service", create_phenotype_markdown_service, Warm.NONE,
-        "no construction cost; markdown is fetched per request for one phenocode",
     )
     container.register(
         "credible_set_stats_service", create_credible_set_stats_service, Warm.NONE,

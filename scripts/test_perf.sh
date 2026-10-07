@@ -136,7 +136,6 @@ run GET  "/resource_metadata/finngen"
 run GET  "/trait_name_mapping"
 run GET  "/datasets"
 run GET  "/resources"
-run GET  "/phenotype/finngen/I9_HYPERLIPID/markdown"
 
 section "Health"
 printf '%-5s %s\n' GET "$ORIGIN/healthz"
