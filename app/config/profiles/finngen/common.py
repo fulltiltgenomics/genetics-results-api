@@ -57,8 +57,6 @@ variant_annotation_sources = {
     },
 }
 
-phenotype_markdown_template = "gs://finngen-commons/results_api_data/phenotype_reports/{resource}/{phenocode}_gene_summary.md"
-
 cors_origins = [
     "https://anno.finngen.fi",
     "https://annopublic.finngen.fi",

@@ -57,9 +57,6 @@ variant_annotation_sources = {
     },
 }
 
-# phenotype_reports directory does not exist in this bucket yet
-phenotype_markdown_template = ""
-
 cors_origins = [
     "https://anno.finngen.fi",
     "https://annopublic.finngen.fi",
