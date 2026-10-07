@@ -23,6 +23,7 @@ from app.core.variant import Variant
 from app.services.gcloud_tabix_base import (
     GCloudTabixBase,
     _get_fetch_semaphore,
+    _get_files_semaphore,
     validate_path_component,
 )
 
@@ -84,19 +85,22 @@ class SumstatsDataAccess(GCloudTabixBase):
             return catalog.sumstats_path(phenotype)
         return f"{data_file_config['prefix']}{phenotype}{data_file_config['suffix']}"
 
-    def get_file_header(self, data_file_config: dict, phenotype: str) -> list[bytes]:
-        """Get and cache the raw file header for a data file config."""
+    async def get_file_header(self, gs_path: str) -> list[bytes]:
+        """The raw header of one object, cached per object and never per config entry.
+
+        A prefix's files are not one shape: the R13 MVP meta-analysis prefixes hold 43-,
+        54- and 65-column files side by side, and a header borrowed from a sibling
+        misaligns every row of a file of another width (an rsid read as a p-value).
+        """
         self._ensure_initialized()
-        gs_path = self._get_file_path(data_file_config, phenotype)
-        # a prefix/suffix config's files share one header; a catalog's do not (the
-        # pipeline writes case/control frequencies for binary traits only), so those
-        # are cached per object
-        cache_key = gs_path if "catalog" in data_file_config else data_file_config["id"]
-        if cache_key in self._header_cache:
-            return self._header_cache[cache_key]
-        header = self._get_header(gs_path)
-        self._header_cache[cache_key] = header
-        return header
+        cached = self._header_cache.get(gs_path)
+        if cached is None:
+            # off the event loop and under the files cap: a PheWAS fans this out over
+            # hundreds of objects the first time each is asked for
+            async with _get_files_semaphore():
+                cached = await self._get_header_async(gs_path)
+            self._header_cache[gs_path] = cached
+        return cached
 
     async def _unindexed_file(
         self, data_file_config: dict, gs_path: str
@@ -256,8 +260,8 @@ class SumstatsDataAccess(GCloudTabixBase):
         # known before any row is serialized — otherwise rows from a narrower file
         # (e.g. Kanta labs) misalign against a wider file's header (e.g. core GWAS).
         contributions = []  # (df_config, phenotype, gs_path, file_header)
-        schema_configs = []  # (column_mapping, file_header) per contributing config
-        seen_config_ids = set()
+        schema_configs = []  # (column_mapping, file_header) per distinct header
+        seen_shapes = set()
 
         candidates = []  # (df_config, phenotype, gs_path), in config order
         for df_config in data_file_configs:
@@ -280,25 +284,39 @@ class SumstatsDataAccess(GCloudTabixBase):
             *(self._check_file_exists(gs_path) for _, _, gs_path in candidates)
         )
 
+        present = []
         for (df_config, phenotype, gs_path), found in zip(candidates, exists):
             if not found:
                 logger.info(f"Phenotype file not found: {gs_path}")
                 continue
+            present.append((df_config, phenotype, gs_path))
 
-            try:
-                if df_config.get("unindexed"):
-                    file_header, _ = await self._unindexed_file(df_config, gs_path)
-                else:
-                    file_header = self.get_file_header(df_config, phenotype)
-            except Exception as e:
+        async def header_of(df_config: dict, gs_path: str) -> list[bytes]:
+            if df_config.get("unindexed"):
+                file_header, _ = await self._unindexed_file(df_config, gs_path)
+                return file_header
+            return await self.get_file_header(gs_path)
+
+        # one header per object, concurrently like the existence checks above
+        headers = await asyncio.gather(
+            *(header_of(df_config, gs_path) for df_config, _, gs_path in present),
+            return_exceptions=True,
+        )
+
+        for (df_config, phenotype, gs_path), file_header in zip(present, headers):
+            if isinstance(file_header, BaseException):
                 logger.warning(
-                    f"Skipping {phenotype} for {df_config['id']}: header fetch failed: {e}"
+                    f"Skipping {phenotype} for {df_config['id']}: header fetch failed: "
+                    f"{file_header}"
                 )
                 continue
 
             contributions.append((df_config, phenotype, gs_path, file_header))
-            if df_config["id"] not in seen_config_ids:
-                seen_config_ids.add(df_config["id"])
+            # one schema entry per distinct header, not per config: files of one config
+            # differ in width, and the union has to see every shape that contributes
+            shape = (df_config["id"], tuple(file_header))
+            if shape not in seen_shapes:
+                seen_shapes.add(shape)
                 schema_configs.append((df_config["column_mapping"], file_header))
 
         if not contributions:

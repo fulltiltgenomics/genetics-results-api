@@ -20,6 +20,7 @@ is measured rather than guessed at.
 """
 
 import logging
+import re
 
 import aiohttp
 
@@ -32,6 +33,17 @@ logger = logging.getLogger(__name__)
 # forwarding it: a field not listed here does not exist, the same rule the sandbox wire
 # contract states for its own shape.
 LD_ENTRY_FIELDS = ("variation1", "variation2", "r2", "d_prime")
+
+# the one piece of an upstream body that is relayed: its own panel list, out of the 400 it
+# answers to a name it does not have. Only name-shaped tokens survive, so a body that is
+# not that list relays nothing.
+_SUPPORTED_PANELS = re.compile(r"supported panels:\s*([A-Za-z0-9_.,\- ]+)")
+_PANEL_NAME = re.compile(r"[A-Za-z0-9_.-]+")
+
+
+def supported_panels_in(body: str) -> list[str]:
+    match = _SUPPORTED_PANELS.search(body)
+    return _PANEL_NAME.findall(match.group(1)) if match else []
 
 
 class LDUpstreamError(DataException):
@@ -53,6 +65,21 @@ class LDVariantNotInPanel(DataException):
     Not an LDUpstreamError: nothing failed and retrying returns the same thing, so a caller
     told "the LD server is unavailable" for this waits on an outage that is not happening.
     """
+
+
+class LDPanelUnknown(DataException):
+    """The upstream answered, and its answer is that it has no panel by that name.
+
+    Carries the upstream's own list, which is the one list this service can relay without
+    keeping one of its own: a caller that guessed a name learns the real ones on the first
+    refusal rather than the thirtieth (measured: one script tried 26 names for one variant).
+    """
+
+    def __init__(self, panel: str, panels: list[str]) -> None:
+        super().__init__(
+            f"Unknown LD panel '{panel}'. The LD server's panels are: {', '.join(panels)}"
+        )
+        self.panels = panels
 
 
 class LDService:
@@ -105,6 +132,10 @@ class LDService:
                         raise LDVariantNotInPanel(
                             f"{variant} is not in LD panel {panel}"
                         )
+                    if resp.status == 400 and (panels := supported_panels_in(body)):
+                        # input noise rather than an incident, like the 404 above
+                        logger.info("LD upstream has no panel %s; it names %s", panel, panels)
+                        raise LDPanelUnknown(panel, panels)
                     logger.warning(
                         "LD upstream answered HTTP %s for variant=%s panel=%s: %s",
                         resp.status, variant, panel, body,
@@ -113,7 +144,7 @@ class LDService:
                         f"the LD server answered HTTP {resp.status}", status=resp.status
                     )
                 payload = await resp.json(content_type=None)
-        except (LDUpstreamError, LDVariantNotInPanel):
+        except (LDUpstreamError, LDVariantNotInPanel, LDPanelUnknown):
             raise
         except aiohttp.ClientError as exc:
             logger.warning("LD upstream unreachable for variant=%s: %s", variant, exc)

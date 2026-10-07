@@ -9,7 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from app.config import ld as ld_config
 from app.core.responses import TimedJSONResponse
 from app.dependencies import get_ld_service
-from app.services.ld_service import LDService, LDUpstreamError, LDVariantNotInPanel
+from app.services.ld_service import (
+    LDPanelUnknown,
+    LDService,
+    LDUpstreamError,
+    LDVariantNotInPanel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +115,10 @@ async def variants_in_ld(
         # an answer about the variant, not a failure: 404 so a caller stops retrying and can
         # say why there is no LD rather than report an outage
         raise HTTPException(status_code=404, detail=str(exc))
+    except LDPanelUnknown as exc:
+        # the caller's name was wrong and the upstream said which ones are right: 422 with
+        # that list, the same shape as the window refusal, so the next call can be correct
+        raise HTTPException(status_code=422, detail=str(exc))
     except LDUpstreamError as exc:
         # 502 and not 4xx: nothing the caller sent is wrong, and a script that reads this as
         # its own fault will rewrite a correct request instead of backing off

@@ -25,6 +25,7 @@ from app.dependencies import get_ld_service
 from app.routers import ld as ld_router
 from app.services.ld_service import (
     LD_ENTRY_FIELDS,
+    LDPanelUnknown,
     LDService,
     LDUpstreamError,
     LDVariantNotInPanel,
@@ -184,6 +185,13 @@ def test_an_r2_threshold_outside_zero_to_one_is_refused(threshold):
     assert response.status_code == 422
 
 
+def test_an_unknown_panel_is_422_naming_the_panels_the_upstream_has():
+    service = StubService(raises=LDPanelUnknown("1kg", ["sisu3", "sisu4", "sisu42"]))
+    response = call(service, "/api/v1/ld/12:49048170:A:C", "panel=1kg")
+    assert response.status_code == 422
+    assert "sisu3, sisu4, sisu42" in response.json()["detail"]
+
+
 def test_an_upstream_failure_is_502_and_not_the_callers_fault():
     response = call(
         StubService(raises=LDUpstreamError("the LD server could not be reached")),
@@ -310,6 +318,33 @@ def test_the_upstreams_variant_not_found_is_its_own_error():
     with pytest.raises(LDVariantNotInPanel) as caught:
         fetch(service)
     assert "12:49048170:A:C is not in LD panel sisu42" == str(caught.value)
+
+
+def test_the_upstreams_own_panel_list_is_relayed_when_the_panel_is_unknown():
+    """The one piece of an upstream body that is relayed, and only name-shaped tokens of
+    it: a caller that guessed a name learns the real ones on the first refusal."""
+    service, _session = service_with(
+        FakeResponse(
+            status=400,
+            text="<!doctype html>\n<title>400 Bad Request</title>\n"
+            "<p>supported panels: sisu3,sisu4,sisu42</p>",
+        )
+    )
+    with pytest.raises(LDPanelUnknown) as caught:
+        fetch(service, panel="1000G")
+    assert caught.value.panels == ["sisu3", "sisu4", "sisu42"]
+    assert str(caught.value) == (
+        "Unknown LD panel '1000G'. The LD server's panels are: sisu3, sisu4, sisu42"
+    )
+
+
+def test_a_400_that_names_no_panels_is_still_an_upstream_failure():
+    service, _session = service_with(
+        FakeResponse(status=400, text="<p>window must be between 100000 and 5000000</p>")
+    )
+    with pytest.raises(LDUpstreamError) as caught:
+        fetch(service)
+    assert caught.value.status == 400
 
 
 def test_a_404_that_is_not_about_the_variant_is_still_an_upstream_failure():
