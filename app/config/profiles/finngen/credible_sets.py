@@ -311,23 +311,6 @@ data_files = [
         },
     },
     {
-        # GTEx v10 and IBDverse QTLs of the same release, in files of their own; per-study files
-        # are per tissue x quantification method, as for eQTL Catalogue (see genetics-results-munge
-        # scripts/create_open_targets_qtl_files.py)
-        "id": "open_targets_qtl",
-        "dataset_id": "open_targets_qtl",
-        "resource": "open_targets",
-        "data_source": "gcloud",
-        "example_pheno_or_study": "GTEx_v10_lung_ge",
-        "gencode_version": 39,
-        "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/open_targets_qtl/202609/individual/",
-            "suffix_95": ".SUSIE.munged.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets_qtl/202609/Open_Targets_QTL_26.09_credible_sets.tsv.gz",
-            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets_qtl/202609/Open_Targets_QTL_26.09_credible_sets.qtl.tsv.gz",
-        },
-    },
-    {
         "id": "nmr_ukbb_est",
         "dataset_id": "nmr_ukbb_est",
         "resource": "nmr_ukbb_est",
