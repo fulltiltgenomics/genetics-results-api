@@ -40,8 +40,12 @@ LD_ENTRY_FIELDS = ("variation1", "variation2", "r2", "d_prime")
 UPSTREAM_FIELDS = tuple(f for f in LD_ENTRY_FIELDS if f in ld_config.LD_STATISTICS)
 
 # a pair is asked of the upstream as a window centred on the first variant that just
-# reaches the second; the margin covers the upstream's own rounding of the span
-_PAIR_WINDOW_MARGIN = 10_000
+# reaches the second. The upstream's right-hand reach falls short of half its window:
+# measured at 12:49272869:C:T, a partner 291,680 bp to the right was missed at twice the
+# distance plus 8 kb and found at plus 12 kb. How the shortfall grows with the window is not
+# known, so the margin is far larger than that one measurement needs, at the cost of the
+# furthest pair the upstream can be asked about being (max window - margin) / 2 apart.
+_PAIR_WINDOW_MARGIN = 1_000_000
 
 # the one piece of an upstream body that is relayed: its own panel list, out of the 400 it
 # answers to a name it does not have. Only name-shaped tokens survive, so a body that is

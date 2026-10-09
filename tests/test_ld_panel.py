@@ -23,7 +23,12 @@ from app.routers import ld as ld_router
 from app.services import gcloud_tabix_base, ld_panel_service, startup_checks
 from app.services.gcloud_tabix_base import GCloudTabixBase
 from app.services.ld_panel_service import LDPanelService
-from app.services.ld_service import LDPairTooFar, LDService, LDVariantNotInPanel
+from app.services.ld_service import (
+    _PAIR_WINDOW_MARGIN,
+    LDPairTooFar,
+    LDService,
+    LDVariantNotInPanel,
+)
 from app.services.tabix_query import parse_tabix_index
 
 PANEL = "test_panel"
@@ -443,12 +448,14 @@ def test_the_upstream_pair_is_a_window_that_just_reaches_the_other_variant():
     upstream = _FakeUpstream([far, hit])
     got = asyncio.run(upstream.pair("22:1000:A:G", "chr22:150000:C:T", r2_threshold=0.2, panel="sisu42"))
     assert got == [hit]
-    assert upstream.calls == [("22:1000:A:G", 2 * 149_000 + 10_000, 0.2, "sisu42")]
+    assert upstream.calls == [("22:1000:A:G", 2 * 149_000 + _PAIR_WINDOW_MARGIN, 0.2, "sisu42")]
 
-    # never narrower than the upstream's minimum window
+    # the margin is what covers the upstream's short right-hand reach, so it is never
+    # narrower than the measured shortfall and never narrower than the upstream's minimum
+    assert _PAIR_WINDOW_MARGIN >= 12_000
     upstream = _FakeUpstream([])
     asyncio.run(upstream.pair("22:1000:A:G", "22:1500:C:T", r2_threshold=0.0, panel="sisu42"))
-    assert upstream.calls[0][1] == ld_config.ld_min_window
+    assert upstream.calls[0][1] >= ld_config.ld_min_window
 
 
 def test_the_upstream_pair_refuses_a_distance_its_window_cannot_reach():
