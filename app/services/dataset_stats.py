@@ -128,7 +128,8 @@ def get_dataset_stats(
         _misses.add(dataset_id)
         return None
 
-    collection = bool(entry.get("collection"))
+    # a substudy_metadata file counts sub-studies, as a collection's does
+    collection = bool(entry.get("collection") or entry.get("substudy_metadata"))
     stats = _compute_for_rows(rows, collection)
     _stats_cache[dataset_id] = stats
     return stats

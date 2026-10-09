@@ -71,6 +71,8 @@ class MetadataHarmonizer:
             return self._harmonize_eqtl_catalogue(raw_metadata, harm_config)
         elif harm_type == "open_targets":
             return self._harmonize_open_targets(raw_metadata, harm_config)
+        elif harm_type == "open_targets_qtl":
+            return self._harmonize_open_targets_qtl(raw_metadata, harm_config)
         elif harm_type == "genebass":
             return self._harmonize_genebass(raw_metadata, harm_config)
         elif harm_type == "custom_gwas":
@@ -457,6 +459,34 @@ class MetadataHarmonizer:
                 logger.error(f"Error harmonizing Open Targets item: {e}")
                 continue
 
+        return harmonized
+
+    def _harmonize_open_targets_qtl(
+        self, raw_metadata: list[dict], config: dict
+    ) -> list[HarmonizedMetadata]:
+        """Open Targets QTL sub-studies, as genetics-results-munge's
+        create_open_targets_qtl_files.py writes them: one row per results file
+        (substudy, cell_type, data_type, n_samples)."""
+        harmonized = []
+        for item in raw_metadata:
+            try:
+                n_samples = int(item.get("n_samples") or "")
+            except ValueError:
+                n_samples = "NA"
+            harmonized.append(
+                HarmonizedMetadata(
+                    phenotype_code=item.get("substudy", ""),
+                    phenotype_string=item.get("cell_type", ""),
+                    n_samples=n_samples,
+                    n_cases="NA",
+                    n_controls="NA",
+                    trait_type="quantitative",
+                    author=config.get("author") or "Open Targets",
+                    date=config.get("publication_date", "unknown"),
+                    resource=config.get("resource") or "open_targets",
+                    version=config.get("version_label", "unknown"),
+                )
+            )
         return harmonized
 
     def _harmonize_genebass(
