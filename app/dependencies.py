@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from app.services.gene_disease_data import GeneDiseaseData
     from app.services.gene_group_service import GeneGroupService
     from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
+    from app.services.ld_panel_service import LDPanelService
     from app.services.ld_service import LDService
     from app.services.request_util import RequestUtil
     from app.services.rsid_db import RsidDB
@@ -180,6 +181,11 @@ def get_request_util() -> "RequestUtil":
 def get_ld_service() -> "LDService":
     """Get LDService instance."""
     return container.get("ld_service")
+
+
+def get_ld_panel_service() -> "LDPanelService":
+    """Get LDPanelService instance."""
+    return container.get("ld_panels")
 
 
 def get_search_index() -> "SearchIndex":

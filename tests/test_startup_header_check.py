@@ -12,6 +12,7 @@ import subprocess
 import pytest
 
 from app.config.credible_sets import cs_file_header, cs_qtl_file_header
+from app.config.ld import ld_panels, panel_header
 from app.services import gcloud_tabix_base, startup_checks
 from app.services.gcloud_tabix_base import GCloudTabixBase
 
@@ -119,7 +120,8 @@ def test_unreadable_file_is_still_reported(monkeypatch, tabix, tmp_path):
 
 def test_every_configured_credible_set_file_gets_its_family_header():
     """The wiring over the real profile: cs and cs_qtl entries carry the expected header,
-    every other family is reachability-only."""
+    LD panel files carry their panel's declared header (the LD service reads statistics
+    by column offset), every other family is reachability-only."""
     checks = startup_checks._collect_tabix_files()
     by_family = {}
     for label, _, expected in checks:
@@ -128,5 +130,9 @@ def test_every_configured_credible_set_file_gets_its_family_header():
         )
     assert by_family["cs"] == {tuple(cs_file_header)}
     assert by_family["cs_qtl"] == {tuple(cs_qtl_file_header)}
-    others = {k: v for k, v in by_family.items() if k not in ("cs", "cs_qtl")}
+    if ld_panels:
+        assert by_family["ld"] == {tuple(panel_header(cfg)) for cfg in ld_panels}
+    else:
+        assert "ld" not in by_family
+    others = {k: v for k, v in by_family.items() if k not in ("cs", "cs_qtl", "ld")}
     assert others and all(v == {None} for v in others.values())

@@ -53,6 +53,7 @@ def _collect_tabix_files() -> list[TabixCheck]:
     from app.config.exome_results import exome_data_files
     from app.config.expression import expression_data
     from app.config.gene_based_results import gene_based_data_files
+    from app.config.ld import ld_panels, panel_file, panel_header
     from app.config.mpra import mpra_data
     from app.config.open_chromatin import open_chromatin_data
     from app.config.summary_stats import data_files as sumstats_files
@@ -67,6 +68,15 @@ def _collect_tabix_files() -> list[TabixCheck]:
         if "all_cs_qtl_file" in cfg:
             files.append(
                 (f"cs_qtl:{df['id']}", cfg["all_cs_qtl_file"], cs_qtl_file_header)
+            )
+
+    # one LD file per chromosome per panel, each held to the exact header its panel
+    # declares: the service reads statistics by column offset, so a file whose columns
+    # differ would serve one statistic under another's name
+    for cfg in ld_panels:
+        for chrom in cfg["chromosomes"]:
+            files.append(
+                (f"ld:{cfg['panel']}:{chrom}", panel_file(cfg, chrom), panel_header(cfg))
             )
 
     unchecked: list[tuple[str, str]] = []

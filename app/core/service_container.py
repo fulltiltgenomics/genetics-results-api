@@ -269,6 +269,10 @@ def _register_services():
         from app.services.ld_service import LDService
         return LDService()
 
+    def create_ld_panels():
+        from app.services.ld_panel_service import LDPanelService
+        return LDPanelService()
+
     # every registration states whether startup warms it; app.server's lifespan derives
     # its warming from these declarations rather than repeating the names.
     container.register(
@@ -281,6 +285,9 @@ def _register_services():
         "Warming would open a session to a third party this pod may never need, and there "
         "is nothing to prefetch — the upstream computes per query",
     )
+    # the panels served from our own matrices are a data product like the rest: cheap to
+    # construct, and warm_all prefetches one .tbi per chromosome file
+    container.register("ld_panels", create_ld_panels, Warm.ASYNC)
     container.register("search_index", create_search_index, Warm.THREAD)
     container.register("data_access", create_data_access, Warm.ASYNC)
     container.register("custom_gwas_catalogs", create_custom_gwas_catalogs, Warm.ASYNC)

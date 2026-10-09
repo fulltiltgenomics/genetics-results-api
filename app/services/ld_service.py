@@ -26,6 +26,7 @@ import aiohttp
 
 from app.config import ld as ld_config
 from app.core.exceptions import DataException
+from app.core.variant import Variant
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,14 @@ logger = logging.getLogger(__name__)
 # forwarding it: a field not listed here does not exist, the same rule the sandbox wire
 # contract states for its own shape.
 LD_ENTRY_FIELDS = ("variation1", "variation2", "r2", "d_prime")
+
+# the statistics the upstream carries, derived from the contract above so an upstream that
+# gains signed r is one edit here and `fields=r` starts working
+UPSTREAM_FIELDS = tuple(f for f in LD_ENTRY_FIELDS if f in ld_config.LD_STATISTICS)
+
+# a pair is asked of the upstream as a window centred on the first variant that just
+# reaches the second; the margin covers the upstream's own rounding of the span
+_PAIR_WINDOW_MARGIN = 10_000
 
 # the one piece of an upstream body that is relayed: its own panel list, out of the 400 it
 # answers to a name it does not have. Only name-shaped tokens survive, so a body that is
@@ -80,6 +89,23 @@ class LDPanelUnknown(DataException):
             f"Unknown LD panel '{panel}'. The LD server's panels are: {', '.join(panels)}"
         )
         self.panels = panels
+
+
+class LDPairTooFar(DataException):
+    """The two variants are further apart than the source computes LD for.
+
+    A caller error the caller can know in advance, so a 422 naming the cap rather than an
+    empty answer that reads as "independent".
+    """
+
+
+def _same_site(a: str, b: str) -> bool:
+    """Whether two ids name one variant, whatever spelling each uses (chr prefix, X vs 23)."""
+    try:
+        va, vb = Variant(a), Variant(b)
+    except Exception:
+        return a == b
+    return (va.chr, va.pos, va.ref, va.alt) == (vb.chr, vb.pos, vb.ref, vb.alt)
 
 
 class LDService:
@@ -171,3 +197,31 @@ class LDService:
             for entry in entries
             if isinstance(entry, dict)
         ]
+
+    async def pair(
+        self, variant: str, other: str, *, r2_threshold: float, panel: str
+    ) -> list[dict]:
+        """The upstream has no pair query, so a pair is a window query that just reaches the
+        other variant, filtered to it. [] means below the threshold OR not in the panel: the
+        upstream cannot tell those apart for the second variant, and neither can this.
+
+        The caller has already checked both ids parse and share a chromosome.
+        """
+        distance = abs(Variant(variant).pos - Variant(other).pos)
+        window = max(ld_config.ld_min_window, 2 * distance + _PAIR_WINDOW_MARGIN)
+        if window > ld_config.ld_max_window:
+            raise LDPairTooFar(
+                f"{variant} and {other} are {distance:,} bp apart; the LD server's window "
+                f"reaches {(ld_config.ld_max_window - _PAIR_WINDOW_MARGIN) // 2:,} bp"
+            )
+        if _same_site(variant, other):
+            # a variant against itself is 1 by definition; the query only proves membership
+            await self.variants_in_ld(variant, window=window, r2_threshold=1.0, panel=panel)
+            return [{"variation1": variant, "variation2": variant, "r2": 1.0, "d_prime": 1.0}]
+        entries = await self.variants_in_ld(
+            variant, window=window, r2_threshold=r2_threshold, panel=panel
+        )
+        return [
+            e for e in entries
+            if _same_site(e.get("variation2") or "", other) or _same_site(e.get("variation1") or "", other)
+        ][:1]
