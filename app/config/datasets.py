@@ -3,7 +3,8 @@ Central dataset registry loaded from datasets.yaml via the YAML loader.
 
 Each dataset_id maps to a dict with resource, version, description, author,
 publication_date, trait_type, data_type, metadata_file, metadata_harmonizer,
-and optionally collection + subdataset_id_field.
+and optionally collection + subdataset_id_field, or substudy_metadata (a metadata_file
+listing the dataset's sub-studies rather than phenotypes; it feeds only the dataset's stats).
 See docs/datasets-yaml-schema.md for full field documentation.
 """
 

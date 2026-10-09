@@ -93,6 +93,18 @@ def get_data_file_ids_for_resource(resource: str) -> list[str]:
     return resource_to_data_file_ids.get(resource, [])
 
 
+def _has_phenotype_metadata(dataset_id: str | None) -> bool:
+    """Whether a dataset's metadata file lists phenotypes of its resource.
+
+    A `substudy_metadata` file lists the dataset's sub-studies instead (Open Targets QTL:
+    one row per tissue x quantification file). Pooled into the resource's phenotype
+    metadata, its rows would become searchable "phenotypes" and reach /trait_name_mapping,
+    which reads the resource's own field names; only the dataset's stats read it.
+    """
+    entry = _dataset_registry.get(dataset_id) or {}
+    return not entry.get("substudy_metadata")
+
+
 def get_metadata_dataset_ids_for_resource(
     resource: str, include_coloc_partners: bool = False
 ) -> list[str]:
@@ -111,7 +123,7 @@ def get_metadata_dataset_ids_for_resource(
     seen: set[str] = set()
 
     def _add(ds_id: str | None) -> None:
-        if ds_id and ds_id not in seen:
+        if ds_id and ds_id not in seen and _has_phenotype_metadata(ds_id):
             seen.add(ds_id)
             dataset_ids.append(ds_id)
 
@@ -163,7 +175,7 @@ def get_resources_with_metadata() -> list[str]:
     resources_with_meta = set()
     for df in data_files:
         dataset_id = df["dataset_id"]
-        if build_harmonizer_config(dataset_id):
+        if build_harmonizer_config(dataset_id) and _has_phenotype_metadata(dataset_id):
             resource = df.get("resource", df["id"])
             resources_with_meta.add(resource)
     return sorted(list(resources_with_meta))
