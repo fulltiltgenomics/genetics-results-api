@@ -80,7 +80,7 @@ async def list_datasets(
     each dataset supports (one key per product config the dataset carries) and
     aggregate sample-size statistics.
 
-    `qtl_types`, `n_phenotypes`, `n_samples`, `pseudo_credible_sets` and `collection`
+    `qtl_types`, `n_phenotypes`, `n_samples`, `pseudo_credible_sets`, `cohorts` and `collection`
     are present only for datasets that define them."""
     return JSONResponse(
         content=_catalogue(resource, data_type, include_stats, False, data_access)
@@ -170,6 +170,9 @@ def _catalogue(
             item["n_phenotypes"] = entry["n_phenotypes"]
         if entry.get("pseudo_credible_sets"):
             item["pseudo_credible_sets"] = True
+        # sample collections that contributed individuals; absent means unknown, not "none"
+        if entry.get("cohorts"):
+            item["cohorts"] = [str(c) for c in entry["cohorts"]]
         if entry.get("collection"):
             item["collection"] = True
             item["subdataset_id_field"] = entry.get("subdataset_id_field")
