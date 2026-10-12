@@ -7,7 +7,7 @@ of a dataset's registry entry selects which one reads its file.
 
 import logging
 from dataclasses import asdict, dataclass
-from typing import Literal
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +26,22 @@ class HarmonizedMetadata:
     date: str  # ISO 8601 format (YYYY-MM-DD)
     resource: str
     version: str
+    # multi-cohort meta-analyses only; omitted from to_dict when unset so every other
+    # resource keeps its exact row shape
+    contributing_cohorts: list[str] | None = None
+    cohort_families: list[str] | None = None
+    n_by_cohort: dict[str, Any] | None = None
 
     def to_dict(self):
         """Convert to dictionary."""
-        return asdict(self)
+        d = asdict(self)
+        for key in _OPTIONAL_FIELDS:
+            if d[key] is None:
+                del d[key]
+        return d
+
+
+_OPTIONAL_FIELDS = ("contributing_cohorts", "cohort_families", "n_by_cohort")
 
 
 class MetadataHarmonizer:
@@ -67,6 +79,8 @@ class MetadataHarmonizer:
             return self._harmonize_quantitative_pheweb(raw_metadata, harm_config)
         elif harm_type == "pheweb":
             return self._harmonize_pheweb(raw_metadata, harm_config)
+        elif harm_type == "finngen_meta":
+            return self._harmonize_finngen_meta(raw_metadata, harm_config)
         elif harm_type == "eqtl_catalogue":
             return self._harmonize_eqtl_catalogue(raw_metadata, harm_config)
         elif harm_type == "open_targets":
@@ -302,6 +316,67 @@ class MetadataHarmonizer:
                 )
             except Exception as e:
                 logger.error(f"Error harmonizing pheweb item: {e}")
+                continue
+
+        return harmonized
+
+    def _harmonize_finngen_meta(
+        self, raw_metadata: list[dict], config: dict
+    ) -> list[HarmonizedMetadata]:
+        """Harmonize a FinnGen multi-cohort meta-analysis file (FinnGen + MVP + UKBB + AoU).
+
+        The trait name is under `name`. A quantitative trait carries `num_cases` (its whole
+        sample) and no `num_controls`, so only `num_controls` marks a trait binary; deciding
+        on `num_cases` as `_harmonize_pheweb` does would call every lab value binary. Which
+        cohorts contributed varies per phenotype, so the file's per-phenotype
+        `contributing_cohorts`, `cohort_families` and `n_by_cohort` are passed through.
+        """
+        harmonized = []
+
+        author = config.get("author", "")
+        pub_date = config.get("publication_date", "")
+        version = config.get("version_label", "")
+        resource = config.get("resource", "")
+
+        def safe_int_or_na(value):
+            if value in ("NA", "", None):
+                return "NA"
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                return "NA"
+
+        for item in raw_metadata:
+            try:
+                n_cases = safe_int_or_na(item.get("num_cases"))
+                n_controls = safe_int_or_na(item.get("num_controls"))
+                binary = "num_controls" in item
+                if binary:
+                    n_samples = (
+                        n_cases + n_controls if "NA" not in (n_cases, n_controls) else "NA"
+                    )
+                else:
+                    n_samples = n_cases
+
+                harmonized.append(
+                    HarmonizedMetadata(
+                        phenotype_code=item.get("phenocode", ""),
+                        phenotype_string=item.get("name") or item.get("phenostring", ""),
+                        n_samples=n_samples,
+                        n_cases=n_cases,
+                        n_controls=n_controls,
+                        trait_type="binary" if binary else "quantitative",
+                        author=author,
+                        date=pub_date,
+                        resource=resource,
+                        version=version,
+                        contributing_cohorts=list(item.get("contributing_cohorts") or []),
+                        cohort_families=list(item.get("cohort_families") or []),
+                        n_by_cohort=dict(item.get("n_by_cohort") or {}),
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error harmonizing FinnGen meta item: {e}")
                 continue
 
         return harmonized

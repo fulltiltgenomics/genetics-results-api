@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Literal
 
@@ -11,6 +12,17 @@ from app.services.data_access import DataAccess
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _tsv_cell(value) -> str:
+    """One /resource_metadata TSV cell: lists `;`-joined, dicts as compact JSON, whose
+    escaping keeps a nested value on one line."""
+    if isinstance(value, list):
+        return ";".join(map(str, value))
+    if isinstance(value, dict):
+        return json.dumps(value, separators=(",", ":"))
+    return str(value)
+
 
 @router.get(
     "/resource_metadata/{resource}",
@@ -108,6 +120,10 @@ async def resource_metadata(
     - date: Publication or release date (YYYY-MM-DD)
     - resource: Resource name
     - version: Resource version
+
+    A multi-cohort meta-analysis adds contributing_cohorts, cohort_families and
+    n_by_cohort; in TSV the lists are `;`-joined, n_by_cohort is compact JSON, and rows
+    without them read NA.
     """
     from app.services.config_util import get_resources
 
@@ -133,10 +149,16 @@ async def resource_metadata(
 
         if format == "tsv":
 
+            # rows of one resource can come from several metadata files, and only some
+            # harmonizers emit the optional cohort fields, so the header is the union
+            columns = list(dict.fromkeys(key for row in meta for key in row))
+
             def generate_tsv():
-                yield "\t".join(meta[0].keys()) + "\n"
+                yield "\t".join(columns) + "\n"
                 for row in meta:
-                    yield "\t".join(map(str, row.values())) + "\n"
+                    yield "\t".join(
+                        _tsv_cell(row[col]) if col in row else "NA" for col in columns
+                    ) + "\n"
 
             return StreamingResponse(
                 generate_tsv(), media_type="text/tab-separated-values"

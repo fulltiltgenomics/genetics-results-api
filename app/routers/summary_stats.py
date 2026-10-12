@@ -20,6 +20,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# typed by suffix so a new cohort or ancestry block in a meta-analysis is numeric without
+# being listed; anything unmatched stays a string, which never fails to parse
+_INT_COLUMNS = {"chr", "pos", "meta_n"}
+_INT_SUFFIXES = ("_n",)
+_FLOAT_COLUMNS = {
+    "pval", "mlog10p", "beta", "se", "af", "af_cases", "af_controls", "info", "het_p",
+}
+_FLOAT_SUFFIXES = ("_beta", "_se", "_sebeta", "_pval", "_af", "_af_alt", "_mlog10p", "_het_p", "_r2")
+
+
+def _infer_sumstats_type(out_col: str) -> type:
+    if out_col in _INT_COLUMNS or out_col.endswith(_INT_SUFFIXES):
+        return int
+    if out_col in _FLOAT_COLUMNS or out_col.endswith(_FLOAT_SUFFIXES):
+        return float
+    return str
+
+
 def _build_sumstats_header_schema(
     resource: str, data_type: str
 ) -> dict[str, type]:
@@ -33,30 +51,9 @@ def _build_sumstats_header_schema(
     # use first config's mapping to build schema
     mapping = data_file_configs[0]["column_mapping"]
 
-    # infer types from output column names
-    int_columns = {"chr", "pos"}
-    float_columns = {
-        "pval", "mlog10p", "beta", "se", "af", "af_cases", "af_controls",
-        "info", "het_p", "fg_beta", "fg_se", "fg_pval", "fg_af",
-        "mvp_eur_beta", "mvp_eur_se", "mvp_eur_pval", "mvp_eur_af",
-        "mvp_afr_beta", "mvp_afr_se", "mvp_afr_pval", "mvp_afr_af",
-        "mvp_amr_beta", "mvp_amr_se", "mvp_amr_pval", "mvp_amr_af",
-        "ukbb_beta", "ukbb_se", "ukbb_pval", "ukbb_af",
-        "leave_fg_beta", "leave_fg_se", "leave_fg_pval", "leave_fg_mlog10p",
-        "leave_mvp_eur_beta", "leave_mvp_eur_se", "leave_mvp_eur_pval", "leave_mvp_eur_mlog10p",
-        "leave_mvp_afr_beta", "leave_mvp_afr_se", "leave_mvp_afr_pval", "leave_mvp_afr_mlog10p",
-        "leave_mvp_amr_beta", "leave_mvp_amr_se", "leave_mvp_amr_pval", "leave_mvp_amr_mlog10p",
-        "leave_ukbb_beta", "leave_ukbb_se", "leave_ukbb_pval", "leave_ukbb_mlog10p",
-    }
-
     schema = {"resource": str, "version": str, "phenotype": str}
     for out_col in mapping.values():
-        if out_col in int_columns:
-            schema[out_col] = int
-        elif out_col in float_columns:
-            schema[out_col] = float
-        else:
-            schema[out_col] = str
+        schema[out_col] = _infer_sumstats_type(out_col)
     return schema
 
 

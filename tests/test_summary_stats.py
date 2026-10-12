@@ -216,16 +216,20 @@ class TestSummaryStatsGet:
         [
             ("finngen", "gwas"),
             ("finngen_mvp_ukbb", "gwas"),
+            ("finngen_mvp_ukbb_aou", "gwas"),
         ],
     )
     def test_summary_stats_per_resource(
-        self, server_url, test_variant, resource, data_type
+        self, server_url, test_variant, sumstats_resources_and_types, resource, data_type
     ):
         """Test each configured resource/data_type returns data."""
+        if (resource, data_type) not in sumstats_resources_and_types:
+            pytest.skip(f"{resource}/{data_type} is not configured in this profile")
         # use known phenotype per resource
         phenotype_map = {
             "finngen": "AUTOIMMUNE",
             "finngen_mvp_ukbb": "T2D",
+            "finngen_mvp_ukbb_aou": "T2D",
         }
         phenotype = phenotype_map.get(resource)
         if not phenotype:
@@ -889,3 +893,98 @@ class TestSummaryStatsErrorHandling:
         )
 
         assert response.status_code == 422
+
+
+class TestSummaryStatsTyping:
+    """JSON values are typed from the mapped column name, so every cohort block is numeric."""
+
+    def test_r14_meta_columns_are_typed_by_suffix(self):
+        from app.config.profiles.r14_meta_columns import R14_META_COLUMN_MAPPING
+        from app.routers.summary_stats import _infer_sumstats_type
+
+        types = {c: _infer_sumstats_type(c) for c in R14_META_COLUMN_MAPPING.values()}
+        for col in ("aou_eur_beta", "aou_mid_se", "ukbb_eur_pval", "mvp_afr_af",
+                    "mvp_eur_r2", "leave_aou_het_p", "leave_mvp_mlog10p", "het_p"):
+            assert types[col] is float, col
+        for col in ("chr", "pos", "meta_n", "leave_aou_n", "leave_fg_n"):
+            assert types[col] is int, col
+        for col in ("ref", "alt", "rsid"):
+            assert types[col] is str, col
+
+    def test_r13_meta_typing_is_unchanged_but_meta_n(self):
+        """The R13 meta schema matches what the enumerated type sets gave it, except that
+        meta_n, a count, is now an int rather than a string."""
+        from app.routers.summary_stats import _build_sumstats_header_schema
+
+        schema = _build_sumstats_header_schema("finngen_mvp_ukbb", "gwas")
+        assert schema, "finngen_mvp_ukbb/gwas is configured in every profile"
+        strings = {"resource", "version", "phenotype", "ref", "alt", "rsid"}
+        for col, type_ in schema.items():
+            if col in strings:
+                assert type_ is str, col
+            elif col in ("chr", "pos", "meta_n"):
+                assert type_ is int, col
+            else:
+                assert type_ is float, col
+
+    def test_finngen_pqtl_meta_typing(self):
+        """The finngen pQTL schema types per-cohort effect columns as floats and meta_n,
+        a count, as an int; identifiers stay strings."""
+        from app.routers.summary_stats import _build_sumstats_header_schema
+
+        schema = _build_sumstats_header_schema("finngen", "pqtl")
+        if not schema:
+            pytest.skip("finngen/pqtl is not configured in this profile")
+        floats = {
+            f"{cohort}_{stat}"
+            for cohort in ("olink", "olink_genewiz")
+            for stat in ("beta", "se", "pval", "af")
+        }
+        for col in floats:
+            assert schema[col] is float, col
+        assert schema["meta_n"] is int
+        assert schema["chr"] is int and schema["pos"] is int
+        for col in ("resource", "version", "phenotype", "ref", "alt", "rsid"):
+            assert schema[col] is str, col
+
+    def test_finngen_ukbb_pqtl_meta_typing(self):
+        """The finngen_ukbb pQTL schema types per-cohort and leave-one-out statistics as
+        floats and meta_n as an int; identifiers stay strings."""
+        from app.routers.summary_stats import _build_sumstats_header_schema
+
+        schema = _build_sumstats_header_schema("finngen_ukbb", "pqtl")
+        if not schema:
+            pytest.skip("finngen_ukbb/pqtl is not configured in this profile")
+        cohorts = ("fg2_3k", "ukbb_ppp", "fg3_cb")
+        floats = {
+            f"{cohort}_{stat}" for cohort in cohorts for stat in ("beta", "se", "pval", "af")
+        } | {
+            f"leave_{cohort}_{stat}"
+            for cohort in cohorts
+            for stat in ("beta", "se", "pval", "mlog10p", "het_p")
+        }
+        for col in floats:
+            assert schema[col] is float, col
+        assert schema["meta_n"] is int
+        assert schema["chr"] is int and schema["pos"] is int
+        for col in ("resource", "version", "phenotype", "ref", "alt", "rsid"):
+            assert schema[col] is str, col
+
+    def test_r14_meta_json_values_are_numbers(
+        self, server_url, test_variant, sumstats_resources_and_types
+    ):
+        if ("finngen_mvp_ukbb_aou", "gwas") not in sumstats_resources_and_types:
+            pytest.skip("finngen_mvp_ukbb_aou/gwas is not configured in this profile")
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats/finngen_mvp_ukbb_aou/gwas",
+            params={"variants": test_variant, "phenotypes": "T2D", "format": "json"},
+            timeout=30,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        row = data[0]
+        assert isinstance(row["aou_eur_beta"], float)
+        assert isinstance(row["leave_aou_n"], int)
+        assert isinstance(row["meta_n"], int)
+        assert isinstance(row["mlog10p"], float)

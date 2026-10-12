@@ -1,5 +1,7 @@
 """FinnGen profile: summary statistics data paths and column mappings."""
 
+from app.config.profiles.r14_meta_columns import R14_META_COLUMN_MAPPING
+
 data_files = [
     {
         "id": "finngen_gwas_sumstats",
@@ -23,6 +25,15 @@ data_files = [
             "af_alt_cases": "af_cases",
             "af_alt_controls": "af_controls",
         },
+    },
+    {
+        "id": "finngen_mvp_ukbb_aou_gwas_sumstats",
+        "dataset_id": "finngen_mvp_ukbb_aou",
+        "resource": "finngen_mvp_ukbb_aou",
+        "data_source": "gcloud",
+        "prefix": "gs://finngen-production-library-green/finngen_R14/finngen_R14_analysis_data/meta_analysis/summary_stats/",
+        "suffix": "_meta_out.tsv.gz",
+        "column_mapping": R14_META_COLUMN_MAPPING,
     },
     {
         "id": "finngen_mvp_ukbb_gwas_sumstats",
