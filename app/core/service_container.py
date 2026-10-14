@@ -207,6 +207,10 @@ def _register_services():
         from app.services.data_access_mpra import DataAccessMpra
         return DataAccessMpra()
 
+    def create_data_access_cell_type_expression():
+        from app.services.data_access_cell_type_expression import CellTypeExpressionAccess
+        return CellTypeExpressionAccess()
+
     # gene name mapping
     def create_gene_name_mapping():
         from app.services.gene_name_and_position_mapping import (
@@ -303,6 +307,9 @@ def _register_services():
         "data_access_variant_effect", create_data_access_variant_effect, Warm.ASYNC
     )
     container.register("data_access_mpra", create_data_access_mpra, Warm.ASYNC)
+    container.register(
+        "data_access_cell_type_expression", create_data_access_cell_type_expression, Warm.ASYNC
+    )
     container.register("gene_name_mapping", create_gene_name_mapping, Warm.THREAD)
     container.register(
         "gene_group_service", create_gene_group_service, Warm.NONE,

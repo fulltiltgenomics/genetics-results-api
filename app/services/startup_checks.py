@@ -13,6 +13,9 @@ collected before raising, so one run reports every problem at once:
     a cross-resource response is emitted positionally under the first file's header.
   - existence check (fsspec) for the non-tabix mapping files.
 
+The cell-type expression release is checked after those, through its pointer, because the
+directory it names is not known statically (`_check_cell_type_expression_release`).
+
 Per-phenotype files addressed by `prefix` + <phenotype> + `suffix` are NOT
 enumerable statically (thousands per resource, set unknown), so they are not
 header-checked here. The end-to-end range smoke query in app.server's lifespan
@@ -225,6 +228,51 @@ def _check_exists(label: str, path: str) -> str | None:
         return f"{label}: error checking {path}: {e}"
 
 
+def _check_cell_type_expression_release(tabix: GCloudTabixBase) -> list[str]:
+    """Errors for the release the cell-type expression pointer names right now.
+
+    Not part of `_collect_tabix_files`: the files live in a directory the pointer chooses
+    at run time, so there is nothing static to list. Both tabix files are held to the exact
+    header the service refuses to serve without, and the side tables and manifest must exist. A pointer
+    that cannot be read or parsed is only a warning; a release it names that is broken is an error.
+    """
+    import app.config.cell_type_expression as cfg
+    from app.services.data_access_cell_type_expression import (
+        parse_pointer,
+        release_paths,
+    )
+
+    if cfg.release_pointer is None:
+        return []
+    try:
+        with fsspec.open(cfg.release_pointer, "rb") as f:
+            pointer = parse_pointer(f.read())
+    except Exception as e:
+        # not an error: a deployment may start before the first release has been published,
+        # and the service answers 503 and keeps polling the pointer until it appears
+        logger.warning(
+            f"cell_type_expression: release pointer {cfg.release_pointer} unusable, the route "
+            f"will answer 503 until it is readable: {e}"
+        )
+        return []
+
+    paths = release_paths(pointer)
+    expected = {
+        cfg.SUMMARY_FILE: cfg.summary_columns,
+        cfg.PER_DATASET_FILE: cfg.per_dataset_columns,
+    }
+    errors = [
+        _check_tabix_header(
+            tabix, f"cell_type_expression:{name}", paths[name], [c.encode() for c in columns]
+        )
+        for name, columns in expected.items()
+    ] + [
+        _check_exists(f"cell_type_expression:{name}", paths[name])
+        for name in (cfg.MEASURED_GENES_FILE, cfg.DATASETS_FILE, cfg.GROUPS_FILE, cfg.MANIFEST_FILE)
+    ]
+    return [e for e in errors if e]
+
+
 def verify_all_data_files() -> None:
     """Verify every configured tabix file and mapping file is reachable.
 
@@ -256,6 +304,8 @@ def verify_all_data_files() -> None:
             err = future.result()
             if err:
                 errors.append(err)
+
+    errors.extend(_check_cell_type_expression_release(tabix))
 
     if errors:
         errors.sort()

@@ -136,3 +136,10 @@ def test_every_configured_credible_set_file_gets_its_family_header():
         assert "ld" not in by_family
     others = {k: v for k, v in by_family.items() if k not in ("cs", "cs_qtl", "ld")}
     assert others and all(v == {None} for v in others.values())
+
+
+@pytest.fixture(autouse=True)
+def _no_release_pointer(monkeypatch):
+    """verify_all_data_files also reads the cell-type expression pointer off GCS; that check
+    has its own tests in test_cell_type_expression.py."""
+    monkeypatch.setattr(startup_checks, "_check_cell_type_expression_release", lambda tabix: [])
