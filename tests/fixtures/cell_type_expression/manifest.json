@@ -1,0 +1,8 @@
+{
+ "thresholds": {
+  "min_cells": 50,
+  "min_donors": 3,
+  "min_pseudobulk_donors": 3,
+  "summary_include_spatial": false
+ }
+}

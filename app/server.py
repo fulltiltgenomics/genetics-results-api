@@ -15,6 +15,7 @@ from app.dependencies import auth_required, is_public
 from app.middleware import setup_middleware
 from app.routers import (
     auth,
+    cell_type_expression,
     chromatin_peaks,
     colocalization,
     credible_sets,
@@ -152,6 +153,9 @@ app.include_router(ld.router, prefix="/api/v1", tags=["ld"])
 app.include_router(credible_sets.router, prefix="/api/v1", tags=["credible-sets"])
 app.include_router(colocalization.router, prefix="/api/v1", tags=["colocalization"])
 app.include_router(expression.router, prefix="/api/v1", tags=["expression"])
+app.include_router(
+    cell_type_expression.router, prefix="/api/v1", tags=["cell-type-expression"]
+)
 app.include_router(genes.router, prefix="/api/v1", tags=["genes"])
 app.include_router(gene_groups.router, prefix="/api/v1", tags=["gene-groups"])
 app.include_router(gene_disease.router, prefix="/api/v1", tags=["gene-disease"])

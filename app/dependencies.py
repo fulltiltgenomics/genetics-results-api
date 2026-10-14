@@ -19,6 +19,7 @@ from app.services.gcloud_tabix_base import (
 if TYPE_CHECKING:
     from app.services.credible_set_stats_service import CredibleSetStatsService
     from app.services.data_access import DataAccess
+    from app.services.data_access_cell_type_expression import CellTypeExpressionAccess
     from app.services.data_access_chromatin_peaks import DataAccessChromatinPeaks
     from app.services.data_access_coloc import DataAccessColoc
     from app.services.data_access_expression import DataAccessExpression
@@ -226,6 +227,11 @@ def get_data_access_variant_effect() -> "DataAccessVariantEffect":
 def get_data_access_mpra() -> "DataAccessMpra":
     """Get DataAccessMpra service instance."""
     return container.get("data_access_mpra")
+
+
+def get_data_access_cell_type_expression() -> "CellTypeExpressionAccess":
+    """Get CellTypeExpressionAccess service instance."""
+    return container.get("data_access_cell_type_expression")
 
 
 def get_gene_name_mapping() -> "GeneNameAndPositionMapping":
