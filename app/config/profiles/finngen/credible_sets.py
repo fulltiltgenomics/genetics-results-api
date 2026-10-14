@@ -1,23 +1,19 @@
 """FinnGen profile: credible sets data paths."""
 
 data_files = [
-    # NOT YET STAGED: uncomment once the pseudo credible-set files below exist. Startup
-    # (app.services.startup_checks.verify_all_data_files) tabix-reads every configured
-    # all_cs_file and refuses to boot when one is missing, so enabling this entry before
-    # the files are written takes the whole finngen profile down.
-    # {
-    #     "id": "finngen_mvp_ukbb_aou",
-    #     "dataset_id": "finngen_mvp_ukbb_aou",
-    #     "resource": "finngen_mvp_ukbb_aou",
-    #     "data_source": "gcloud",
-    #     "example_pheno_or_study": "T2D",
-    #     "gencode_version": 49,
-    #     "cs": {
-    #         "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_mvp_ukbb_aou_pseudo/r14/",
-    #         "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
-    #         "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_mvp_ukbb_aou_pseudo/r14/FinnGen_R14_MVP_UKBB_AOU_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
-    #     },
-    # },
+    {
+        "id": "finngen_mvp_ukbb_aou",
+        "dataset_id": "finngen_mvp_ukbb_aou",
+        "resource": "finngen_mvp_ukbb_aou",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "T2D",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_mvp_ukbb_aou_pseudo/r14/",
+            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_mvp_ukbb_aou_pseudo/r14/FinnGen_R14_MVP_UKBB_AOU_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+        },
+    },
     {
         "id": "finngen_mvp_ukbb",
         "dataset_id": "finngen_mvp_ukbb",
