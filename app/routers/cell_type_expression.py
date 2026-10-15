@@ -84,7 +84,8 @@ async def cell_type_expression(
     level: Literal["summary", "dataset"] = Query(
         default="summary",
         description=(
-            "summary: normal tissue, pooled across datasets per (cell type, tissue). "
+            "summary: normal tissue, pooled across datasets per (cell type, tissue), leaving out "
+            "broad lineage labels such as 'leukocyte' or 'epithelial cell'. "
             "dataset: every group of every dataset that passes the suppression thresholds. "
             "A dataset that has at least one such group and measured the gene but has no row "
             "for it gets one placeholder row (status=measured_no_row): the gene has no "
