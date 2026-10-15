@@ -311,6 +311,29 @@ class TestProfiles:
         assert daly.release_pointer == "gs://daly-expression-data/cellxgene/releases/CURRENT"
         assert finngen.release_pointer is None
 
+    @pytest.mark.parametrize("profile,env,expected", [
+        ("daly", "gs://b/staging/CURRENT", "gs://b/staging/CURRENT"),
+        ("daly", "", "gs://daly-expression-data/cellxgene/releases/CURRENT"),
+        ("daly", None, "gs://daly-expression-data/cellxgene/releases/CURRENT"),
+        ("finngen", "", None),
+        ("finngen", None, None),
+    ])
+    def test_env_overrides_profile_pointer(self, monkeypatch, profile, env, expected):
+        import importlib
+
+        from app.config import profile as profile_loader
+
+        monkeypatch.setattr(profile_loader, "CONFIG_PROFILE", profile)
+        if env is None:
+            monkeypatch.delenv("CELL_TYPE_EXPRESSION_RELEASE_POINTER", raising=False)
+        else:
+            monkeypatch.setenv("CELL_TYPE_EXPRESSION_RELEASE_POINTER", env)
+        try:
+            assert importlib.reload(config).release_pointer == expected
+        finally:
+            monkeypatch.undo()
+            importlib.reload(config)
+
     def test_no_release_yet_is_503(self, access):
         with pytest.raises(HTTPException) as e:
             call(access, "WASH7P")

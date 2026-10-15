@@ -11,6 +11,8 @@ The profile names only the release POINTER; the release directory it locates cha
 under a running server (see app.services.data_access_cell_type_expression).
 """
 
+import os
+
 from app.config.profile import load_profile_module
 
 GENCODE_VERSION = 49
@@ -60,6 +62,8 @@ summary_header_schema = _schema(summary_columns)
 per_dataset_header_schema = _schema(per_dataset_columns + [STATUS_COLUMN])
 
 _profile = load_profile_module("cell_type_expression")
-# gs:// URI of the release pointer object; None where the deployment has no such data
-release_pointer: str | None = _profile.release_pointer
+# gs:// URI of the release pointer object; None where the deployment has no such data. The env
+# override lets a second cluster of the same profile (staging) read its own release; empty counts
+# as unset so a blank manifest value cannot give a profile without data a pointer.
+release_pointer: str | None = os.environ.get("CELL_TYPE_EXPRESSION_RELEASE_POINTER") or _profile.release_pointer
 refresh_seconds: int = _profile.refresh_seconds
