@@ -304,17 +304,19 @@ class TestProfiles:
         asyncio.run(a.warm_all())
         assert a._task is None
 
-    def test_only_the_daly_profile_names_a_pointer(self):
+    def test_no_profile_names_a_pointer(self):
+        # the deployment's env is the on/off switch; a profile default would turn the route on
+        # in every cluster of that profile
         from app.config.profiles.daly import cell_type_expression as daly
         from app.config.profiles.finngen import cell_type_expression as finngen
 
-        assert daly.release_pointer == "gs://daly-expression-data/cellxgene/releases/CURRENT"
+        assert daly.release_pointer is None
         assert finngen.release_pointer is None
 
     @pytest.mark.parametrize("profile,env,expected", [
         ("daly", "gs://b/staging/CURRENT", "gs://b/staging/CURRENT"),
-        ("daly", "", "gs://daly-expression-data/cellxgene/releases/CURRENT"),
-        ("daly", None, "gs://daly-expression-data/cellxgene/releases/CURRENT"),
+        ("daly", "", None),
+        ("daly", None, None),
         ("finngen", "", None),
         ("finngen", None, None),
     ])
