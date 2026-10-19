@@ -2,55 +2,16 @@
 
 data_files = [
     {
-        "id": "finngen_mvp_ukbb",
-        "dataset_id": "finngen_mvp_ukbb",
-        "resource": "finngen_mvp_ukbb",
+        "id": "finngen_mvp_ukbb_aou",
+        "dataset_id": "finngen_mvp_ukbb_aou",
+        "resource": "finngen_mvp_ukbb_aou",
         "data_source": "gcloud",
-        "example_pheno_or_study": "AB1_DERMATOPHYTOSIS",
+        "example_pheno_or_study": "T2D",
         "gencode_version": 49,
         "cs": {
-            "prefix": "gs://daly-genetics-results/credible_sets/finngen_mvp_ukbb_pseudo/r13/",
+            "prefix": "gs://daly-genetics-results/credible_sets/finngen_mvp_ukbb_aou_pseudo/r14/",
             "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
-            "all_cs_file": "gs://daly-genetics-results/credible_sets/finngen_mvp_ukbb_pseudo/r13/FinnGen_R13_MVP_UKBB_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
-        },
-    },
-    {
-        "id": "finngen_mvp_ukbb_labs",
-        "dataset_id": "finngen_mvp_ukbb_labs",
-        "resource": "finngen_mvp_ukbb",
-        "data_source": "gcloud",
-        "example_pheno_or_study": "3000963",
-        "gencode_version": 49,
-        "cs": {
-            "prefix": "gs://daly-genetics-results/credible_sets/finngen_mvp_ukbb_labs_pseudo/r13/",
-            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
-            "all_cs_file": "gs://daly-genetics-results/credible_sets/finngen_mvp_ukbb_labs_pseudo/r13/FinnGen_R13_MVP_UKBB_labs_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
-        },
-    },
-    {
-        "id": "finngen_ukbb",
-        "dataset_id": "finngen_ukbb",
-        "resource": "finngen_ukbb",
-        "data_source": "gcloud",
-        "example_pheno_or_study": "AB1_DERMATOPHYTOSIS",
-        "gencode_version": 49,
-        "cs": {
-            "prefix": "gs://daly-genetics-results/credible_sets/finngen_ukbb_pseudo/r13/",
-            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
-            "all_cs_file": "gs://daly-genetics-results/credible_sets/finngen_ukbb_pseudo/r13/FinnGen_R13_UKBB_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
-        },
-    },
-    {
-        "id": "finngen_ukbb_labs",
-        "dataset_id": "finngen_ukbb_labs",
-        "resource": "finngen_ukbb",
-        "data_source": "gcloud",
-        "example_pheno_or_study": "3000963",
-        "gencode_version": 49,
-        "cs": {
-            "prefix": "gs://daly-genetics-results/credible_sets/finngen_ukbb_labs_pseudo/r13/",
-            "suffix_95": ".report.out.pseudo_cs.mlog10p_2.r2_0.6.tsv",
-            "all_cs_file": "gs://daly-genetics-results/credible_sets/finngen_ukbb_labs_pseudo/r13/FinnGen_R13_UKBB_labs_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
+            "all_cs_file": "gs://daly-genetics-results/credible_sets/finngen_mvp_ukbb_aou_pseudo/r14/FinnGen_R14_MVP_UKBB_AOU_pseudo_credible_sets.mlog10p_2.r2_0.6.tsv.gz",
         },
     },
     {
