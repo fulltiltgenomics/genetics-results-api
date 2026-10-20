@@ -186,3 +186,6 @@ cython_debug/
 
 # synced from ../genetics-results-suite (canonical source); run scripts/sync-datasets.sh
 configs/datasets.yaml
+
+# the issue tracker lives in the private Dolt remote; its export carries internal detail and is not published
+.beads/issues.jsonl
