@@ -187,13 +187,63 @@ def get_authenticated_user(request: Request) -> str | None:
         return None
     # header format: "accounts.google.com:user@domain.com"
     email = iap_email.split(":")[-1] if ":" in iap_email else iap_email
-    if not _email_allowed(email):
+    if not identity_allowed(email):
         logger.warning("proxied identity rejected: email not in the allow-list")
         return None
     # matching is case-insensitive and whitespace-tolerant, so the same person can arrive as
     # several spellings; return the normalized form or endpoint_access splits them into
     # separate identities. Must stay in step with _extract_user_from_header.
     return email.strip().lower()
+
+
+# runtime access grants are chat-backend's table (genetics-mcp-server access_grants.py); this
+# service only asks. Answers are cached briefly in both directions so a grant or a revocation
+# is seen here within ACCESS_GRANT_CACHE_S, about what oauth2-proxy's ConfigMap propagation
+# already imposes, and a browser session does not cost one HTTP call per data request
+ACCESS_GRANT_CACHE_S = 60.0
+_access_grant_cache: dict[str, tuple[bool, float]] = {}
+
+
+def _has_access_grant(email: str) -> bool:
+    """Whether chat-backend holds an active runtime grant for the address. Failures answer False."""
+    import time
+
+    email = email.strip().lower()
+    now = time.monotonic()
+    cached = _access_grant_cache.get(email)
+    if cached and cached[1] > now:
+        return cached[0]
+    if not config.chat_backend_url:
+        return False
+    allowed = False
+    try:
+        import requests
+        headers = {}
+        if config.internal_api_secret:
+            headers["Authorization"] = f"Bearer {config.internal_api_secret}"
+        resp = requests.get(
+            f"{config.chat_backend_url}/v1/access-grants/check",
+            params={"email": email},
+            headers=headers,
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            allowed = bool(resp.json().get("allowed"))
+        else:
+            logger.warning(f"access-grant check answered {resp.status_code}")
+    except Exception as e:
+        logger.warning(f"access-grant check failed: {e}")
+    _access_grant_cache[email] = (allowed, now + ACCESS_GRANT_CACHE_S)
+    return allowed
+
+
+def identity_allowed(email: str, *, allow_wildcard: bool = True) -> bool:
+    """The static allow-list, or failing that a runtime grant.
+
+    Kept apart from `_email_allowed` so that function stays the pure matching twin of
+    mcp-server's `_matches_allow_list`; every authorization decision goes through this one.
+    """
+    return _email_allowed(email, allow_wildcard=allow_wildcard) or _has_access_grant(email)
 
 
 def _validate_user_api_token(token: str) -> str | None:
@@ -318,7 +368,7 @@ def get_bearer_token_user(request: Request) -> str | None:
     # is not a backstop: inert while GOOGLE_TOKEN_AUDIENCE is unset, and the *public* gcloud
     # client id when set. get_authenticated_user's call keeps the default — it runs behind
     # is_internal_caller, so there the gateway really has decided.
-    if not _email_allowed(email, allow_wildcard=False):
+    if not identity_allowed(email, allow_wildcard=False):
         raise HTTPException(status_code=403, detail="Email domain not allowed")
 
     return email

@@ -32,7 +32,7 @@ def _extract_user_from_header(scope: Scope) -> Optional[str]:
     any pod that can reach this service could pick whose name lands in the endpoint_access log,
     and an identity the auth path refused would still be attributed a request here.
     """
-    from app.core.auth import _email_allowed, is_internal_caller
+    from app.core.auth import identity_allowed, is_internal_caller
 
     headers = dict(scope.get("headers", []))
     iap_email = headers.get(b"x-goog-authenticated-user-email", b"").decode("utf-8", errors="ignore")
@@ -52,7 +52,7 @@ def _extract_user_from_header(scope: Scope) -> Optional[str]:
     # header format: "accounts.google.com:user@domain.com"
     email = iap_email.split(":")[-1] if ":" in iap_email else iap_email
     # normalized exactly as get_authenticated_user does, so one person is one identity in the log
-    return email.strip().lower() if _email_allowed(email) else None
+    return email.strip().lower() if identity_allowed(email) else None
 
 
 class UsageLoggingMiddleware:
