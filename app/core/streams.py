@@ -800,6 +800,8 @@ async def tsv_stream_to_list_with_header(
             raise ValueError(f"Header {h} not found in header schema")
 
     rows = []
+    # no per-cell fallback: only "NA" becomes null and a leading "inf" 1e308, so one cell a
+    # typed column cannot hold ("", ".", "NaN", "-inf", "12.0" under int) fails the whole response
     try:
         async for fields in line_stream:
             row = {}
