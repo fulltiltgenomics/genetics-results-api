@@ -438,6 +438,27 @@ data_files = [
         },
     },
     {
+        # munged and staged on daly; the finngen side copies it bucket-to-bucket to this
+        # path, and until it has, range queries log the file as not found and skip it
+        "id": "huerta_chagoya_t2d_sumstats",
+        "dataset_id": "huerta_chagoya_t2d",
+        "resource": "huerta_chagoya_t2d",
+        "data_source": "gcloud",
+        "file": "gs://finngen-commons/results_api_data/sumstats/HUERTA_CHAGOYA_T2D/GCST90444202.munged.tsv.gz",
+        "phenotype": "T2D",
+        "column_mapping": {
+            "chr": "chr",
+            "pos": "pos",
+            "ref": "ref",
+            "alt": "alt",
+            "rsid": "rsid",
+            "beta": "beta",
+            "se": "se",
+            "mlog10p": "mlog10p",
+            "af": "af",
+        },
+    },
+    {
         "id": "decode_asmqtl_cpg_sumstats",
         "dataset_id": "decode_asmqtl_cpg",
         "resource": "decode",
