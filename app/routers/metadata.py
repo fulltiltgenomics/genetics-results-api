@@ -125,9 +125,11 @@ async def resource_metadata(
     n_by_cohort; in TSV the lists are `;`-joined, n_by_cohort is compact JSON, and rows
     without them read NA.
     """
-    from app.services.config_util import get_resources
+    from app.services.config_util import get_resources, get_resources_with_metadata
 
-    if resource not in get_resources():
+    # a resource serving nothing but summary statistics (the R12 sex-specific and
+    # recessive GWAS) has no product data file, so get_resources() does not know it
+    if resource not in get_resources() and resource not in get_resources_with_metadata():
         raise HTTPException(status_code=404, detail=f"Resource {resource} not found")
     try:
         meta = data_access.get_harmonized_metadata(

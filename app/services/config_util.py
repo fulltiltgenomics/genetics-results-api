@@ -111,7 +111,10 @@ def get_metadata_dataset_ids_for_resource(
     """Dataset IDs whose metadata should populate a resource's harmonized metadata.
 
     Always includes the datasets backing the resource's products (credible sets,
-    exome, gene-based). When ``include_coloc_partners`` is set, also includes
+    exome, gene-based, summary statistics - a resource serving nothing but summary
+    statistics, the R12 sex-specific and recessive GWAS, has no other source for its
+    phenotype list; the readers dedupe by file, so a product sharing its release's
+    metadata file adds nothing). When ``include_coloc_partners`` is set, also includes
     coloc-partner datasets that belong to this resource but ship no product of
     their own (e.g. ``finngen_kanta_r12``, retained only as the eQTL/caQTL coloc
     partner). Those partners are referenced in coloc results by their own
@@ -130,6 +133,9 @@ def get_metadata_dataset_ids_for_resource(
     for data_file_id in get_data_file_ids_for_resource(resource):
         df = data_file_by_id.get(data_file_id)
         if df:
+            _add(df.get("dataset_id"))
+    for df in _sumstats_data_files:
+        if df.get("resource") == resource:
             _add(df.get("dataset_id"))
 
     if include_coloc_partners:
@@ -173,8 +179,8 @@ def get_resources(data_type: str | None = None) -> list[str]:
 def get_resources_with_metadata() -> list[str]:
     """Get the resources with metadata from the config."""
     resources_with_meta = set()
-    for df in data_files:
-        dataset_id = df["dataset_id"]
+    for df in data_files + _sumstats_data_files:
+        dataset_id = df.get("dataset_id")
         if build_harmonizer_config(dataset_id) and _has_phenotype_metadata(dataset_id):
             resource = df.get("resource", df["id"])
             resources_with_meta.add(resource)

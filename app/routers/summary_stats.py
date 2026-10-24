@@ -22,12 +22,16 @@ router = APIRouter()
 
 # typed by suffix so a new cohort or ancestry block in a meta-analysis is numeric without
 # being listed; anything unmatched stays a string, which never fails to parse
-_INT_COLUMNS = {"chr", "pos", "meta_n"}
+_INT_COLUMNS = {"chr", "pos", "meta_n", "ac_het", "ac_hom"}
 _INT_SUFFIXES = ("_n",)
 _FLOAT_COLUMNS = {
     "pval", "mlog10p", "beta", "se", "af", "af_cases", "af_controls", "info", "het_p",
+    "mlog10p_diff",
 }
-_FLOAT_SUFFIXES = ("_beta", "_se", "_sebeta", "_pval", "_af", "_af_alt", "_mlog10p", "_het_p", "_r2")
+_FLOAT_SUFFIXES = (
+    "_beta", "_se", "_sebeta", "_pval", "_af", "_af_alt", "_af_cases", "_af_controls",
+    "_mlog10p", "_het_p", "_r2",
+)
 
 
 def _infer_sumstats_type(out_col: str) -> type:

@@ -1,5 +1,9 @@
 """FinnGen profile: summary statistics data paths and column mappings."""
 
+from app.config.profiles.r12_model_columns import (
+    RECESSIVE_COLUMN_MAPPING,
+    SEX_SPECIFIC_COLUMN_MAPPING,
+)
 from app.config.profiles.r14_meta_columns import R14_META_COLUMN_MAPPING
 
 data_files = [
@@ -74,6 +78,27 @@ data_files = [
             "sebeta": "se",
             "af_alt": "af",
         },
+    },
+    # R12 model-specific releases, read in place from the green library. Each is an
+    # on-request resource of its own (see datasets.yaml): the flag gates a whole resource,
+    # and under finngen the R12 T2D would sit beside the R14 core T2D
+    {
+        "id": "finngen_sex_specific_r12_sumstats",
+        "dataset_id": "finngen_sex_specific_r12",
+        "resource": "finngen_sex_specific",
+        "data_source": "gcloud",
+        "prefix": "gs://finngen-production-library-green/finngen_R12/finngen_R12_analysis_data/sex_difference/meta_analysis/meta_summary_stats/",
+        "suffix": "_meta_out_filtered.tsv.gz",
+        "column_mapping": SEX_SPECIFIC_COLUMN_MAPPING,
+    },
+    {
+        "id": "finngen_recessive_r12_sumstats",
+        "dataset_id": "finngen_recessive_r12",
+        "resource": "finngen_recessive",
+        "data_source": "gcloud",
+        "prefix": "gs://finngen-production-library-green/finngen_R12/finngen_R12_analysis_data/summary_stats_recessive/results/",
+        "suffix": ".gz",
+        "column_mapping": RECESSIVE_COLUMN_MAPPING,
     },
     {
         "id": "finngen_pqtl_sumstats",

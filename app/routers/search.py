@@ -165,7 +165,8 @@ async def search_autocomplete(
         default=None,
         description="Comma-separated resources to restrict phenotype results to. Required to "
         "reach an on_request resource (a sandbox custom GWAS release such as "
-        "finngen_custom_r14), whose phenotypes a search without it never returns",
+        "finngen_custom_r14, or the R12 sex-specific and recessive releases), whose "
+        "phenotypes a search without it never returns",
     ),
     search_index: SearchIndex = Depends(get_search_index),
 ):

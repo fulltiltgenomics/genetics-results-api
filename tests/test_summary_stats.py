@@ -989,3 +989,95 @@ class TestSummaryStatsTyping:
         assert isinstance(row["leave_aou_n"], int)
         assert isinstance(row["meta_n"], int)
         assert isinstance(row["mlog10p"], float)
+
+
+class TestR12ModelSpecific:
+    """The FinnGen R12 sex-specific and recessive releases: on-request resources of their
+    own, each serving one data type, so T2D under finngen/gwas stays the R14 core run."""
+
+    @pytest.mark.parametrize(
+        "resource,data_type,columns,float_cols,int_cols",
+        [
+            (
+                "finngen_sex_specific",
+                "gwas_sex_specific",
+                ("female_beta", "female_pval", "male_beta", "male_pval", "meta_n", "beta", "het_p"),
+                ("female_pval", "female_af_cases", "het_p"),
+                ("meta_n",),
+            ),
+            (
+                "finngen_recessive",
+                "gwas_recessive",
+                ("beta", "additive_beta", "additive_pval", "effect_allele", "flipped", "mlog10p_diff", "ac_het", "ac_hom"),
+                ("additive_pval", "mlog10p_diff", "info"),
+                ("ac_het", "ac_hom"),
+            ),
+        ],
+    )
+    def test_model_specific_columns_and_types(
+        self, server_url, test_variant, sumstats_resources_and_types, resource, data_type, columns, float_cols, int_cols
+    ):
+        if (resource, data_type) not in sumstats_resources_and_types:
+            pytest.skip(f"{resource}/{data_type} is not configured in this profile")
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats/{resource}/{data_type}",
+            params={"variants": test_variant, "phenotypes": "T2D", "format": "json"},
+            timeout=60,
+        )
+        assert response.status_code == 200, response.text[:200]
+        data = response.json()
+        assert len(data) == 1, data
+        row = data[0]
+        assert row["phenotype"] == "T2D" and row["version"] == "R12"
+        for col in columns:
+            assert col in row, f"missing {col}"
+        # the JSON typing is inferred from the output column name, so a column that falls
+        # through to str is a naming mistake rather than a data one
+        for col in float_cols:
+            assert isinstance(row[col], float), (col, row[col])
+        for col in int_cols:
+            assert isinstance(row[col], int), (col, row[col])
+
+    def test_region_query_serves_both_models(self, server_url, sumstats_resources_and_types):
+        if ("finngen_recessive", "gwas_recessive") not in sumstats_resources_and_types:
+            pytest.skip("finngen_recessive/gwas_recessive is not configured in this profile")
+        response = requests.get(
+            f"{server_url}/api/v1/summary_stats_by_region/finngen_recessive/gwas_recessive/19:44905000-44910000",
+            params={"phenotypes": "T2D", "format": "tsv"},
+            timeout=60,
+        )
+        assert response.status_code == 200, response.text[:200]
+        validation = validate_tsv_response(response.text, min_data_lines=1)
+        assert validation["valid"], validation["errors"]
+        for col in ("beta", "additive_beta", "effect_allele", "flipped"):
+            assert col in validation["header"], col
+
+    def test_the_releases_are_on_request(self, server_url, sumstats_resources_and_types):
+        """Hidden from the general catalogue and the default search, listed when named:
+        the same gate as the sandbox custom GWAS, so a question about a disease is
+        answered from the core release unless the user asks for the model."""
+        if ("finngen_sex_specific", "gwas_sex_specific") not in sumstats_resources_and_types:
+            pytest.skip("finngen_sex_specific is not configured in this profile")
+        listed = {d["dataset_id"] for d in requests.get(f"{server_url}/api/v1/datasets", timeout=60).json()}
+        assert not {"finngen_sex_specific_r12", "finngen_recessive_r12"} & listed
+        for resource, dataset_id in (
+            ("finngen_sex_specific", "finngen_sex_specific_r12"),
+            ("finngen_recessive", "finngen_recessive_r12"),
+        ):
+            named = requests.get(
+                f"{server_url}/api/v1/datasets", params={"resource": resource}, timeout=60
+            ).json()
+            assert [d["dataset_id"] for d in named] == [dataset_id]
+            assert named[0]["products"] == {"summary_stats": True}
+        on_request = {d["resource"] for d in requests.get(f"{server_url}/api/v1/datasets/on_request", timeout=60).json()}
+        assert {"finngen_sex_specific", "finngen_recessive"} <= on_request
+        hits = requests.get(
+            f"{server_url}/api/v1/search", params={"q": "T2D", "types": "phenotypes", "limit": "50"}, timeout=60
+        ).json()
+        assert not any(h.get("resource") in ("finngen_sex_specific", "finngen_recessive") for h in hits)
+        hits = requests.get(
+            f"{server_url}/api/v1/search",
+            params={"q": "T2D", "types": "phenotypes", "limit": "50", "resources": "finngen_sex_specific"},
+            timeout=60,
+        ).json()
+        assert {h.get("resource") for h in hits} == {"finngen_sex_specific"}

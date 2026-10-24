@@ -124,7 +124,8 @@ def _catalogue(
     for dataset_id, entry in registry.items():
         if resource and entry.get("resource") != resource:
             continue
-        # an on_request dataset (a sandbox custom GWAS release) is listed only to a
+        # an on_request dataset (a sandbox custom GWAS release, an R12 model-specific
+        # release) is listed only to a
         # request that asks for its resource by name, never in the general catalogue
         flagged = config_util.is_on_request(dataset_id)
         if on_request and not flagged:
