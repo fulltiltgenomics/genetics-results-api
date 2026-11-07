@@ -6,6 +6,7 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
+import app.config.cell_type_expression as cell_type_expression_config
 from app.core.auth import warn_if_wildcard_allow_list
 from app.core.logging_config import setup_logging
 from app.core.query_params import reject_unknown_query_params
@@ -103,6 +104,22 @@ async def lifespan(app):
             await instance.cleanup()
 
 
+def include_cell_type_expression(app: FastAPI) -> bool:
+    """Register the cell-type expression route only where the deployment names a release.
+
+    Absent rather than answering 404: a deployment without the data (the finngen profile, or
+    a daly cluster with no pointer) must not list the route in its OpenAPI schema or the
+    /api/v1 index either. The browser hides its section on the missing route, and mcp-server
+    withdraws the tool on the same deployments.
+    """
+    if cell_type_expression_config.release_pointer is None:
+        return False
+    app.include_router(
+        cell_type_expression.router, prefix="/api/v1", tags=["cell-type-expression"]
+    )
+    return True
+
+
 # FastAPI registers its docs/openapi routes with Starlette's add_route, which does NOT
 # apply the app-level `dependencies` below — so the built-in docs_url/redoc_url/openapi_url
 # were served without auth_required. Combined with the auth-gateway's `Authorization: Bearer`
@@ -153,9 +170,7 @@ app.include_router(ld.router, prefix="/api/v1", tags=["ld"])
 app.include_router(credible_sets.router, prefix="/api/v1", tags=["credible-sets"])
 app.include_router(colocalization.router, prefix="/api/v1", tags=["colocalization"])
 app.include_router(expression.router, prefix="/api/v1", tags=["expression"])
-app.include_router(
-    cell_type_expression.router, prefix="/api/v1", tags=["cell-type-expression"]
-)
+include_cell_type_expression(app)
 app.include_router(genes.router, prefix="/api/v1", tags=["genes"])
 app.include_router(gene_groups.router, prefix="/api/v1", tags=["gene-groups"])
 app.include_router(gene_disease.router, prefix="/api/v1", tags=["gene-disease"])

@@ -101,10 +101,6 @@ async def cell_type_expression(
 ) -> Response:
     """Mean log1p CP10K and the fraction of expressing cells per cell type, from CELLxGENE."""
     start_time = time.time()
-    if not data_access.configured:
-        raise HTTPException(
-            status_code=404, detail="Cell-type expression data is not configured for this deployment"
-        )
     genes = _resolve_genes(gene, gene_name_and_position_mapping)
     try:
         release = data_access.release

@@ -290,12 +290,18 @@ async def _collect(access, gene) -> str:
 
 
 class TestProfiles:
-    def test_unconfigured_deployment_answers_404(self, monkeypatch):
-        monkeypatch.setattr(gcloud_tabix_base, "ensure_gcs_token", lambda: None)
-        monkeypatch.setattr(config, "release_pointer", None)
-        with pytest.raises(HTTPException) as e:
-            call(CellTypeExpressionAccess(), "WASH7P")
-        assert e.value.status_code == 404 and "not configured" in e.value.detail
+    @pytest.mark.parametrize("pointer,registered", [(None, False), (POINTER, True)])
+    def test_route_exists_only_where_a_release_is_named(self, monkeypatch, pointer, registered):
+        # absent, not 404: a deployment without the data lists nothing in its OpenAPI schema
+        from fastapi import FastAPI
+
+        from app.server import include_cell_type_expression
+
+        monkeypatch.setattr(config, "release_pointer", pointer)
+        app = FastAPI()
+        assert include_cell_type_expression(app) is registered
+        paths = {getattr(r, "path", None) for r in app.routes}
+        assert ("/api/v1/cell_type_expression/{gene}" in paths) is registered
 
     def test_unconfigured_deployment_neither_warms_nor_polls(self, monkeypatch):
         monkeypatch.setattr(gcloud_tabix_base, "ensure_gcs_token", lambda: None)
