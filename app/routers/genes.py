@@ -41,7 +41,6 @@ def _tsv_value(value: Any) -> str:
 
 @router.get(
     "/genes_in_region/{chr}/{start}/{end}",
-    include_in_schema=False,
     responses={
         200: {
             "description": "Successful response",

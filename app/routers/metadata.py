@@ -189,7 +189,6 @@ async def resource_metadata(
         404: {"description": "Trait name mapping not found"},
         500: {"description": "Internal server error"},
     },
-    include_in_schema=False,
 )
 async def trait_name_mapping(
     request: Request,

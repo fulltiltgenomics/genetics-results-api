@@ -67,6 +67,7 @@ def _verified_search_columns(
                                 "name": {"type": "string"},
                                 "resource": {"type": "string", "description": "Phenotype results only"},
                                 "data_type": {"type": "string", "description": "Phenotype results only; pass to summary_stats/{resource}/{data_type}"},
+                                "version": {"type": "string", "description": "Phenotype results only; the dataset's release label (R14, R12, v10, ...), the same string resource_metadata carries"},
                                 "sample_size": {"type": "integer", "description": "Phenotype results only"},
                                 "n_cases": {"type": ["integer", "string"], "description": "Phenotype results only, int or 'NA'"},
                                 "n_controls": {"type": ["integer", "string"], "description": "Phenotype results only, int or 'NA'"},
@@ -109,6 +110,7 @@ def _verified_search_columns(
                             "name": "Hyperlipidaemia",
                             "resource": "finngen",
                             "data_type": "gwas",
+                            "version": "R14",
                             "sample_size": 156438,
                             "n_cases": 56438,
                             "n_controls": 100000,
@@ -124,7 +126,7 @@ def _verified_search_columns(
                 },
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "type\tsymbol\tname\taliases\tensembl_id\tchrom\tgene_start\tgene_end\tmatch_type\tmatch_score\trank_score\tmatched_key\ngene\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tENSG00000169174\t1\t55039447\t55064852\texact\t100\t1200\tPCSK9\n\ntype\tcode\tname\tresource\tdata_type\tsample_size\tn_cases\tn_controls\thas_summary_stats\thas_credible_sets\tmatch_type\tmatch_score\trank_score\tmatched_key\nphenotype\tI9_HYPERLIPID\tHyperlipidaemia\tfinngen\tgwas\t156438\t56438\t100000\ttrue\ttrue\tprefix\t95\t965\tI9_HYPERLIPID\n...",
+                    "example": "type\tsymbol\tname\taliases\tensembl_id\tchrom\tgene_start\tgene_end\tmatch_type\tmatch_score\trank_score\tmatched_key\ngene\tPCSK9\tproprotein convertase subtilisin/kexin type 9\tNARC-1|FH3\tENSG00000169174\t1\t55039447\t55064852\texact\t100\t1200\tPCSK9\n\ntype\tcode\tname\tresource\tdata_type\tversion\tsample_size\tn_cases\tn_controls\thas_summary_stats\thas_credible_sets\tmatch_type\tmatch_score\trank_score\tmatched_key\nphenotype\tI9_HYPERLIPID\tHyperlipidaemia\tfinngen\tgwas\tR14\t156438\t56438\t100000\ttrue\ttrue\tprefix\t95\t965\tI9_HYPERLIPID\n...",
                 },
             },
         },
@@ -176,10 +178,13 @@ async def search_autocomplete(
     Supports comma-separated queries (e.g., 'SLC26A3,CLCA,PCSK9') to search
     for multiple terms in a single request.
 
-    A phenotype may appear once per (resource, data_type): the same FinnGen
+    A phenotype may appear once per (resource, data_type, version): the same FinnGen
     phenocode exists across the finngen, finngen_ukbb and finngen_mvp_ukbb
-    resources, and a code can have multiple result types (e.g. genebass exome and
-    gene_based), so the same code can occur in more than one result row.
+    resources, a code can have multiple result types (e.g. genebass exome and
+    gene_based), and a resource can carry a code in more than one release, so the
+    same code can occur in more than one result row. Releases are kept apart rather
+    than collapsed because ranking is by sample size, which would otherwise pick an
+    older release silently.
 
     Results are ranked by:
     1. Exact matches first
@@ -233,6 +238,7 @@ async def search_autocomplete(
                     result.get("code") or result.get("symbol"),
                     result.get("resource"),
                     result.get("data_type"),
+                    result.get("version"),
                 )
                 if result_id not in seen_ids:
                     seen_ids.add(result_id)
@@ -285,12 +291,12 @@ async def search_autocomplete(
                     )
                     rows.append(row)
             else:  # phenotypes
-                header = "type\tcode\tname\tresource\tdata_type\tsample_size\tn_cases\tn_controls\thas_summary_stats\thas_credible_sets\tmatch_type\tmatch_score\trank_score\tmatched_key"
+                header = "type\tcode\tname\tresource\tdata_type\tversion\tsample_size\tn_cases\tn_controls\thas_summary_stats\thas_credible_sets\tmatch_type\tmatch_score\trank_score\tmatched_key"
                 rows = []
                 for r in results:
                     row = (
                         f"{r['type']}\t{r.get('code', '')}\t{r.get('name', '')}\t"
-                        f"{r.get('resource', '')}\t{r.get('data_type', '')}\t{r.get('sample_size', 0)}\t"
+                        f"{r.get('resource', '')}\t{r.get('data_type', '')}\t{r.get('version') or ''}\t{r.get('sample_size', 0)}\t"
                         f"{r.get('n_cases', 'NA')}\t{r.get('n_controls', 'NA')}\t"
                         f"{str(r.get('has_summary_stats', False)).lower()}\t"
                         f"{str(r.get('has_credible_sets', False)).lower()}\t"

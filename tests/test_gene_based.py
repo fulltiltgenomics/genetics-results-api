@@ -21,7 +21,7 @@ class TestGeneBased:
         )
 
         assert response.status_code == 200
-        assert "application/octet-stream" in response.headers.get("content-type", "")
+        assert "text/tab-separated-values" in response.headers.get("content-type", "")
 
     def test_gene_based_invalid_gene(self, server_url, invalid_gene):
         """Test that invalid gene returns 404."""
@@ -42,7 +42,7 @@ class TestGeneBased:
         )
 
         assert response.status_code == 200
-        assert "application/octet-stream" in response.headers.get("content-type", "")
+        assert "text/tab-separated-values" in response.headers.get("content-type", "")
 
     def test_gene_based_multiple_genes_one_invalid(self, server_url, invalid_gene):
         """Test that a multi-gene query with one invalid gene returns 404."""
@@ -156,6 +156,27 @@ class TestGeneBased:
         for col in expected_columns:
             assert col in header, f"Expected column '{col}' in header, got: {header}"
 
+    def test_gene_based_json(self, server_url):
+        """JSON rows carry the router-appended resource column."""
+        response = requests.get(
+            f"{server_url}/api/v1/gene_based/GPT",
+            params={"format": "json"},
+            timeout=30,
+        )
+
+        assert response.status_code == 200
+        assert "application/json" in response.headers.get("content-type", "")
+        rows = response.json()
+        validation = validate_json_response(rows)
+        assert validation["valid"], f"JSON validation failed: {validation['errors']}"
+        assert rows and "resource" in rows[0]
+        assert "resource" in response.headers.get("x-columns", "").split(",")
+
+    def test_gene_based_in_openapi(self, server_url):
+        response = requests.get(f"{server_url}/api/v1/openapi.json", timeout=10)
+        assert response.status_code == 200
+        assert "/api/v1/gene_based/{gene}" in response.json()["paths"]
+
 
 class TestGeneBasedResultsByPhenotype:
     """Test /api/v1/gene_based_results_by_phenotype/{resource}/{phenotype} endpoint."""
@@ -164,13 +185,13 @@ class TestGeneBasedResultsByPhenotype:
         "resource,phenotype",
         [
             ("genebass", "categorical_41210_both_sexes_S068_"),
-            ("schema2", "schizophrenia"),
-            ("bipex2", "bipolar_disorder"),
-            # the burden files spell the IBD traits out; only the exome variant
-            # files use the IBD/UC/CD short codes
-            ("ibd_exome_2026", "inflammatory_bowel_disease"),
-            ("ibd_exome_2026", "ulcerative_colitis"),
-            ("ibd_exome_2026", "crohns_disease"),
+            # the codes /search advertises for these resources, which is also what the
+            # per-trait files are named
+            ("schema2", "SCZ"),
+            ("bipex2", "BIP"),
+            ("ibd_exome_2026", "IBD"),
+            ("ibd_exome_2026", "UC"),
+            ("ibd_exome_2026", "CD"),
         ],
     )
     @pytest.mark.parametrize("format", ["tsv", "json"])
@@ -224,7 +245,7 @@ class TestGeneBasedResultsByPhenotype:
     def test_gene_based_by_phenotype_unknown_resource(self, server_url):
         """Test that an unknown resource returns 404."""
         response = requests.get(
-            f"{server_url}/api/v1/gene_based_results_by_phenotype/not_a_resource/inflammatory_bowel_disease",
+            f"{server_url}/api/v1/gene_based_results_by_phenotype/not_a_resource/IBD",
             timeout=10,
         )
 
@@ -238,7 +259,7 @@ class TestGeneBasedTraitFilter:
         """NOD2 in Crohn's and UC, from the unfiltered per-trait files."""
         response = requests.get(
             f"{server_url}/api/v1/gene_based/NOD2",
-            params={"traits": "crohns_disease,ulcerative_colitis"},
+            params={"traits": "CD,UC"},
             timeout=60,
         )
 
@@ -248,23 +269,24 @@ class TestGeneBasedTraitFilter:
         assert sum(1 for l in lines if l.startswith("dataset\t")) == 1
 
         rows = [l.split("\t") for l in lines[1:]]
-        assert {r[1] for r in rows} == {"crohns_disease", "ulcerative_colitis"}
+        # column 16 is trait_original, the code; column 2 is the display name
+        assert {r[15] for r in rows} == {"CD", "UC"}
         # every row must be NOD2 exactly once per (trait, annotation): the three IBD
         # data files share a per-trait directory, so an undeduped query would triple
-        keys = [(r[1], r[7]) for r in rows]
+        keys = [(r[15], r[7]) for r in rows]
         assert len(keys) == len(set(keys)), f"Duplicated rows: {keys}"
 
     def test_traits_filter_returns_sub_threshold_results(self, server_url):
         """The point of the filter: a non-significant result is still a result."""
         response = requests.get(
             f"{server_url}/api/v1/gene_based/NOD2",
-            params={"traits": "ulcerative_colitis"},
+            params={"traits": "UC"},
             timeout=60,
         )
 
         assert response.status_code == 200
         rows = [l.split("\t") for l in response.text.strip().split("\n")[1:] if l]
-        assert rows, "Expected NOD2 rows for ulcerative_colitis"
+        assert rows, "Expected NOD2 rows for UC"
         assert any(float(r[8]) < 4 for r in rows), "Expected a sub-threshold burden result"
 
     def test_traits_filter_unknown_trait(self, server_url):

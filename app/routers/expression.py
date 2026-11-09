@@ -27,7 +27,6 @@ router = APIRouter()
 
 @router.get(
     "/expression_by_gene/{gene}",
-    include_in_schema=False,
     summary="Get expression data for a gene across resources",
     responses={
         200: {

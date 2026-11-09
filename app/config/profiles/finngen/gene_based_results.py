@@ -26,7 +26,7 @@ gene_based_data_files = [
         "dataset_id": "schema_gene_based",
         "resource": "schema2",
         "data_source": "gcloud",
-        "example_pheno_or_study": "schizophrenia",
+        "example_pheno_or_study": "SCZ",
         "gencode_version": 39,
         "gene_based": {
             "file": "gs://finngen-commons/results_api_data/exome_results/schema/SCHEMA2_gene_results.munged.tsv.gz",
@@ -39,7 +39,7 @@ gene_based_data_files = [
         "dataset_id": "bipex_gene_based",
         "resource": "bipex2",
         "data_source": "gcloud",
-        "example_pheno_or_study": "bipolar_disorder",
+        "example_pheno_or_study": "BIP",
         "gencode_version": 39,
         "gene_based": {
             "file": "gs://finngen-commons/results_api_data/exome_results/bipex/BipEx2_gene_results.munged.tsv.gz",
@@ -52,7 +52,7 @@ gene_based_data_files = [
         "dataset_id": "ibd_gene_based",
         "resource": "ibd_exome_2026",
         "data_source": "gcloud",
-        "example_pheno_or_study": "inflammatory_bowel_disease",
+        "example_pheno_or_study": "IBD",
         "gencode_version": 45,
         "gene_based": {
             "file": "gs://finngen-commons/results_api_data/exome_results/ibd/IBD_exome_IBD_gene_results.munged.tsv.gz",
@@ -65,7 +65,7 @@ gene_based_data_files = [
         "dataset_id": "ibd_gene_based",
         "resource": "ibd_exome_2026",
         "data_source": "gcloud",
-        "example_pheno_or_study": "ulcerative_colitis",
+        "example_pheno_or_study": "UC",
         "gencode_version": 45,
         "gene_based": {
             "file": "gs://finngen-commons/results_api_data/exome_results/ibd/IBD_exome_UC_gene_results.munged.tsv.gz",
@@ -78,7 +78,7 @@ gene_based_data_files = [
         "dataset_id": "ibd_gene_based",
         "resource": "ibd_exome_2026",
         "data_source": "gcloud",
-        "example_pheno_or_study": "crohns_disease",
+        "example_pheno_or_study": "CD",
         "gencode_version": 45,
         "gene_based": {
             "file": "gs://finngen-commons/results_api_data/exome_results/ibd/IBD_exome_CD_gene_results.munged.tsv.gz",

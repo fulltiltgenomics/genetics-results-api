@@ -187,7 +187,7 @@ async def peak_to_genes(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tchrom\tstart\tend\tpeak_id\tgene_id\tsymbol\tcell_type\ttotal_cell_num\texpr_cell_num\topen_cell_num\thurdle_zero_beta\thurdle_zero_se\thurdle_zero_z\thurdle_zero_nlog10p\thurdle_count_beta\thurdle_count_se\thurdle_count_z\thurdle_count_nlog10p\thurdle_aic\thurdle_bic\tgene_chrom\tgene_start\tgene_end\nfinngen\tR12\t5\t35853087\t35853586\tchr5-35853087-35853586\tENSG00000168685\tIL7R\tl1.CD4_T\t7088529\t187191\t118742\t0.122891591499534\t0.0139613929348723\t8.80224430848729\t17.8725490512647\t0.287993450475682\t0.0381107939160484\t7.55674235257555\t13.3837456571306\t1645822.3526141\t1645973.86648652\tchr5\t35852695\t35879603\n...",
+                    "example": "resource\tversion\tchrom\tstart\tend\tpeak_id\tgene_id\tsymbol\tcell_type\ttotal_cell_num\texpr_cell_num\topen_cell_num\thurdle_zero_beta\thurdle_zero_se\thurdle_zero_z\thurdle_zero_nlog10p\thurdle_count_beta\thurdle_count_se\thurdle_count_z\thurdle_count_nlog10p\thurdle_aic\thurdle_bic\tgene_chrom\tgene_start\tgene_end\nfinngen\tbatch1-5\t5\t35853087\t35853586\tchr5-35853087-35853586\tENSG00000168685\tIL7R\tl1.CD4_T\t7088529\t187191\t118742\t0.122891591499534\t0.0139613929348723\t8.80224430848729\t17.8725490512647\t0.287993450475682\t0.0381107939160484\t7.55674235257555\t13.3837456571306\t1645822.3526141\t1645973.86648652\tchr5\t35852695\t35879603\n...",
                 },
                 "application/json": {
                     "schema": {
@@ -197,7 +197,7 @@ async def peak_to_genes(
                     "example": [
                         {
                             "resource": "finngen",
-                            "version": "R12",
+                            "version": "batch1-5",
                             "chrom": "5",
                             "start": 35853087,
                             "end": 35853586,
@@ -243,7 +243,12 @@ async def gene_to_peaks(
     """
     Get chromatin peaks linked to a gene, i.e. the inverse of peak_to_genes.
 
-    Returns the same columns as peak_to_genes: one row per peak, linked gene and cell type.
+    The links are Open4Gene peak-to-gene associations from the FinnGen PBMC single-cell
+    multiome data, per predicted immune cell type, and only significant links are
+    published. An unknown gene is a 404; a known gene answers an empty list when it has
+    no significant link in any cell type, which is what a gene not expressed in PBMC
+    cell types looks like. Returns the same columns as peak_to_genes: one row per peak,
+    linked gene and cell type.
     """
     start_time = time.time()
 

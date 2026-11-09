@@ -53,6 +53,7 @@ def _collect_tabix_files() -> list[TabixCheck]:
     from app.config.coloc import coloc
     from app.config.credible_sets import cs_file_header, cs_qtl_file_header
     from app.config.credible_sets import data_files as cs_files
+    from app.config.datasets import get_dataset
     from app.config.exome_results import exome_data_files
     from app.config.expression import expression_data
     from app.config.gene_based_results import gene_based_data_files
@@ -93,6 +94,15 @@ def _collect_tabix_files() -> list[TabixCheck]:
         cfg = df.get("gene_based", {})
         if "file" in cfg:
             unchecked.append((f"gene_based:{df['id']}", cfg["file"]))
+        # a registry-listed code is served as prefix+code+suffix, so each one must be a
+        # file; a code spelled differently from its file is unreachable with no error
+        entry = get_dataset(df["dataset_id"]) or {}
+        if "prefix" in cfg and entry.get("phenotypes"):
+            for pheno in entry["phenotypes"]:
+                code = pheno["phenotype_code"]
+                unchecked.append(
+                    (f"gene_based:{df['id']}:{code}", f"{cfg['prefix']}{code}{cfg['suffix']}")
+                )
 
     for c in coloc:
         if "credset_file" in c:

@@ -73,7 +73,7 @@ class TestSearchAutocomplete:
         # Should find PCSK9
         if len(data) > 0:
             # Check if PCSK9 is in results (symbol should be PCSK9, not the alias)
-            symbols = [item.get("symbol") for item in data if item.get("type") == "gene"]
+            [item.get("symbol") for item in data if item.get("type") == "gene"]
             # Might match PCSK9 or other genes with similar aliases
 
     def test_search_gene_ensembl_id(self, server_url):
@@ -135,6 +135,8 @@ class TestSearchAutocomplete:
             assert "has_summary_stats" in pheno
             assert "has_credible_sets" in pheno
             assert isinstance(pheno["has_credible_sets"], bool)
+            # the release label is what tells an R12 row from an R14 row of the same code
+            assert isinstance(pheno.get("version"), str) and pheno["version"]
 
     def test_search_has_credible_sets_filter(self, server_url):
         """has_credible_sets=true drops phenotypes without credible sets, keeps genes."""
@@ -189,7 +191,7 @@ class TestSearchAutocomplete:
 
         # Should have both genes and phenotypes
         if len(data) > 1:
-            types = set(item["type"] for item in data)
+            set(item["type"] for item in data)
             # Could have both or just one type depending on data
 
     @pytest.mark.parametrize("limit", [1, 5, 10, 20])
@@ -331,7 +333,7 @@ class TestSearchAutocomplete:
         # All queries should return similar results (same genes)
         if all(len(r) > 0 for r in results):
             # Compare symbols from each result
-            symbols_sets = [
+            [
                 set(item.get("symbol") for item in r if item.get("type") == "gene")
                 for r in results
             ]
@@ -353,7 +355,7 @@ class TestSearchAutocomplete:
         if len(data) > 0:
             genes = [item for item in data if item.get("type") == "gene"]
             # Check if any symbols start with BRC
-            symbols = [g["symbol"] for g in genes]
+            [g["symbol"] for g in genes]
 
     def test_search_phenotype_sample_size_ranking(self, server_url):
         """Test that phenotypes with larger sample sizes rank higher."""

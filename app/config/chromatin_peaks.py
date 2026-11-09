@@ -6,6 +6,7 @@ This module contains all configuration related to chromatin peaks data:
 - Chromatin peaks data source configurations
 """
 
+from app.config.datasets import get_dataset
 from app.config.profile import load_profile_module
 
 chromatin_peaks_header_schema = {
@@ -38,3 +39,11 @@ chromatin_peaks_header_schema = {
 
 _profile = load_profile_module("chromatin_peaks")
 chromatin_peaks_data = _profile.chromatin_peaks_data
+
+# the served `version` column is the registry's label for the dataset, so the profile
+# names the dataset and never repeats the label
+for _entry in chromatin_peaks_data:
+    _dataset = get_dataset(_entry["dataset_id"])
+    if _dataset is None:
+        raise ValueError(f"chromatin peaks dataset_id {_entry['dataset_id']!r} is not in the registry")
+    _entry["version"] = str(_dataset["version"])

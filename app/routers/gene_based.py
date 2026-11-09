@@ -4,7 +4,6 @@ import time
 from typing import AsyncGenerator, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
-from fastapi.responses import StreamingResponse
 
 import app.config.common as config_common
 from app.config.gene_based_results import (
@@ -18,6 +17,7 @@ from app.core.responses import (
     TimedJSONResponse,
     TimedStreamingResponse,
     columns_header,
+    range_response,
 )
 from app.dependencies import ensure_gcs_token, get_data_access, get_gene_name_mapping
 from app.services.data_access import DataAccess
@@ -114,18 +114,32 @@ async def _merge_results(
 
 @router.get(
     "/gene_based/{gene}",
-    include_in_schema=False,
+    summary="Get gene burden results for a gene across every resource",
     responses={
         200: {
             "description": "Successful response",
-            "content": {"application/octet-stream": {"schema": {"type": "string"}}},
+            "content": {
+                "text/tab-separated-values": {
+                    "schema": {"type": "string"},
+                    "example": f"{_EXAMPLE_TSV_HEADER}\tresource\n{_EXAMPLE_TSV_ROW}\tgenebass\n...",
+                },
+                "application/json": {
+                    "schema": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
+                    "example": [{**_EXAMPLE_JSON_ROW, "resource": "genebass"}],
+                },
+            },
         },
         401: {"description": "Not authenticated"},
         404: {"description": "Gene not found"},
+        422: {"description": "Invalid format parameter"},
         500: {"description": "Internal server error"},
     },
 )
 async def gene_based(
+    request: Request,
     gene: str = Path(..., description="Gene symbol or comma-separated list of gene symbols", examples=["BRCA1"]),
     traits: str | None = Query(
         default=None,
@@ -136,14 +150,18 @@ async def gene_based(
             "no significant result in a named trait still comes back."
         ),
     ),
+    format: Literal["tsv", "json"] = Query(
+        default="tsv", description="Response format"
+    ),
     gene_name_and_position_mapping: GeneNameAndPositionMapping = Depends(get_gene_name_mapping),
     data_access: DataAccess = Depends(get_data_access),
     _=Depends(ensure_gcs_token),
-):
+) -> Response:
     """
     Get gene-based burden results for a specific gene or comma-separated list of genes.
     Queries all configured gene-based data sources in parallel and merges results.
     """
+    start_time = time.time()
     genes = [g.strip() for g in gene.split(",") if g.strip()]
     if not genes:
         raise HTTPException(status_code=422, detail="No valid gene names provided")
@@ -223,9 +241,14 @@ async def gene_based(
                 detail=f"Error querying gene-based data from {data_file['id']}",
             )
 
-    return StreamingResponse(
+    # the merged header carries the router-appended `resource`, which the files' own
+    # schema does not, so the JSON path validates against the schema plus that one column
+    return await range_response(
+        str(request.url),
         _merge_results(task_data_files, results),
-        media_type="application/octet-stream",
+        {**gene_based_header_schema, "resource": str},
+        format,
+        start_time,
     )
 
 
