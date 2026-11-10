@@ -85,7 +85,8 @@ async def cell_type_expression(
         default="summary",
         description=(
             "summary: normal tissue, pooled across datasets per (cell type, tissue), leaving out "
-            "broad lineage labels such as 'leukocyte' or 'epithelial cell'. "
+            "broad lineage labels such as 'leukocyte' or 'epithelial cell' and datasets whose "
+            "donors are all prenatal. "
             "dataset: every group of every dataset that passes the suppression thresholds. "
             "A dataset that has at least one such group and measured the gene but has no row "
             "for it gets one placeholder row (status=measured_no_row): the gene has no "
