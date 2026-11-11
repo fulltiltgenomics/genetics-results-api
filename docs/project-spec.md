@@ -52,7 +52,7 @@ run_server.py       # server entry point
 | Tag | Domain |
 |-----|--------|
 | authentication | Auth status only: `GET /auth` (public, hidden from the schema) reports whether the request carries an oauth2-proxy/IAP identity. No login or token issuance — tokens are minted elsewhere |
-| metadata | Dataset and resource metadata. `/resource_metadata/{resource}` takes an optional comma-separated `phenotypes`, returning only those rows (404 when none matches), so one trait of a large resource is reachable without the whole table. A dataset with no `metadata_file` still gets stats and a `metadata_endpoint` when a sandbox custom GWAS release serves it: `build_harmonizer_config` then points the harmonizer at `catalog://<release>`, which `_read_metadata_file` answers from that release's bucket catalog (see "Sandbox custom GWAS" below). The `finngen_meta` harmonizer (multi-cohort meta-analysis files) adds `contributing_cohorts`, `cohort_families` and `n_by_cohort` to its rows; other harmonizers' rows are unchanged. The TSV header is the union of the rows' keys, lists are `;`-joined, `n_by_cohort` is compact JSON, and a row lacking a column reads `NA` |
+| metadata | Dataset and resource metadata. `/resource_metadata/{resource}` takes an optional comma-separated `phenotypes`, returning only those rows (404 when none matches), so one trait of a large resource is reachable without the whole table. A dataset with no `metadata_file` still gets stats and a `metadata_endpoint` when a sandbox custom GWAS release serves it: `build_harmonizer_config` then points the harmonizer at `catalog://<release>`, which `_read_metadata_file` answers from that release's bucket catalog (see "Sandbox custom GWAS" below). The `finngen_meta` harmonizer (multi-cohort meta-analysis files) adds `contributing_cohorts`, `cohort_families` and `n_by_cohort` to its rows; other harmonizers' rows are unchanged. The TSV header is the union of the rows' keys, lists are `;`-joined, `n_by_cohort` is compact JSON, and a row lacking a column reads `NA` `/trait_name_mapping` answers TSV by default (`trait`/`name` columns) and `format=json` gives the same pairs as one object keyed by trait code, which is what the browser and the MCP server request. |
 | search | Search across phenotypes and genes (includes gene coordinates via GENCODE). `resources=<comma-separated>` restricts phenotype hits to those resources, and is the only way to search an `on_request` resource (the sandbox custom GWAS releases): their phenotypes sit in a separate index list that a search without the parameter never reads, so a user's run cannot surface next to a release phenotype by fuzzy match |
 | credible-sets | Fine-mapping credible set results. The variant-row endpoints (`credible_sets_by_phenotype`, `_by_id`, `_by_region`, `_by_variant` GET/POST, `_by_gene`, `_by_qtl_gene`) accept an optional `coding_only=true` query param that restricts returned rows to coding variants by their inline `most_severe` consequence, reusing `config.common.coding_set`; rows with a missing/NA `most_severe` are excluded. Default (`false`) is unchanged. Applied via header-aware `filter_stream_by_coding` (TSV) / `filter_coding_rows` (JSON) in `app/core/streams.py`, wired through `range_response` for the range endpoints. `_by_gene`, `_by_variant` (GET) and `_by_qtl_gene` additionally accept `data_types=<comma-separated>` (GWAS, eQTL, pQTL, sQTL, caQTL, metaboQTL), which restricts rows by their inline `data_type` column, matched case-insensitively; it runs on the same `range_response` path via the generic `filter_stream_by_column` / `filter_rows_by_column` that `coding_only` is now built on. An unrecognized type yields an empty result rather than unfiltered rows. These three endpoints are the ones the mcp-server tools expose a QTL-type filter for — the filter previously existed only client-side and was silently dropped by the API (see "Undeclared query parameters" below). Two endpoints take neither filter: `credible_sets_by_phenotype_leads` reduces a phenotype's file to one lead variant per `cs_id` while streaming it (the row flagged by an `is_lead`/`lead` column if present, else highest `pip` with ties broken by `mlog10p`; `format` defaults to `json` here, not `tsv`), and `credible_sets/{id_or_resource}/stats` returns per-trait credible-set counts (risk/protective, each with coding and LoF breakdowns) for a data file or a whole resource. The sandbox custom GWAS resources (`finngen_custom_r14/r13/r12`) answer only the per-phenotype endpoints (`_by_phenotype`, `_by_phenotype_leads`, `_by_id`), translated at read time from the fine-mapping pipeline's own SuSiE files; they have no combined file, so the by-variant/gene/region endpoints skip them the way per-phenotype-only exome resources are skipped |
 | colocalization | Colocalization analysis results |
@@ -195,6 +195,24 @@ Pinned by `tests/test_columns_header.py` (offline lane).
    headers the service serves, but an unreadable pointer is only a warning: a deployment may
    start before the first release exists, and the route answers 503 until it does.
 8. **Routing layer**: `app/routers/` defines endpoints that validate input, call services, and return formatted responses
+
+### Colocalization: matching a variant to pairs, and attributing a release
+
+A pair is returned for a variant when the variant is a member of the credible set on either
+side. The credset file and the pair file do not name a QTL trait the same way — the pair file
+carries the gene symbol in `trait2` and keeps the feature id in `trait2_original`, the credset
+file keeps the feature id in `trait` — so the two are joined on `coloc_cs_key` in
+`app/core/streams.py`: dataset, `trait_original`, cell type and cs_id. Joining on `trait`
+finds a pair only through its GWAS side. `trait_original` is compared whole, quantification
+suffix included, except for a dataset whose pair rows omit the suffix the credset rows
+carry; `coloc_pair_side_keys` adds the suffix-less form for those.
+
+`version1`/`version2` are not in the files. A `dataset` label does not identify a release
+when two registry entries share it (`FinnGen_kanta` is both the R14 and the R12-era Kanta
+GWAS), so `app/config/coloc.py` resolves a label through the `pairs` of the coloc file the
+row came from and only then through the registry-wide lookup. `pairs` is therefore not just
+the `/datasets` partner list: a pair missing from it leaves that file's rows on the
+registry-wide version, and a file pairing two releases under one label fails at import.
 
 ### Authentication
 

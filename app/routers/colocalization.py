@@ -36,10 +36,10 @@ _BY_VARIANT_PROPERTIES = {
 
 _BY_VARIANT_EXAMPLE_ROW = {
     "resource1": "finngen",
-    "version1": "R13",
+    "version1": "R14",
     "resource2": "finngen",
-    "version2": "kanta",
-    "dataset1": "FinnGen_R13",
+    "version2": "R14",
+    "dataset1": "FinnGen_R14",
     "dataset2": "FinnGen_kanta",
     "data_type1": "GWAS",
     "data_type2": "GWAS",
@@ -133,9 +133,26 @@ async def colocalization_by_variant(
     """
     Get colocalization trait pairs where the given variant is in a credible set of either trait.
 
+    A pair matches when the exact variant (chr, pos, ref, alt) is a member of the credible
+    set on either side, at any PIP; being the lead variant (hit1/hit2) is not required, and
+    region overlap alone is not a match. Nothing is capped or paginated.
+
+    Which pairs are served is decided when the files are built, from the release's colocQC
+    table: a pair is dropped if either credible set is flagged low purity, has probability
+    mass <= 0.9, or has log10 Bayes factor <= 0.9. Served pairs start at PP.H4 0.5, the
+    source table's own floor, so filter on PP.H4.abf, and on cs_overlap (0 means the two
+    credible sets share no variant), before reading a row as a colocalization. A member variant with
+    no effect estimate is not listed in its credible set and cannot match.
+
+    version1/version2 are the release of each side as colocalized: R12-era pairs (FinnGen
+    caQTL and per-cell-type eQTL against R12 core and Kanta) are labelled R12 even where
+    the dataset label is shared with the current release.
+
     Response schema depends on the include_variants parameter:
-    - include_variants=false (default): Returns colocalization pairs only (one row per pair)
-    - include_variants=true: Returns colocalization pairs plus statistics of all variants in each credible set (one row per variant)
+    - include_variants=false (default): one row per pair
+    - include_variants=true: one row per member variant of each credible set that contains
+      the query variant, repeated for every pair that set is in. The partner credible
+      set's members are not listed; fetch them from /credible_sets_by_id.
     """
     start_time = time.time()
     try:
@@ -206,6 +223,9 @@ async def colocalization_by_variant_filtered(
     Get colocalization trait pairs where the given variant is in a credible set
     of either trait, filtered by resource and phenotype.
 
+    Same match rule, build-time filters and version labels as
+    /colocalization_by_variant/{variant}.
+
     Response schema depends on the include_variants parameter:
     - include_variants=false (default): Returns colocalization pairs only (one row per pair)
     - include_variants=true: Returns colocalization pairs plus statistics of all variants in each credible set (one row per variant)
@@ -255,7 +275,7 @@ async def colocalization_by_variant_filtered(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tcs_id\thit\thit_beta\thit_mlog10p\tchr\tregion_start_min\tregion_end_max\tPP.H0.abf\tPP.H1.abf\tPP.H2.abf\tPP.H3.abf\tPP.H4.abf\tnsnps\tcs_log10bf\tclpp\tclpa\tcs_size\tcs_overlap\ttopInOverlap\nfinngen\tkanta\tFinnGen_kanta\tGWAS\tnonHDL\tnonHDL\tNA\tchr1:47813785-56873172_1\t1:55039974:G:T\t2.0\t9.2\t1\t47813785\t56873172\t0.000e+00\t0.000e+00\t2.992e-15\t2.643e-06\t1.000e+00\t21673\tinf\t9.987e-01\t9.987e-01\t1\t1\t1,1",
+                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tcs_id\thit\thit_beta\thit_mlog10p\tchr\tregion_start_min\tregion_end_max\tPP.H0.abf\tPP.H1.abf\tPP.H2.abf\tPP.H3.abf\tPP.H4.abf\tnsnps\tcs_log10bf\tclpp\tclpa\tcs_size\tcs_overlap\ttopInOverlap\nfinngen\tR14\tFinnGen_kanta\tGWAS\tnonHDL\tnonHDL\tNA\tchr1:47813785-56873172_1\t1:55039974:G:T\t2.0\t9.2\t1\t47813785\t56873172\t0.000e+00\t0.000e+00\t2.992e-15\t2.643e-06\t1.000e+00\t21673\tinf\t9.987e-01\t9.987e-01\t1\t1\t1,1",
                 },
                 "application/json": {
                     "schema": {
@@ -295,7 +315,7 @@ async def colocalization_by_variant_filtered(
                     "example": [
                         {
                             "resource": "finngen",
-                            "version": "kanta",
+                            "version": "R14",
                             "dataset": "FinnGen_kanta",
                             "data_type": "GWAS",
                             "trait": "nonHDL",
@@ -352,6 +372,9 @@ async def colocalization_by_credible_set_id(
 ) -> Response:
     """
     Get colocalized credible sets for a credible set id.
+
+    Returns every served pair the credible set is in, on either side. The build-time
+    filters and version labels are those described for /colocalization_by_variant/{variant}.
     """
     start_time = time.time()
     try:

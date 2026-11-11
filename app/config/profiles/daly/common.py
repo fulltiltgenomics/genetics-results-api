@@ -18,7 +18,7 @@ dataset_mapping_files = [
         "gs://daly-genetics-results/mapping_files/eqtl_catalogue_r8_dataset_metadata.tsv",
         "dataset_id",
         "eqtl_catalogue",
-        "R8",
+        "R8_pre",
     ),
 ]
 

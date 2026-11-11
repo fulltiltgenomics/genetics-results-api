@@ -108,6 +108,7 @@ class TestTraitNameMapping:
         """Test that trait name mapping returns valid JSON."""
         response = requests.get(
             f"{server_url}/api/v1/trait_name_mapping",
+            params={"format": "json"},
             timeout=30,
         )
 
@@ -118,10 +119,23 @@ class TestTraitNameMapping:
         assert isinstance(data, dict), "Trait mapping should be a dictionary"
         assert len(data) > 0, "Trait mapping should not be empty"
 
+    def test_trait_name_mapping_tsv_matches_json(self, server_url):
+        """format=tsv carries the same pairs as the default JSON object."""
+        url = f"{server_url}/api/v1/trait_name_mapping"
+        as_json = requests.get(url, params={"format": "json"}, timeout=30)
+        as_tsv = requests.get(url, params={"format": "tsv"}, timeout=30)
+
+        assert as_json.status_code == 200 and as_tsv.status_code == 200
+        assert "text/tab-separated-values" in as_tsv.headers.get("content-type", "")
+        lines = as_tsv.text.splitlines()
+        assert lines[0] == "trait\tname"
+        assert len(lines) - 1 == len(as_json.json())
+
     def test_trait_name_mapping_structure(self, server_url):
         """Test that trait name mapping has expected structure."""
         response = requests.get(
             f"{server_url}/api/v1/trait_name_mapping",
+            params={"format": "json"},
             timeout=30,
         )
 
@@ -139,6 +153,7 @@ class TestTraitNameMapping:
         phenostring and is merged after R14; a blank must not overwrite R14's good name."""
         response = requests.get(
             f"{server_url}/api/v1/trait_name_mapping",
+            params={"format": "json"},
             timeout=30,
         )
         assert response.status_code == 200

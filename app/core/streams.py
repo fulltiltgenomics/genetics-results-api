@@ -370,69 +370,127 @@ def tsv_line_iterator_qtl(
     return tsv_line_iterator_base(stream, filter_fn, transform_fn)
 
 
+def coloc_cs_key(
+    dataset: bytes, trait_original: bytes, cell_type: bytes, cs_id: bytes
+) -> tuple[bytes, bytes, bytes, bytes]:
+    """Identity of one credible set, comparable between a coloc credset file and its pair file.
+
+    `trait` cannot serve: the pair file rewrites a molecular trait to its gene symbol while
+    the credset file keeps the feature id, so the two never agree for a QTL side.
+    `trait_original` survives on both. `cell_type` belongs in the key because cs_id names
+    the fine-mapped region and repeats across the cell types of one dataset.
+    """
+    return (dataset, trait_original, cell_type, cs_id)
+
+
+def coloc_pair_side_keys(cs_keys: "set[CsKey]") -> "set[CsKey]":
+    """The pair-file keys that the credible sets in cs_keys answer to.
+
+    Normally the key itself. A dataset can carry a quantification suffix on the credset
+    side only (`ENSG00000100147|ge` against a bare `ENSG00000100147` in the pair file), and
+    its pairs are reachable only by the id without the suffix, so that form is added for
+    every suffixed key. The suffix is otherwise compared in full: where the pair file has
+    it, `|ge` and `|exon` of one gene are different credible sets and stay apart. A
+    suffix-less pair side cannot say which quantification it was, so if a dataset of that
+    kind ever fine-maps two of them under one cs_id and cell type, both match.
+    """
+    return cs_keys | {
+        (dataset, trait_original.split(b"|", 1)[0], cell_type, cs_id)
+        for dataset, trait_original, cell_type, cs_id in cs_keys
+        if b"|" in trait_original
+    }
+
+
+CsKey = tuple[bytes, bytes, bytes, bytes]
+
+
 def tsv_line_iterator_coloc_credset(
     stream: AsyncIterator[bytes],
     header: list[bytes],
-    cs_ids: list[bytes],
+    cs_keys: set[CsKey],
 ) -> AsyncIterator[list[bytes]]:
     """
     Iterate over lines in a stream and split them into a list.
-    Filter to given cs_ids (dataset|trait|cs_id).
+    Filter to the credible sets in cs_keys (see coloc_cs_key).
     """
 
-    # Get column indices from header
     dataset_index = header.index(b"dataset")
-    trait_index = header.index(b"trait")
+    trait_original_index = header.index(b"trait_original")
+    cell_type_index = header.index(b"cell_type")
     cs_id_index = header.index(b"cs_id")
 
     def filter_fn(s: list[bytes]) -> bool:
-        """Filter to specific credible set IDs."""
-        cs_id = s[dataset_index] + b"|" + s[trait_index] + b"|" + s[cs_id_index]
-        return cs_id in cs_ids
+        return (
+            coloc_cs_key(
+                s[dataset_index],
+                s[trait_original_index],
+                s[cell_type_index],
+                s[cs_id_index],
+            )
+            in cs_keys
+        )
 
     def transform_fn(s: list[bytes]) -> list[bytes]:
-        """No transformation needed."""
         return s
 
     return tsv_line_iterator_base(stream, filter_fn, transform_fn)
 
 
+def _coloc_resource_version(label_versions: dict[bytes, tuple[bytes, bytes]] | None):
+    """dataset label -> (resource, version), the coloc file's own attribution first."""
+    overrides = label_versions or {}
+    fallback = get_dataset_mapping().get_resource_and_version_bytes_by_dataset
+
+    def resolve(label: bytes) -> tuple[bytes, bytes]:
+        return overrides.get(label) or fallback(label)
+
+    return resolve
+
+
+def coloc_side_key_fns(header: list[bytes], offset: int = 0):
+    """Two functions giving the coloc_cs_key of side 1 and side 2 of a pair row.
+
+    `offset` is the number of columns prepended to the row ahead of `header`.
+    """
+
+    def side(n: bytes):
+        d = header.index(b"dataset" + n) + offset
+        t = header.index(b"trait" + n + b"_original") + offset
+        c = header.index(b"cell_type" + n) + offset
+        i = header.index(b"cs" + n + b"_id") + offset
+        return lambda s: coloc_cs_key(s[d], s[t], s[c], s[i])
+
+    return side(b"1"), side(b"2")
+
+
 def tsv_line_iterator_coloc(
     stream: AsyncIterator[bytes],
     header: list[bytes],
-    cs_ids: list[bytes],
+    cs_keys: set[CsKey],
+    label_versions: dict[bytes, tuple[bytes, bytes]] | None = None,
 ) -> AsyncIterator[list[bytes]]:
     """
     Iterate over lines in a stream and split them into a list.
-    Filter to given cs_ids (dataset1|trait1|cs1_id or dataset2|trait2|cs2_id).
-    Adds dual resource/version columns for both datasets.
+    Keep a pair when either side is in cs_keys, which the caller has passed through
+    coloc_pair_side_keys.
+    Adds dual resource/version columns for both datasets, resolved through label_versions
+    (the stream's own coloc file, see app.config.coloc) before the registry-wide lookup.
     """
 
-    # Get column indices from header
     dataset1_index = header.index(b"dataset1")
     dataset2_index = header.index(b"dataset2")
-    trait1_index = header.index(b"trait1")
-    trait2_index = header.index(b"trait2")
-    cs1_id_index = header.index(b"cs1_id")
-    cs2_id_index = header.index(b"cs2_id")
-    dataset_mapping = get_dataset_mapping()
+    key1, key2 = coloc_side_key_fns(header)
+    resource_version = _coloc_resource_version(label_versions)
 
     def filter_fn(s: list[bytes]) -> bool:
-        """Filter to lines where either cs1 or cs2 is in the target set."""
-        cs1_id = s[dataset1_index] + b"|" + s[trait1_index] + b"|" + s[cs1_id_index]
-        cs2_id = s[dataset2_index] + b"|" + s[trait2_index] + b"|" + s[cs2_id_index]
-        return cs1_id in cs_ids or cs2_id in cs_ids
+        return key1(s) in cs_keys or key2(s) in cs_keys
 
     def transform_fn(s: list[bytes]) -> list[bytes]:
         """Add dual resource and version columns."""
         dataset1 = s[dataset1_index]
         dataset2 = s[dataset2_index]
-        resource1, version1 = dataset_mapping.get_resource_and_version_bytes_by_dataset(
-            dataset1
-        )
-        resource2, version2 = dataset_mapping.get_resource_and_version_bytes_by_dataset(
-            dataset2
-        )
+        resource1, version1 = resource_version(dataset1)
+        resource2, version2 = resource_version(dataset2)
         return [resource1, version1, resource2, version2] + s
 
     return tsv_line_iterator_base(stream, filter_fn, transform_fn)
@@ -472,6 +530,7 @@ def tsv_line_iterator_coloc_by_trait(
     header: list[bytes],
     cs_ids: list[bytes],
     simple: bool = False,
+    label_versions: dict[bytes, tuple[bytes, bytes]] | None = None,
 ) -> AsyncIterator[list[bytes]]:
     """
     Iterate over lines in a stream and split them into a list.
@@ -489,7 +548,7 @@ def tsv_line_iterator_coloc_by_trait(
     trait2_index = header.index(b"trait2")
     cs1_id_index = header.index(b"cs1_id")
     cs2_id_index = header.index(b"cs2_id")
-    dataset_mapping = get_dataset_mapping()
+    resource_version = _coloc_resource_version(label_versions)
 
     def _get_index_optional(column_name: bytes) -> int | None:
         try:
@@ -524,12 +583,8 @@ def tsv_line_iterator_coloc_by_trait(
         dataset2 = s[dataset2_index]
         trait1 = s[trait1_index]
         trait2 = s[trait2_index]
-        resource1, version1 = dataset_mapping.get_resource_and_version_bytes_by_dataset(
-            dataset1
-        )
-        resource2, version2 = dataset_mapping.get_resource_and_version_bytes_by_dataset(
-            dataset2
-        )
+        resource1, version1 = resource_version(dataset1)
+        resource2, version2 = resource_version(dataset2)
         resource1_dataset1_cs1 = resource1 + b"|" + dataset1 + b"|" + s[cs1_id_index]
         resource2_dataset2_cs2 = resource2 + b"|" + dataset2 + b"|" + s[cs2_id_index]
         resource1_trait1_cs1 = resource1 + b"|" + trait1 + b"|" + s[cs1_id_index]
@@ -553,12 +608,8 @@ def tsv_line_iterator_coloc_by_trait(
         """Add dual resource and version columns."""
         dataset1 = s[dataset1_index]
         dataset2 = s[dataset2_index]
-        resource1, version1 = dataset_mapping.get_resource_and_version_bytes_by_dataset(
-            dataset1
-        )
-        resource2, version2 = dataset_mapping.get_resource_and_version_bytes_by_dataset(
-            dataset2
-        )
+        resource1, version1 = resource_version(dataset1)
+        resource2, version2 = resource_version(dataset2)
         if simple:
             side2_matches = _is_query_side(resource2, s[trait2_index])
 

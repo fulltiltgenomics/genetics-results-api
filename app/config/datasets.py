@@ -19,7 +19,8 @@ def _dataset_to_resource(registry: dict[str, dict]) -> dict[str, tuple[str, str]
     dropped from shared-file range queries. Where several entries share a label (pgc_scz +
     pgc_bip are both "PGC"; finngen_kanta and finngen_kanta_r12 are both "FinnGen_kanta") the
     first entry in registry order wins, so the version is the current release's and the
-    resource - the part that matters for filtering - is the same either way.
+    resource - the part that matters for filtering - is the same either way. Colocalization
+    rows do not rely on that version: app.config.coloc resolves it per coloc file.
     """
     mapping: dict[str, tuple[str, str]] = {}
     for entry in registry.values():

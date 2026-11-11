@@ -437,7 +437,7 @@ class MetadataHarmonizer:
         harmonized = []
 
         pub_date = config.get("publication_date", "2020-01-01")
-        version = config.get("version_label", "R7")
+        version = config.get("version_label", "R8_pre")
 
         for item in raw_metadata:
             try:

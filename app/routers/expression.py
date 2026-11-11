@@ -106,6 +106,15 @@ async def expression_by_gene(
 ) -> Response:
     """
     Get expression data for a gene or comma-separated list of genes across resources.
+
+    `level` means something different per resource: for gtex it is RNA, the median TPM of
+    the tissue; for hpa it is protein, the immunohistochemistry staining category of a cell
+    type in a tissue (High, Medium, Low, Not_detected). hpa carries no RNA data.
+
+    A resource with no rows for the gene is left out of the response, so an empty list
+    means the gene is not covered, not that it is not expressed. hpa covers only the genes
+    whose IHC reliability the Human Protein Atlas scores well enough; which scores those
+    are is in the hpa dataset description from /datasets.
     """
     start_time = time.time()
     if resources is None:  # use all resources if none given

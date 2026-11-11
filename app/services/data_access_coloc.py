@@ -7,7 +7,7 @@ from typing import AsyncGenerator
 
 from asyncstdlib.heapq import merge
 
-from app.config.coloc import coloc
+from app.config.coloc import coloc, coloc_label_versions
 from app.config.credible_sets import variant_columns as cs_variant_columns
 from app.config.sort_keys import (
     SORT_CONFIG_COLOC,
@@ -16,7 +16,11 @@ from app.config.sort_keys import (
 )
 from app.core.exceptions import DataException
 from app.core.streams import (
+    CsKey,
     chunk_iterator,
+    coloc_cs_key,
+    coloc_pair_side_keys,
+    coloc_side_key_fns,
     coloc_simple_projection,
     start_iterators,
     tsv_line_iterator,
@@ -32,6 +36,20 @@ from app.services.base_data_access import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def _cs_keys_of(lines, cs_header: list[bytes]) -> set[CsKey]:
+    """The credible sets behind credset rows that carry resource/version up front."""
+    dataset = cs_header.index(b"dataset") + 2
+    trait_original = cs_header.index(b"trait_original") + 2
+    cell_type = cs_header.index(b"cell_type") + 2
+    cs_id = cs_header.index(b"cs_id") + 2
+    return {
+        coloc_cs_key(
+            line[dataset], line[trait_original], line[cell_type], line[cs_id]
+        )
+        async for line in lines
+    }
 
 
 class DataAccessObjectColoc(BaseDataAccessObject):
@@ -155,14 +173,10 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
         # prime each file's first tabix read concurrently so they overlap instead
         # of serializing inside merge()'s sequential heap seeding
         merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
-        index_dataset = accesses[0].get_credible_set_header().index(b"dataset") + 2
-        index_trait = accesses[0].get_credible_set_header().index(b"trait") + 2
-        index_cs_id = accesses[0].get_credible_set_header().index(b"cs_id") + 2
-        # memorize credible set ids that have the variant
-        cs_ids = [
-            b"|".join([line[index_dataset], line[index_trait], line[index_cs_id]])
-            async for line in merged_iterator
-        ]
+        cs_ids = await _cs_keys_of(
+            merged_iterator, accesses[0].get_credible_set_header()
+        )
+        pair_keys = coloc_pair_side_keys(cs_ids)
         # query all coloc pairs whose cs overlap with the variant
         chunk_iterators = await asyncio.gather(
             *[
@@ -186,8 +200,10 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
 
             # First apply variant filter using standard iterator
             base_iterators = [
-                tsv_line_iterator_coloc(iterator, header, cs_ids)
-                for iterator in chunk_iterators
+                tsv_line_iterator_coloc(
+                    iterator, header, pair_keys, coloc_label_versions[name]
+                )
+                for name, iterator in zip(names, chunk_iterators)
             ]
 
             # Wrap with resource/phenotype filter and optional swapping for simple format
@@ -325,8 +341,10 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
         else:
             # use standard iterator when no filtering
             line_iterators = [
-                tsv_line_iterator_coloc(iterator, header, cs_ids)
-                for iterator in chunk_iterators
+                tsv_line_iterator_coloc(
+                    iterator, header, pair_keys, coloc_label_versions[name]
+                )
+                for name, iterator in zip(names, chunk_iterators)
             ]
             header_with_resources = [
                 b"resource1",
@@ -390,14 +408,8 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
             cs_header_with_resources, SORT_CONFIG_COLOC_CREDSET
         )
         merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
-        index_dataset = cs_header.index(b"dataset") + 2
-        index_trait = cs_header.index(b"trait") + 2
-        index_cs_id = cs_header.index(b"cs_id") + 2
-        # memorize credible set ids that have the variant
-        cs_ids = [
-            b"|".join([line[index_dataset], line[index_trait], line[index_cs_id]])
-            async for line in merged_iterator
-        ]
+        cs_ids = await _cs_keys_of(merged_iterator, cs_header)
+        pair_keys = coloc_pair_side_keys(cs_ids)
         cur_time = time.time()
         logger.info(f"Time taken to get cs ids: {cur_time - start_time:.3f}s")
         # query all coloc pairs whose cs overlap with the variant
@@ -412,8 +424,10 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
         header = accesses[0].get_coloc_header()
         # filter coloc pairs to only include credible set ids that have the variant
         line_iterators = [
-            tsv_line_iterator_coloc(iterator, header, cs_ids)
-            for iterator in chunk_iterators
+            tsv_line_iterator_coloc(
+                iterator, header, pair_keys, coloc_label_versions[name]
+            )
+            for name, iterator in zip(names, chunk_iterators)
         ]
         header_with_resources = [
             b"resource1",
@@ -424,12 +438,7 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
         sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_COLOC)
         merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
 
-        index_dataset1 = header.index(b"dataset1") + 4
-        index_dataset2 = header.index(b"dataset2") + 4
-        index_trait1 = header.index(b"trait1") + 4
-        index_trait2 = header.index(b"trait2") + 4
-        index_cs1_id = header.index(b"cs1_id") + 4
-        index_cs2_id = header.index(b"cs2_id") + 4
+        side1_key, side2_key = coloc_side_key_fns(header, offset=4)
         index_region_start_min = header.index(b"region_start_min") + 4
         index_region_end_max = header.index(b"region_end_max") + 4
 
@@ -439,16 +448,8 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
         min_cs_start = float("inf")
         max_cs_end = float("-inf")
         async for line in merged_iterator:
-            cs1_ids_to_coloc_lines[
-                b"|".join(
-                    [line[index_dataset1], line[index_trait1], line[index_cs1_id]]
-                )
-            ].append(line)
-            cs2_ids_to_coloc_lines[
-                b"|".join(
-                    [line[index_dataset2], line[index_trait2], line[index_cs2_id]]
-                )
-            ].append(line)
+            cs1_ids_to_coloc_lines[side1_key(line)].append(line)
+            cs2_ids_to_coloc_lines[side2_key(line)].append(line)
             min_cs_start = min(min_cs_start, int(line[index_region_start_min]))
             max_cs_end = max(max_cs_end, int(line[index_region_end_max]))
 
@@ -482,17 +483,23 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
         # output all coloc lines for each cs id
         async def long_coloc_iterator():
             cs_dataset_idx = cs_header.index(b"dataset")
-            cs_trait_idx = cs_header.index(b"trait")
+            cs_trait_original_idx = cs_header.index(b"trait_original")
+            cs_cell_type_idx = cs_header.index(b"cell_type")
             cs_cs_id_idx = cs_header.index(b"cs_id")
 
             async for line in merged_iterator:
-                cs_id = b"|".join(
-                    [line[cs_dataset_idx], line[cs_trait_idx], line[cs_cs_id_idx]]
+                cs_key = coloc_cs_key(
+                    line[cs_dataset_idx],
+                    line[cs_trait_original_idx],
+                    line[cs_cell_type_idx],
+                    line[cs_cs_id_idx],
                 )
-                for coloc_line in cs1_ids_to_coloc_lines[cs_id]:
-                    yield line + coloc_line
-                for coloc_line in cs2_ids_to_coloc_lines[cs_id]:
-                    yield line + coloc_line
+                # sorted: a set's order varies between processes, the response must not
+                for side_key in sorted(coloc_pair_side_keys({cs_key})):
+                    for coloc_line in cs1_ids_to_coloc_lines.get(side_key, ()):
+                        yield line + coloc_line
+                    for coloc_line in cs2_ids_to_coloc_lines.get(side_key, ()):
+                        yield line + coloc_line
 
         return chunk_iterator(long_coloc_iterator(), header_line, out_chunk_size)
 
@@ -541,8 +548,9 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
                 header,
                 [f"{resource}|{phenotype_or_study}|{credible_set_id}".encode()],
                 simple,
+                coloc_label_versions[name],
             )
-            for iterator in chunk_iterators
+            for name, iterator in zip(names, chunk_iterators)
         ]
         if simple:
             # the non-query side keeps singular names (resource, version, dataset, trait, ...)

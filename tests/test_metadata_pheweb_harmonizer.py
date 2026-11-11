@@ -94,7 +94,9 @@ class _StubDataAccess:
 
 
 def test_trait_name_mapping_resolves_stratum_codes():
-    response = asyncio.run(trait_name_mapping(request=None, data_access=_StubDataAccess()))
+    response = asyncio.run(
+        trait_name_mapping(request=None, format="json", data_access=_StubDataAccess())
+    )
     trait_map = json.loads(response.body)
     assert trait_map["AFib|EUR"] == "Atrial fibrillation"
     assert trait_map["ALT"] == "Alanine transaminase"

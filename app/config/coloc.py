@@ -97,3 +97,36 @@ coloc_header_schema_simple = {
 
 _profile = load_profile_module("coloc")
 coloc = _profile.coloc
+
+
+def _label_versions(entry: dict) -> dict[bytes, tuple[bytes, bytes]]:
+    """`dataset` label -> (resource, version) for the datasets one coloc file's `pairs` name.
+
+    A label alone does not identify a release: two registry entries can share one
+    (finngen_kanta and finngen_kanta_r12 are both "FinnGen_kanta"), and the registry-wide
+    lookup then stamps every such row with whichever entry comes first. A coloc file holds
+    one release per label, and its `pairs` say which, so rows are attributed per file. A
+    label that no pair covers falls back to the registry-wide lookup.
+    """
+    from app.config.datasets import datasets
+
+    versions: dict[bytes, tuple[bytes, bytes]] = {}
+    for dataset_id in dict.fromkeys(d for pair in entry.get("pairs", []) for d in pair):
+        registry_entry = datasets.get(dataset_id)
+        if registry_entry is None:
+            continue
+        labels = registry_entry.get("dataset") or []
+        resolved = (
+            registry_entry["resource"].encode(),
+            str(registry_entry.get("version")).encode(),
+        )
+        for label in labels if isinstance(labels, list) else [labels]:
+            if versions.setdefault(label.encode(), resolved) != resolved:
+                raise ValueError(
+                    f"coloc file {entry['name']!r} pairs two datasets labelled {label!r} "
+                    f"with different resource/version; its rows cannot be attributed"
+                )
+    return versions
+
+
+coloc_label_versions = {entry["name"]: _label_versions(entry) for entry in coloc}

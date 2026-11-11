@@ -24,6 +24,7 @@ coloc = [
             ("finngen_gwas", "ukbb_finucane"),
             ("finngen_gwas", "ukbb_pqtl"),
             ("finngen_gwas", "eqtl_catalogue"),
+            ("finngen_gwas", "finngen_eqtl"),
         ],
     },
     {

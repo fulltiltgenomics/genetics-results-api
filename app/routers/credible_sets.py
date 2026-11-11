@@ -446,7 +446,7 @@ async def credible_sets_by_id(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\neqtl_catalogue\tR7\tQTD000608\teQTL\tISG15\tENSG00000187608|ge\tB_cell|naive\t1\t1000018\tG\tA\t7.3668\t-7.921e-01\t1.434e-01\t0.0914\tENSG00000187608_L1\t25\t0.7468\t0.3012\t5_prime_UTR_variant\tHES4\n...",
+                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\neqtl_catalogue\tR8_pre\tQTD000608\teQTL\tISG15\tENSG00000187608|ge\tB_cell|naive\t1\t1000018\tG\tA\t7.3668\t-7.921e-01\t1.434e-01\t0.0914\tENSG00000187608_L1\t25\t0.7468\t0.3012\t5_prime_UTR_variant\tHES4\n...",
                 },
                 "application/json": {
                     "schema": {
@@ -481,7 +481,7 @@ async def credible_sets_by_id(
                     "example": [
                         {
                             "resource": "eqtl_catalogue",
-                            "version": "R7",
+                            "version": "R8_pre",
                             "dataset": "QTD000608",
                             "data_type": "eQTL",
                             "trait": "ISG15",
@@ -586,7 +586,7 @@ async def credible_sets_by_region(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\neqtl_catalogue\tR7\tQTD000608\teQTL\tISG15\tENSG00000187608|ge\tB_cell|naive\t1\t1000018\tG\tA\t7.3668\t-7.921e-01\t1.434e-01\t0.0914\tENSG00000187608_L1\t25\t0.7468\t0.3012\t5_prime_UTR_variant\tHES4\n...",
+                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\neqtl_catalogue\tR8_pre\tQTD000608\teQTL\tISG15\tENSG00000187608|ge\tB_cell|naive\t1\t1000018\tG\tA\t7.3668\t-7.921e-01\t1.434e-01\t0.0914\tENSG00000187608_L1\t25\t0.7468\t0.3012\t5_prime_UTR_variant\tHES4\n...",
                 },
                 "application/json": {
                     "schema": {
@@ -621,7 +621,7 @@ async def credible_sets_by_region(
                     "example": [
                         {
                             "resource": "eqtl_catalogue",
-                            "version": "R7",
+                            "version": "R8_pre",
                             "dataset": "QTD000608",
                             "data_type": "eQTL",
                             "trait": "ISG15",
@@ -824,7 +824,7 @@ async def credible_sets_by_variant_post(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\neqtl_catalogue\tR7\tQTD000572\teQTL\tCPSF1\tENSG00000071894.grp_2.contained.ENST00000533492|txrev\tneuron|naive\t8\t144503051\tG\tA\t2.6248\t-1.001e+00\t3.150e-01\t0.0217\tENSG00000071894.grp_2.contained.ENST00000533492_L2\t75\t0.6995\t0.01023\t5_prime_UTR_variant\tGPT\n...",
+                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\neqtl_catalogue\tR8_pre\tQTD000572\teQTL\tCPSF1\tENSG00000071894.grp_2.contained.ENST00000533492|txrev\tneuron|naive\t8\t144503051\tG\tA\t2.6248\t-1.001e+00\t3.150e-01\t0.0217\tENSG00000071894.grp_2.contained.ENST00000533492_L2\t75\t0.6995\t0.01023\t5_prime_UTR_variant\tGPT\n...",
                 },
                 "application/json": {
                     "schema": {
@@ -859,7 +859,7 @@ async def credible_sets_by_variant_post(
                     "example": [
                         {
                             "resource": "eqtl_catalogue",
-                            "version": "R7",
+                            "version": "R8_pre",
                             "dataset": "QTD000572",
                             "data_type": "eQTL",
                             "trait": "CPSF1",
@@ -991,7 +991,7 @@ async def credible_sets_by_gene(
             "content": {
                 "text/tab-separated-values": {
                     "schema": {"type": "string"},
-                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\ttrait_chr\ttrait_start\ttrait_end\neqtl_catalogue\tR7\tQTD000425\teQTL\tADAM17\tENSG00000151694.14_2_9494637_9494767|exon\tmonocyte|R848_6h\t2\t8538794\tT\tC\t5.6502\t0.347\t0.07094\t0.998\tENSG00000151694.14_2_9494637_9494767_L2\t1\t1.0\t0.1234\tintron_variant\tLINC01814\t2\t9488486\t9556732",
+                    "example": "resource\tversion\tdataset\tdata_type\ttrait\ttrait_original\tcell_type\tchr\tpos\tref\talt\tmlog10p\tbeta\tse\tpip\tcs_id\tcs_size\tcs_min_r2\taaf\tmost_severe\tgene_most_severe\ttrait_chr\ttrait_start\ttrait_end\neqtl_catalogue\tR8_pre\tQTD000425\teQTL\tADAM17\tENSG00000151694.14_2_9494637_9494767|exon\tmonocyte|R848_6h\t2\t8538794\tT\tC\t5.6502\t0.347\t0.07094\t0.998\tENSG00000151694.14_2_9494637_9494767_L2\t1\t1.0\t0.1234\tintron_variant\tLINC01814\t2\t9488486\t9556732",
                 },
                 "application/json": {
                     "schema": {
@@ -1029,7 +1029,7 @@ async def credible_sets_by_gene(
                     "example": [
                         {
                             "resource": "eqtl_catalogue",
-                            "version": "R7",
+                            "version": "R8_pre",
                             "dataset": "QTD000608",
                             "data_type": "eQTL",
                             "trait": "ISG15",

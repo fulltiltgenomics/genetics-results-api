@@ -81,7 +81,7 @@ def _tsv_cell(value) -> str:
                             "author": "Alasoo_2018",
                             "date": "2020-01-01",
                             "resource": "eqtl_catalogue",
-                            "version": "R7",
+                            "version": "R8_pre",
                         },
                     ],
                 },
@@ -177,25 +177,45 @@ async def resource_metadata(
         )
 
 
+def _trait_map_tsv(trait_map: dict) -> str:
+    """Two columns, one row per trait; a tab or newline inside a name would break the row."""
+    clean = str.maketrans("\t\r\n", "   ")
+    rows = (f"{str(k).translate(clean)}\t{str(v).translate(clean)}" for k, v in trait_map.items())
+    return "\n".join(["trait\tname", *rows]) + "\n"
+
+
 @router.get(
     "/trait_name_mapping",
     summary="Get trait name mapping",
     responses={
         200: {
             "description": "Successful response",
-            "content": {"application/json": {"schema": {"type": "object"}}},
+            "content": {
+                "application/json": {"schema": {"type": "object"}},
+                "text/tab-separated-values": {
+                    "schema": {"type": "string"},
+                    "example": "trait\tname\nI9_HYPERLIPID\tHyperlipidaemia\n",
+                },
+            },
         },
         401: {"description": "Not authenticated"},
         404: {"description": "Trait name mapping not found"},
+        422: {"description": "Invalid format parameter"},
         500: {"description": "Internal server error"},
     },
 )
 async def trait_name_mapping(
     request: Request,
+    format: Literal["tsv", "json"] = Query(
+        default="tsv", description="Response format"
+    ),
     data_access: DataAccess = Depends(get_data_access),
 ) -> Response:
     """
-    Get trait name mapping.
+    Get trait name mapping: trait code -> display name, across every resource with metadata.
+
+    TSV (the default) is two columns, `trait` and `name`; JSON is the same pairs as one
+    object keyed by trait code.
     """
     resources = config_util.get_resources_with_metadata()
     trait_map = {}
@@ -253,4 +273,6 @@ async def trait_name_mapping(
                 if code and name:
                     trait_map[code] = name
         metadata.extend(meta)
-    return JSONResponse(trait_map)
+    if format == "json":
+        return JSONResponse(trait_map)
+    return Response(_trait_map_tsv(trait_map), media_type="text/tab-separated-values")
