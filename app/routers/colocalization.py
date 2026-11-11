@@ -373,7 +373,9 @@ async def colocalization_by_credible_set_id(
     """
     Get colocalized credible sets for a credible set id.
 
-    Returns every served pair the credible set is in, on either side. The build-time
+    Returns every served pair the credible set is in, on either side. Only the region is
+    read from the id, so both id shapes work: `chr1:100-200_1`, and the eQTL Catalogue's
+    `chr19:100-200_<molecular trait>_L2` (give the QTD dataset id as the study). The build-time
     filters and version labels are those described for /colocalization_by_variant/{variant}.
     """
     start_time = time.time()

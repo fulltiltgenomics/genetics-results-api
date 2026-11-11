@@ -183,3 +183,25 @@ def test_a_file_pairing_two_releases_under_one_label_is_refused():
     current, old = sorted(set(kanta_ids))[:2]
     with pytest.raises(ValueError, match="cannot be attributed"):
         coloc_config._label_versions({"name": "mixed", "pairs": [(current, old)]})
+
+
+@pytest.mark.parametrize(
+    "cs_id, region",
+    [
+        ("chr19:37264258-46314585_1", ("19", "37264258", "46314585")),
+        # eQTL Catalogue ids carry the molecular trait and a signal label, not a number
+        ("chr19:43905791-45905791_APOE.5312.49.3..1_L2", ("19", "43905791", "45905791")),
+        ("chrX:100-200_1", ("X", "100", "200")),
+    ],
+)
+def test_credible_set_id_region_is_read_whatever_follows_it(cs_id, region):
+    from app.services.data_access_coloc import _CS_ID_REGION
+
+    assert _CS_ID_REGION.match(cs_id).group("chr", "start", "end") == region
+
+
+@pytest.mark.parametrize("cs_id", ["chr19:1-2", "chr19:1-2_", "19:1-2_1", "chr19:a-2_1", "x"])
+def test_malformed_credible_set_id_is_refused(cs_id):
+    from app.services.data_access_coloc import _CS_ID_REGION
+
+    assert _CS_ID_REGION.match(cs_id) is None

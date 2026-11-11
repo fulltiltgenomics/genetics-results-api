@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import time
 from abc import abstractmethod
 from collections import defaultdict as dd
@@ -36,6 +37,8 @@ from app.services.base_data_access import (
 )
 
 logger = logging.getLogger(__name__)
+
+_CS_ID_REGION = re.compile(r"^chr(?P<chr>\d+|X|Y):(?P<start>-?\d+)-(?P<end>\d+)_.+$")
 
 
 async def _cs_keys_of(lines, cs_header: list[bytes]) -> set[CsKey]:
@@ -517,19 +520,14 @@ class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
         Outputs pairs of colocalized credible sets where either credible set is the given one.
         """
 
-        try:
-            chrom = int(
-                credible_set_id.split(":")[0]
-                .strip("chr")
-                .replace("X", "23")
-                .replace("Y", "24")
-            )
-            start = int(credible_set_id.split(":")[1].split("-")[0])
-            end = int(credible_set_id.split(":")[1].split("-")[1].split("_")[0])
-            # the suffix is parsed only to reject a malformed id
-            int(credible_set_id.split(":")[1].split("-")[1].split("_")[1])
-        except ValueError:
+        # only the region is read out of the id. What follows it differs by source: a
+        # signal number (chr1:100-200_1), or a molecular trait and signal label
+        # (chr19:100-200_APOE.5312.49.3..1_L2)
+        match = _CS_ID_REGION.match(credible_set_id)
+        if match is None:
             raise DataException(f"Invalid credible set id: {credible_set_id}")
+        chrom = int(match["chr"].replace("X", "23").replace("Y", "24"))
+        start, end = int(match["start"]), int(match["end"])
 
         names = [c["name"] for c in coloc]
 
