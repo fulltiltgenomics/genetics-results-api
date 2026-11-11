@@ -11,6 +11,6 @@ expression_data = [
         "data_source": "gcloud",
         "resource": "hpa",
         "gencode_version": 43,
-        "file": "gs://finngen-commons/results_api_data/expression/hpa_normal_ihc_data_24.1.long.tsv.gz",
+        "file": "gs://finngen-commons/results_api_data/expression/hpa_normal_ihc_data_26.0.long.tsv.gz",
     },
 ]
