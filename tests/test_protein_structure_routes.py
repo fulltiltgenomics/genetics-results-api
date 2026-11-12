@@ -245,6 +245,8 @@ def service(gcs):
     s._release = release
     s.tables = {}
     s.reading = s.peak_reading = 0
+    # set to an Event to hold every read open until the test releases it
+    s.gate = None
 
     async def stream_range(path, chroms, starts, ends, chunk_size):
         assert starts == ends
@@ -255,6 +257,8 @@ def service(gcs):
             s.reading += 1
             s.peak_reading = max(s.peak_reading, s.reading)
             try:
+                if s.gate is not None:
+                    await s.gate.wait()
                 # chunk boundaries fall inside lines
                 for i in range(0, len(blob), 97):
                     yield blob[i:i + 97]
@@ -470,11 +474,26 @@ class TestRows:
 
     def test_only_so_many_json_bodies_are_built_at_once(self, api, service):
         async def go():
-            return await asyncio.gather(*(acall(api, "residues/CELSR2?format=json") for _ in range(5)))
+            # reads stay open until every request is accounted for: how far a request has got
+            # when another finishes depends on the threadpool that resolves its dependencies
+            service.gate = asyncio.Event()
+            tasks = [asyncio.ensure_future(acall(api, "residues/CELSR2?format=json")) for _ in range(5)]
 
-        responses = asyncio.run(go())
-        assert [r.status for r in responses] == [200] * 5 and len({r.body for r in responses}) == 1
+            def waiting() -> int:
+                slot = data._json_semaphore
+                return len(slot._waiters or ()) if slot is not None else 0
+
+            async with asyncio.timeout(10):
+                while service.reading + waiting() < 5:
+                    await asyncio.sleep(0.001)
+            held = (service.reading, waiting())
+            service.gate.set()
+            return held, await asyncio.gather(*tasks)
+
+        held, responses = asyncio.run(go())
         # the slot is taken before the first read, so the reads show the bound
+        assert held == (2, 3)
+        assert [r.status for r in responses] == [200] * 5 and len({r.body for r in responses}) == 1
         assert service.peak_reading == 2
 
     def test_the_limit_is_the_one_the_sandbox_cap_enforces(self):
