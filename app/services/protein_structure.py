@@ -107,6 +107,11 @@ class Model(NamedTuple):
     pae_bytes: int | None
 
     @property
+    def gene_ids(self) -> tuple[str, ...]:
+        """gene_id is one id, or a comma-joined list when the accession sits under several genes."""
+        return tuple(self.gene_id.split(",")) if self.gene_id else ()
+
+    @property
     def structure_path(self) -> str:
         return contract.structure_path(self.model_file_id)
 
@@ -122,7 +127,8 @@ class Release:
     models: dict[str, Model]
     # model file ids in window order, which is protein order
     by_accession: dict[str, tuple[str, ...]]
-    # unversioned Ensembl gene id -> accessions; rows without a gene_id are not reachable by gene
+    # unversioned Ensembl gene id -> accessions, a model under several genes being listed under
+    # each; rows without a gene_id are not reachable by gene
     by_gene: dict[str, tuple[str, ...]]
 
     @property
@@ -131,6 +137,9 @@ class Release:
 
     def object_path(self, relative: str) -> str:
         return f"{self.pointer.base}/{relative}"
+
+    def models_of(self, accession: str) -> tuple[Model, ...]:
+        return tuple(self.models[mid] for mid in self.by_accession.get(accession, ()))
 
 
 def parse_pointer(raw: bytes) -> Pointer:
@@ -205,6 +214,13 @@ def _model(f: list[str], shared: dict[str, str]) -> Model:
         raise ValueError(f"{mid}: structure_path is not {contract.structure_path(mid)}")
     has_pae = {"true": True, "false": False}[_field(f, "has_pae")]
     n_residues = _int(f, "n_residues")
+    try:
+        genes = contract.split_model_genes(_field(f, "gene_id"), _field(f, "gene_name"))
+    except ValueError as e:
+        raise ValueError(f"{mid}: {e}")
+    # an empty id inside a list would be indexed as a gene
+    if not all(gene_id for gene_id, _ in genes):
+        raise ValueError(f"{mid}: an empty gene id in {_clip(_field(f, 'gene_id'))}")
     if has_pae:
         if _field(f, "pae_path") != contract.pae_path(mid):
             raise ValueError(f"{mid}: pae_path is not {contract.pae_path(mid)}")
@@ -303,8 +319,8 @@ def parse_models(
             continue
         by_accession[accession] = tuple(m.model_file_id for m in ms)
         for m in ms:
-            if m.gene_id:
-                genes.setdefault(m.gene_id, {})[accession] = None
+            for gene_id in m.gene_ids:
+                genes.setdefault(gene_id, {})[accession] = None
     if refused:
         logger.info(f"protein structure: {len(refused)} accessions left out for an unserved licence")
     return models, by_accession, {g: tuple(a) for g, a in genes.items()}
@@ -317,8 +333,70 @@ def release_paths(pointer: Pointer) -> dict[str, str]:
     }
 
 
-# (path, max_bytes): may stop reading after max_bytes + 1 bytes, which is enough to refuse
+# (path, max_bytes): the whole object when it is within max_bytes, else its first max_bytes + 1
+# bytes, which is enough to refuse it. Never fewer bytes than that for any other reason
 Fetch = Callable[[str, int], Awaitable[bytes]]
+
+_READ_CHUNK = 64 * 1024
+
+
+async def read_capped(content, max_bytes: int) -> bytes:
+    """An aiohttp body read to its end, or to max_bytes + 1 bytes when it is longer.
+
+    StreamReader.read(n) returns whatever has arrived, up to n: one call is a prefix of the
+    body, not the body, so the stream is drained until it ends or passes the cap.
+    """
+    buf = bytearray()
+    async for chunk in content.iter_chunked(_READ_CHUNK):
+        buf += chunk
+        if len(buf) > max_bytes:
+            return bytes(buf[: max_bytes + 1])
+    return bytes(buf)
+
+
+def check_models_object(manifest: dict, raw: bytes) -> None:
+    """The fetched models.tsv.gz against the manifest's entry for it: a short or altered read is refused."""
+    objects = manifest.get(contract.MANIFEST_OBJECTS)
+    entry = objects.get(contract.MODELS_FILE) if isinstance(objects, dict) else None
+    if not isinstance(entry, dict):
+        raise ContractCheckFailed("models_object", f"the manifest has no entry for {contract.MODELS_FILE}")
+    size, sha = entry.get(contract.OBJECT_BYTES), entry.get(contract.OBJECT_SHA256)
+    if type(size) is not int or not isinstance(sha, str):
+        raise ContractCheckFailed("models_object", f"the manifest's entry for {contract.MODELS_FILE} is malformed")
+    if len(raw) != size:
+        raise ContractCheckFailed(
+            "models_object", f"{contract.MODELS_FILE}: read {len(raw)} bytes, the manifest says {size}"
+        )
+    actual = hashlib.sha256(raw).hexdigest()
+    if actual != sha.lower():
+        raise ContractCheckFailed(
+            "models_object", f"{contract.MODELS_FILE} hashes to {actual}, the manifest says {_clip(sha)}"
+        )
+
+
+# a bgzf block is at most this long, so this many bytes hold a tabix file's whole first block
+_BGZF_MAX_BLOCK = 64 * 1024
+
+# (file, its columns, the check a differing header fails)
+TABIX_HEADERS = (
+    (contract.RESIDUES_FILE, contract.RESIDUE_COLUMNS, "residues_header"),
+    (contract.FEATURES_FILE, contract.FEATURE_COLUMNS, "features_header"),
+)
+
+
+def check_tabix_header(check: str, name: str, columns: list[tuple[str, type]], head: bytes) -> None:
+    """The first line of a bgzf file, given its leading bytes, against the contract's header."""
+    try:
+        # 47: gzip framing, largest window. Only the first member is inflated, and only as far
+        # as one bounded line
+        first = zlib.decompressobj(47).decompress(head, MAX_LINE_BYTES + 1)
+    except zlib.error as e:
+        raise ContractCheckFailed(check, f"{name}: {_clip(str(e))}")
+    # the newline is appended here, not read: a first block that ends at the header without its
+    # newline passes whatever the next block holds
+    line = first.split(b"\n", 1)[0] + b"\n"
+    if line != contract.header_line(columns).encode():
+        raise ContractCheckFailed(check, f"{name} header {_clip(line[:MAX_LINE_BYTES])} is not the contract's")
 
 
 async def load_release(pointer_uri: str, fetch: Fetch, served_licences: frozenset[str] | None) -> Release:
@@ -337,7 +415,16 @@ async def load_release(pointer_uri: str, fetch: Fetch, served_licences: frozense
     paths = release_paths(pointer)
     manifest = parse_manifest(pointer, await read(paths[contract.MANIFEST_FILE], MAX_MANIFEST_BYTES))
     models_raw = await read(paths[contract.MODELS_FILE], MAX_MODELS_GZ_BYTES)
+    check_models_object(manifest, models_raw)
     models, by_accession, by_gene = await asyncio.to_thread(parse_models, models_raw, served_licences)
+    for name, columns, check in TABIX_HEADERS:
+        path = f"{pointer.base}/{name}"
+        try:
+            # deliberately not `read`: the file is far over this many bytes and only its head is wanted
+            head = await fetch(path, _BGZF_MAX_BLOCK - 1)
+        except Exception as e:
+            raise ContractCheckFailed("object_missing", f"cannot read {path}: {_clip(str(e))}")
+        check_tabix_header(check, name, columns, head)
     return Release(pointer=pointer, manifest=manifest, models=models, by_accession=by_accession, by_gene=by_gene)
 
 
@@ -375,7 +462,7 @@ class ProteinStructureAccess(GCloudTabixBase):
                 if resp.status == 416:
                     return b""
                 resp.raise_for_status()
-                return await resp.content.read(max_bytes + 1)
+                return await read_capped(resp.content, max_bytes)
 
     async def _load(self) -> bool:
         try:

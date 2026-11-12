@@ -214,8 +214,8 @@ def _register_services():
         return CellTypeExpressionAccess()
 
     def create_protein_structure():
-        from app.services.protein_structure import ProteinStructureAccess
-        return ProteinStructureAccess()
+        from app.services.data_access_protein_structure import ProteinStructureData
+        return ProteinStructureData()
 
     # gene name mapping
     def create_gene_name_mapping():

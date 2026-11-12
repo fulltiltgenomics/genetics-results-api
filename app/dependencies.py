@@ -25,13 +25,13 @@ if TYPE_CHECKING:
     from app.services.data_access_expression import DataAccessExpression
     from app.services.data_access_mpra import DataAccessMpra
     from app.services.data_access_open_chromatin import DataAccessOpenChromatin
+    from app.services.data_access_protein_structure import ProteinStructureData
     from app.services.data_access_variant_effect import DataAccessVariantEffect
     from app.services.gene_disease_data import GeneDiseaseData
     from app.services.gene_group_service import GeneGroupService
     from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
     from app.services.ld_panel_service import LDPanelService
     from app.services.ld_service import LDService
-    from app.services.protein_structure import ProteinStructureAccess
     from app.services.request_util import RequestUtil
     from app.services.rsid_db import RsidDB
     from app.services.search_service import SearchIndex
@@ -235,8 +235,8 @@ def get_data_access_cell_type_expression() -> "CellTypeExpressionAccess":
     return container.get("data_access_cell_type_expression")
 
 
-def get_protein_structure() -> "ProteinStructureAccess":
-    """Get ProteinStructureAccess service instance."""
+def get_protein_structure() -> "ProteinStructureData":
+    """Get ProteinStructureData service instance."""
     return container.get("protein_structure")
 
 

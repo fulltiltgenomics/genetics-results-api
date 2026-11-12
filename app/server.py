@@ -33,6 +33,7 @@ from app.routers import (
     metadata,
     mpra,
     open_chromatin,
+    protein_structure,
     resources,
     rsid,
     search,
@@ -123,7 +124,7 @@ def include_cell_type_expression(app: FastAPI) -> bool:
 
 # every protein structure router goes here, never through a bare include_router, so that a
 # deployment without a pointer cannot list one
-PROTEIN_STRUCTURE_ROUTERS: tuple[APIRouter, ...] = ()
+PROTEIN_STRUCTURE_ROUTERS: tuple[APIRouter, ...] = (protein_structure.router,)
 
 
 def include_protein_structure(

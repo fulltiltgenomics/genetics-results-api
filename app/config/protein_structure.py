@@ -31,6 +31,7 @@ release_pointer: str | None = (
 )
 
 # licences whose models this deployment serves; None serves every licence the release holds.
-# An accession with any model outside the set is left out whole, so no protein is served with
-# a window missing.
+# An accession with any model outside the set is left out whole (its model files, its PAE and
+# its residue and feature rows, by accession or by gene), so no protein is served with a
+# window missing.
 served_licences: frozenset[str] | None = _profile.served_licences if _profile is not None else None

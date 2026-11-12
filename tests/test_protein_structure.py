@@ -70,6 +70,10 @@ def models_bytes(rows, header=None) -> bytes:
     return gzip.compress("".join(lines).encode())
 
 
+def object_entry(raw: bytes) -> dict:
+    return {contract.OBJECT_BYTES: len(raw), contract.OBJECT_SHA256: hashlib.sha256(raw).hexdigest()}
+
+
 class FakeGcs:
     """gs://test-bucket/... -> root/...; a missing file raises as _fetch_full does."""
 
@@ -94,12 +98,15 @@ class FakeGcs:
     def publish(self, rows=None, header=None, manifest=None, pointer_version=None, manifest_sha=None,
                 release=RELEASE, models_raw=None):
         base = f"gs://test-bucket/protein_structure/releases/{release}"
-        manifest_raw = json.dumps(
-            manifest if manifest is not None else {"contract_version": contract.CONTRACT_VERSION, "release": release}
-        ).encode()
         if models_raw is None:
             models_raw = models_bytes(rows if rows is not None else default_rows(), header)
+        if manifest is None:
+            manifest = {"contract_version": contract.CONTRACT_VERSION, "release": release,
+                        contract.MANIFEST_OBJECTS: {contract.MODELS_FILE: object_entry(models_raw)}}
+        manifest_raw = json.dumps(manifest).encode()
         self.put(f"{base}/{contract.MODELS_FILE}", models_raw)
+        for name, columns, _ in svc.TABIX_HEADERS:
+            self.put(f"{base}/{name}", gzip.compress(contract.header_line(columns).encode()))
         self.put(f"{base}/{contract.MANIFEST_FILE}", manifest_raw)
         pointer = json.loads(_munge_pointer(release, base, hashlib.sha256(manifest_raw).hexdigest()))
         if pointer_version is not None:
@@ -157,11 +164,20 @@ class TestContractMirror:
         spec = importlib.util.spec_from_file_location("_munge_protein_structure_contract", found)
         munge = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(munge)
-        for name in ("CONTRACT_VERSION", "MANIFEST_FILE", "MODELS_FILE", "RESIDUES_FILE",
-                     "FEATURES_FILE", "VARIANTS_FILE", "STRUCTURE_DIR", "PAE_DIR", "MODEL_COLUMNS"):
+        # every public constant of the mirror, so a name added to it is compared without being listed here
+        constants = [n for n, v in vars(contract).items()
+                     if n.isupper() and not n.startswith("_") and not hasattr(v, "pattern")]
+        assert {"CONTRACT_VERSION", "MODEL_COLUMNS", "RESIDUE_COLUMNS", "FEATURE_COLUMNS",
+                "MANIFEST_OBJECTS", "MAX_RESPONSE_BYTES"} <= set(constants)
+        for name in constants:
             assert getattr(contract, name) == getattr(munge, name), name
         assert contract.MODEL_FILE_ID_RE.pattern == munge.MODEL_FILE_ID_RE.pattern
         assert contract.header_line(contract.MODEL_COLUMNS) == munge.header_line(munge.MODEL_COLUMNS)
+        assert contract.manifest_object_names() == munge.manifest_object_names()
+        for pair in (("", ""), ("ENSG1", "A"), ("ENSG1,ENSG2", "A,B")):
+            assert contract.split_model_genes(*pair) == munge.split_model_genes(*pair)
+        for n in (1, 1707, 5000):
+            assert contract.pae_rows_per_request(n) == munge.pae_rows_per_request(n)
         assert json.loads(munge.pointer(RELEASE, "gs://x", "2026-11-12T12:00:00Z", "a" * 64)).keys() == json.loads(
             _munge_pointer(RELEASE, "gs://x", "a" * 64)
         ).keys()
@@ -231,6 +247,25 @@ class TestLoader:
         r = load(gcs)
         assert r.by_gene == {} and r.models["AF-Q0-F1-model_v4"].gene_id is None
 
+    def test_a_model_under_several_genes_is_indexed_under_each(self, gcs):
+        gcs.publish(rows=[model_row("AF-P69905-F1", "P69905", 1, 1, 1, 142,
+                                    gene_id="ENSG00000188536,ENSG00000206172", gene_name="HBA2,HBA1")])
+        r = load(gcs)
+        assert r.by_gene == {"ENSG00000188536": ("P69905",), "ENSG00000206172": ("P69905",)}
+        m = r.models["AF-P69905-F1"]
+        assert (m.gene_id, m.gene_name, m.gene_ids) == ("ENSG00000188536,ENSG00000206172", "HBA2,HBA1",
+                                                        ("ENSG00000188536", "ENSG00000206172"))
+
+    @pytest.mark.parametrize("gene_id,gene_name", [
+        ("ENSG00000188536,ENSG00000206172", "HBA2"),
+        ("ENSG00000188536", "HBA2,HBA1"),
+        ("", "HBA2"),
+        ("ENSG00000188536,", "HBA2,"),
+    ])
+    def test_gene_lists_that_do_not_pair_up_refuse_the_release(self, gcs, gene_id, gene_name):
+        gcs.publish(rows=[model_row("AF-P69905-F1", "P69905", 1, 1, 1, 142, gene_id=gene_id, gene_name=gene_name)])
+        assert refused(gcs).check == "models_rows"
+
     def test_an_unserved_licence_leaves_the_accession_out(self, gcs):
         gcs.publish()
         r = load(gcs, served=frozenset({"CC-BY-4.0"}))
@@ -271,6 +306,57 @@ class TestLoader:
         gcs.local(POINTER if missing == "pointer" else f"{base}/{missing}").unlink()
         e = refused(gcs)
         assert e.check == "object_missing"
+
+    @pytest.mark.parametrize("entry", [
+        None,
+        {contract.OBJECT_BYTES: "many", contract.OBJECT_SHA256: "a" * 64},
+        "bytes+1",
+        "other-sha",
+    ])
+    def test_models_table_must_be_the_object_the_manifest_lists(self, gcs, entry):
+        raw = models_bytes(default_rows())
+        if entry == "bytes+1":
+            entry = {**object_entry(raw), contract.OBJECT_BYTES: len(raw) + 1}
+        elif entry == "other-sha":
+            entry = {**object_entry(raw), contract.OBJECT_SHA256: "0" * 64}
+        objects = {} if entry is None else {contract.MODELS_FILE: entry}
+        gcs.publish(manifest={"contract_version": contract.CONTRACT_VERSION, contract.MANIFEST_OBJECTS: objects})
+        e = refused(gcs)
+        assert e.check == "models_object" and contract.MODELS_FILE in str(e)
+
+    def test_a_short_read_of_the_models_table_is_refused_by_name(self, gcs):
+        base = gcs.publish()
+
+        async def fetch(path, max_bytes):
+            data = await gcs.fetch(path, max_bytes)
+            return data[:-5] if path == f"{base}/{contract.MODELS_FILE}" else data
+
+        with pytest.raises(ContractCheckFailed) as e:
+            asyncio.run(load_release(POINTER, fetch, None))
+        assert e.value.check == "models_object" and "bytes" in str(e.value)
+
+    @pytest.mark.parametrize("name,columns,check", svc.TABIX_HEADERS)
+    def test_a_tabix_file_under_another_header_is_refused(self, gcs, name, columns, check):
+        base = gcs.publish()
+        for bad in (contract.header_line(columns[:-1]), contract.header_line(columns).lstrip("#")):
+            gcs.put(f"{base}/{name}", gzip.compress(bad.encode() + b"row\n"))
+            assert refused(gcs).check == check
+        gcs.put(f"{base}/{name}", b"not gzip")
+        assert refused(gcs).check == check
+        gcs.local(f"{base}/{name}").unlink()
+        assert refused(gcs).check == "object_missing"
+
+    def test_only_the_head_of_a_tabix_file_is_asked_for(self, gcs):
+        base = gcs.publish()
+        asked = {}
+
+        async def fetch(path, max_bytes):
+            asked[path] = max_bytes
+            return await gcs.fetch(path, max_bytes)
+
+        asyncio.run(load_release(POINTER, fetch, None))
+        for name, _, _ in svc.TABIX_HEADERS:
+            assert asked[f"{base}/{name}"] < svc._BGZF_MAX_BLOCK
 
     @pytest.mark.parametrize("override", [
         {"model_file_id": "../etc"},
@@ -364,6 +450,63 @@ class TestLoader:
         assert refused(gcs).check == "models_rows"
 
 
+class DribblingContent:
+    """An aiohttp body that arrives a few bytes at a time: read(n) is what has arrived, not n bytes."""
+
+    step = 4096
+
+    def __init__(self, body: bytes):
+        self.body, self.served = body, 0
+
+    async def read(self, n: int = -1) -> bytes:
+        take = self.step if n < 0 else min(self.step, n)
+        chunk = self.body[self.served:self.served + take]
+        self.served += len(chunk)
+        return chunk
+
+    async def iter_chunked(self, n: int):
+        while chunk := await self.read(n):
+            yield chunk
+
+
+class FakeResponse:
+    status = 206
+
+    def __init__(self, content):
+        self.content = content
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def raise_for_status(self):
+        pass
+
+
+class FakeSession:
+    closed = False
+
+    def __init__(self, content):
+        self.content, self.requests = content, []
+
+    def get(self, url, headers=None):
+        self.requests.append((url, (headers or {}).get("Range")))
+        return FakeResponse(self.content)
+
+    async def close(self):
+        pass
+
+
+class FakeStorage:
+    async def _headers(self):
+        return {}
+
+    async def close(self):
+        pass
+
+
 class TestService:
     @pytest.fixture
     def access(self, monkeypatch, gcs):
@@ -372,6 +515,19 @@ class TestService:
         a = ProteinStructureAccess()
         monkeypatch.setattr(a, "_fetch_capped", gcs.fetch)
         return a
+
+    @pytest.mark.parametrize("size,cap,expected", [(100_000, 200_000, 100_000), (0, 10, 0), (100_000, 999, 1000)])
+    def test_a_body_arriving_in_pieces_is_read_to_its_end_or_to_the_cap(self, monkeypatch, size, cap, expected):
+        monkeypatch.setattr(gcloud_tabix_base, "ensure_gcs_token", lambda: None)
+        body = os.urandom(size)
+        content = DribblingContent(body)
+        a = ProteinStructureAccess()
+        a._session, a._storage = FakeSession(content), FakeStorage()
+        got = asyncio.run(a._fetch_capped("gs://b/o", cap))
+        assert got == body[:expected]
+        assert a._session.requests == [("https://storage.googleapis.com/b/o", f"bytes=0-{cap}")]
+        # refused on the cap without draining the rest
+        assert content.served <= expected + content.step
 
     def test_good_release_is_served(self, access, gcs):
         gcs.publish()
