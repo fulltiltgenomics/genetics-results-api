@@ -1,12 +1,13 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 import app.config.cell_type_expression as cell_type_expression_config
+import app.config.protein_structure as protein_structure_config
 from app.core.auth import warn_if_wildcard_allow_list
 from app.core.logging_config import setup_logging
 from app.core.query_params import reject_unknown_query_params
@@ -120,6 +121,26 @@ def include_cell_type_expression(app: FastAPI) -> bool:
     return True
 
 
+# every protein structure router goes here, never through a bare include_router, so that a
+# deployment without a pointer cannot list one
+PROTEIN_STRUCTURE_ROUTERS: tuple[APIRouter, ...] = ()
+
+
+def include_protein_structure(
+    app: FastAPI, routers: tuple[APIRouter, ...] = PROTEIN_STRUCTURE_ROUTERS
+) -> bool:
+    """Register the protein structure routes only where the deployment names a release.
+
+    Absent rather than answering 404, as for cell-type expression. A pointer that names a bad
+    release still registers them: they answer 503 and the startup check says why.
+    """
+    if protein_structure_config.release_pointer is None:
+        return False
+    for router in routers:
+        app.include_router(router, prefix="/api/v1", tags=["protein-structure"])
+    return True
+
+
 # FastAPI registers its docs/openapi routes with Starlette's add_route, which does NOT
 # apply the app-level `dependencies` below — so the built-in docs_url/redoc_url/openapi_url
 # were served without auth_required. Combined with the auth-gateway's `Authorization: Bearer`
@@ -171,6 +192,7 @@ app.include_router(credible_sets.router, prefix="/api/v1", tags=["credible-sets"
 app.include_router(colocalization.router, prefix="/api/v1", tags=["colocalization"])
 app.include_router(expression.router, prefix="/api/v1", tags=["expression"])
 include_cell_type_expression(app)
+include_protein_structure(app)
 app.include_router(genes.router, prefix="/api/v1", tags=["genes"])
 app.include_router(gene_groups.router, prefix="/api/v1", tags=["gene-groups"])
 app.include_router(gene_disease.router, prefix="/api/v1", tags=["gene-disease"])

@@ -15,6 +15,8 @@ collected before raising, so one run reports every problem at once:
 
 The cell-type expression release is checked after those, through its pointer, because the
 directory it names is not known statically (`_check_cell_type_expression_release`).
+The protein structure release is checked the same way but only ever warns
+(`_check_protein_structure_release`): it is optional and must never stop the server.
 
 Per-phenotype files addressed by `prefix` + <phenotype> + `suffix` are NOT
 enumerable statically (thousands per resource, set unknown), so they are not
@@ -283,6 +285,47 @@ def _check_cell_type_expression_release(tabix: GCloudTabixBase) -> list[str]:
     return [e for e in errors if e]
 
 
+def _read_object(path: str, max_bytes: int) -> bytes:
+    # one byte past the cap is enough for the caller to refuse the object without holding it
+    with fsspec.open(path, "rb") as f:
+        return f.read(max_bytes + 1)
+
+
+def _check_protein_structure_release() -> None:
+    """Warn, loudly and naming the failed check, when the protein structure release is unusable.
+
+    Never an error: the feature is optional and a bad structure release must not keep
+    results-api from starting. The service refuses the same release when it warms, so the
+    feature stays off; this only makes the reason visible before the server starts.
+    """
+    import asyncio
+
+    import app.config.protein_structure as cfg
+    from app.services.protein_structure import ContractCheckFailed, load_release
+
+    if cfg.release_pointer is None:
+        return
+
+    async def fetch(path: str, max_bytes: int) -> bytes:
+        return await asyncio.to_thread(_read_object, path, max_bytes)
+
+    try:
+        release = asyncio.run(load_release(cfg.release_pointer, fetch, cfg.served_licences))
+    except ContractCheckFailed as e:
+        logger.warning(
+            f"protein_structure: RELEASE REFUSED, check '{e.check}' failed for pointer "
+            f"{cfg.release_pointer}; the feature stays off until a release passes: {e}"
+        )
+        return
+    except Exception as e:
+        logger.warning(
+            f"protein_structure: RELEASE REFUSED, unexpected error reading pointer "
+            f"{cfg.release_pointer}; the feature stays off: {e!r}"
+        )
+        return
+    logger.info(f"protein_structure: release {release.name} passes the contract checks")
+
+
 def verify_all_data_files() -> None:
     """Verify every configured tabix file and mapping file is reachable.
 
@@ -316,6 +359,7 @@ def verify_all_data_files() -> None:
                 errors.append(err)
 
     errors.extend(_check_cell_type_expression_release(tabix))
+    _check_protein_structure_release()
 
     if errors:
         errors.sort()

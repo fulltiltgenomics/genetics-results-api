@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
     from app.services.ld_panel_service import LDPanelService
     from app.services.ld_service import LDService
+    from app.services.protein_structure import ProteinStructureAccess
     from app.services.request_util import RequestUtil
     from app.services.rsid_db import RsidDB
     from app.services.search_service import SearchIndex
@@ -232,6 +233,11 @@ def get_data_access_mpra() -> "DataAccessMpra":
 def get_data_access_cell_type_expression() -> "CellTypeExpressionAccess":
     """Get CellTypeExpressionAccess service instance."""
     return container.get("data_access_cell_type_expression")
+
+
+def get_protein_structure() -> "ProteinStructureAccess":
+    """Get ProteinStructureAccess service instance."""
+    return container.get("protein_structure")
 
 
 def get_gene_name_mapping() -> "GeneNameAndPositionMapping":
