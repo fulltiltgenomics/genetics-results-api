@@ -11,6 +11,7 @@ from app.core.responses import DATASET_VERSION_HEADER, range_response
 from app.core.variant import Variant
 from app.dependencies import get_gene_name_mapping, get_variant_annotation_service
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
+from app.services.protein_structure import ReleaseUnavailable
 from app.services.variant_annotation_service import VariantAnnotationService
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,13 @@ def _validate_source(source: str, service: VariantAnnotationService) -> None:
         )
 
 
+def _require_available(source: str, service: VariantAnnotationService) -> None:
+    try:
+        service.require_available(source)
+    except ReleaseUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
 def _with_version(
     response: Response, source: str, service: VariantAnnotationService
 ) -> Response:
@@ -86,6 +94,7 @@ def _with_version(
         401: {"description": "Not authenticated"},
         404: {"description": "Source or gene not found"},
         422: {"description": "Invalid query parameters"},
+        503: {"description": "The source reads a release and none is loaded yet"},
     },
 )
 async def get_variant_annotation(
@@ -118,6 +127,7 @@ async def get_variant_annotation(
         _validate_source(source, service)
     except NotFoundException as e:
         raise HTTPException(status_code=404, detail=str(e))
+    _require_available(source, service)
 
     try:
         if variant is not None:
@@ -156,6 +166,7 @@ class VariantAnnotationRequest(BaseModel):
         401: {"description": "Not authenticated"},
         404: {"description": "Source not found"},
         422: {"description": "Invalid variants"},
+        503: {"description": "The source reads a release and none is loaded yet"},
     },
 )
 async def post_variant_annotation(
@@ -173,6 +184,7 @@ async def post_variant_annotation(
         _validate_source(source, service)
     except NotFoundException as e:
         raise HTTPException(status_code=404, detail=str(e))
+    _require_available(source, service)
 
     if not body.variants:
         raise HTTPException(status_code=422, detail="No variants provided")

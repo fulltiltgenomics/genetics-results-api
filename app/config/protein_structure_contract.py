@@ -2,8 +2,8 @@
 
 A copy, not an import: the definition lives in genetics-results-munge
 `scripts/protein_structure_contract.py`, and no repo of the suite depends on another's code.
-Only what the loader checks and the routes serve is copied; the variant map, the feature
-vocabularies, the window rules and the view-spec are not read here.
+Only what the loader checks and the routes serve is copied; the feature vocabularies, the
+window rules and the view-spec are not read here.
 tests/test_protein_structure.py compares every public name of this module with the munge
 module when a checkout of it is found.
 """
@@ -125,6 +125,24 @@ FEATURE_COLUMNS = _GENE_ANCHOR + [
     ("description", str),
     ("evidence", str),
     ("evidence_tier", str),
+]
+
+# one row per (variant, accession); `variant` is chr:pos:ref:alt with the numeric chrom
+VARIANT_COLUMNS = [
+    ("chrom", int),
+    ("pos", int),
+    ("ref", str),
+    ("alt", str),
+    ("variant", str),
+    ("accession", str),
+    ("gene_id", str),
+    ("gene_name", str),
+    ("aa_pos", int),
+    ("aa_ref", str),
+    ("aa_alt", str),
+    ("model_file_id", str),
+    ("file_position", int),
+    ("mu_snp", float),
 ]
 
 # PAE: one row-major n x n uint8 object per model file, value = code / PAE_SCALE

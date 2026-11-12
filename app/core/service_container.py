@@ -269,7 +269,7 @@ def _register_services():
 
     def create_variant_annotation_service():
         from app.services.variant_annotation_service import VariantAnnotationService
-        return VariantAnnotationService()
+        return VariantAnnotationService(container.get("protein_structure"))
 
     def create_variant_set_service():
         from app.services.variant_set_service import VariantSetService

@@ -381,6 +381,7 @@ _BGZF_MAX_BLOCK = 64 * 1024
 TABIX_HEADERS = (
     (contract.RESIDUES_FILE, contract.RESIDUE_COLUMNS, "residues_header"),
     (contract.FEATURES_FILE, contract.FEATURE_COLUMNS, "features_header"),
+    (contract.VARIANTS_FILE, contract.VARIANT_COLUMNS, "variants_header"),
 )
 
 
