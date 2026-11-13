@@ -125,6 +125,7 @@ class Table:
 
 RESIDUES = Table(contract.RESIDUES_FILE, tuple(contract.RESIDUE_COLUMNS))
 FEATURES = Table(contract.FEATURES_FILE, tuple(contract.FEATURE_COLUMNS))
+SCORES = Table(contract.SCORES_FILE, tuple(contract.SCORE_COLUMNS))
 
 _NULL = b"NA"
 
@@ -278,14 +279,16 @@ class ProteinStructureData(ProteinStructureAccess):
     """The loaded release plus the reads the routes make against it."""
 
     async def stream_rows(
-        self, release: Release, table: Table, genes: list[dict], accession: str | None = None
+        self, release: Release, table: Table, genes: list[dict], accession: str | None = None,
+        predictors: frozenset[str] | None = None,
     ) -> AsyncGenerator[list[bytes], None]:
         """Rows of the given genes, optionally of one accession, split into fields.
 
         The files are point-indexed on gene_start, so a lookup returns every gene that starts
         there; the gene_id column picks out the requested ones. A row whose accession is not in
         the loaded index is never yielded: the files hold every accession of the release, the
-        index only those this deployment serves.
+        index only those this deployment serves. The same holds for a score row and the
+        release's predictors, which `predictors` can narrow and never widen.
         """
         wanted = {g["ensg"].encode() for g in genes}
         starts = sorted({(g["chrom"], g["gene_start"]) for g in genes})
@@ -293,6 +296,12 @@ class ProteinStructureData(ProteinStructureAccess):
         only = accession.encode() if accession is not None else None
         n_columns = len(table.columns)
         served = release.by_accession
+        predictor = None
+        if "predictor" in table.names:
+            predictor = (
+                table.names.index("predictor"),
+                frozenset(p.encode() for p in release.predictors or () if predictors is None or p in predictors),
+            )
         stream = await self._stream_range(
             release.object_path(table.file), [c for c, _ in starts], [s for _, s in starts], [s for _, s in starts], 0
         )
@@ -300,18 +309,18 @@ class ProteinStructureData(ProteinStructureAccess):
         async for chunk in stream:
             *lines, pending = (pending + chunk).split(b"\n")
             for line in lines:
-                fields = self._wanted_fields(line, n_columns, wanted, accession_col, only, served)
+                fields = self._wanted_fields(line, n_columns, wanted, accession_col, only, served, predictor)
                 if fields is not None:
                     yield fields
         if pending:
-            fields = self._wanted_fields(pending, n_columns, wanted, accession_col, only, served)
+            fields = self._wanted_fields(pending, n_columns, wanted, accession_col, only, served, predictor)
             if fields is not None:
                 yield fields
 
     @staticmethod
     def _wanted_fields(
         line: bytes, n_columns: int, wanted: set[bytes], accession_col: int, only: bytes | None,
-        served: dict[str, tuple[str, ...]],
+        served: dict[str, tuple[str, ...]], predictor: tuple[int, frozenset[bytes]] | None,
     ) -> list[bytes] | None:
         if not line:
             return None
@@ -323,6 +332,8 @@ class ProteinStructureData(ProteinStructureAccess):
         if only is not None and fields[accession_col] != only:
             return None
         if fields[accession_col].decode() not in served:
+            return None
+        if predictor is not None and fields[predictor[0]] not in predictor[1]:
             return None
         return fields
 

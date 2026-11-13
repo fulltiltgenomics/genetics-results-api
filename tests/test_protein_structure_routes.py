@@ -13,7 +13,7 @@ import polars as pl
 import pytest
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
-from test_protein_structure import model_row, models_bytes
+from test_protein_structure import model_row, models_bytes, score_sources
 
 import app.config.protein_structure as config
 import app.config.protein_structure_contract as contract
@@ -24,10 +24,15 @@ from app.routers import protein_structure as routes
 from app.server import PROTEIN_STRUCTURE_ROUTERS, include_protein_structure
 from app.services import data_access_protein_structure as data
 from app.services import gcloud_tabix_base
-from app.services.protein_structure import Pointer, Release, parse_models
+from app.services.protein_structure import (
+    Pointer,
+    Release,
+    parse_models,
+    parse_score_sources,
+)
 
-BASE = "gs://test-bucket/protein_structure/releases/20261112-120000"
-RELEASE = "20261112-120000"
+BASE = "gs://test-bucket/protein_structure/releases/2026-11-12-120000"
+RELEASE = "2026-11-12-120000"
 # the build's own bound on one gene's stored residue rows (munge_protein_structure.py)
 BUILD_MAX_GENE_RESIDUE_BYTES = 8 * 1024 * 1024
 
@@ -75,6 +80,11 @@ def residue_line(gene, name, accession, mid, pos, mu="1.5e-08") -> str:
 def feature_line(gene, name, accession, start, end, evidence="ECO:0000269") -> str:
     tier = "experimental" if evidence else "unknown"
     return "\t".join(anchor(gene, name) + [accession, "uniprot", "Domain", str(start), str(end), "Cadherin", evidence, tier]) + "\n"
+
+
+def score_line(gene, name, accession, predictor, pos, mean_snv="0.81234", percentile="97.5") -> str:
+    scored = [mean_snv, "6", percentile] if mean_snv else ["", "0", ""]
+    return "\t".join(anchor(gene, name) + [accession, predictor, str(pos), "M"] + scored + ["0.5", "19"]) + "\n"
 
 
 class Content:
@@ -228,11 +238,13 @@ def gcs():
     return Gcs()
 
 
-def make_release(rows, served=None) -> Release:
+def make_release(rows, served=None, scores=True, served_scores=None) -> Release:
+    """`scores` False is a release without a scores object; `served_scores` is the deployment's licence set."""
     models, by_accession, by_gene = parse_models(models_bytes(rows), served)
+    predictors = parse_score_sources({"score_sources": score_sources()}, served_scores) if scores else None
     return Release(
         pointer=Pointer(release=RELEASE, uri=BASE, contract_version=contract.CONTRACT_VERSION, manifest_sha256="0" * 64),
-        manifest={}, models=models, by_accession=by_accession, by_gene=by_gene,
+        manifest={}, models=models, by_accession=by_accession, by_gene=by_gene, predictors=predictors,
     )
 
 
@@ -296,7 +308,7 @@ def put_structure(service, gcs, mid: str, text: bytes) -> bytes:
 
 
 ROUTES = [
-    "models/Q9HCU4", "residues/Q9HCU4", "features/Q9HCU4", f"structure/{F1}", f"pae/{F1}", f"pae/{F1}/slice?positions=1",
+    "models/Q9HCU4", "residues/Q9HCU4", "features/Q9HCU4", "scores/Q9HCU4", f"structure/{F1}", f"pae/{F1}", f"pae/{F1}/slice?positions=1",
     f"pae/{F1}/rows?positions=1",
 ]
 
@@ -500,6 +512,148 @@ class TestRows:
         if "SANDBOX_MAX_RESPONSE_BYTES" in os.environ:
             pytest.skip("the cap is overridden in this environment")
         assert contract.MAX_RESPONSE_BYTES == limits.SANDBOX_MAX_RESPONSE_BYTES
+
+
+AM = "alphamissense;direction=higher_is_more_damaging;licence=CC-BY-4.0"
+ESM = "esm1b;direction=lower_is_more_damaging;licence=CC-BY-NC-4.0"
+SCORE_ROUTES = ["scores/CELSR2", f"scores/{CELSR2['ensg']}", "scores/Q9HCU4"]
+
+
+class TestScores:
+    @pytest.fixture(autouse=True)
+    def _tables(self, service):
+        service.tables[f"{BASE}/{contract.SCORES_FILE}"] = [
+            score_line(CELSR2, "CELSR2", "Q9HCU4", "alphamissense", 1),
+            score_line(CELSR2, "CELSR2", "Q9HCU4", "alphamissense", 2, mean_snv=""),
+            score_line(CELSR2, "CELSR2", "Q9HCU4", "esm1b", 1, mean_snv="-7.5", percentile="12.345"),
+            score_line(CELSR2, "CELSR2", "A0A000", "alphamissense", 1),
+            score_line(DECOY, "DECOY", "Q9HCU4", "alphamissense", 1),
+        ]
+
+    @staticmethod
+    def predictors(r, format="tsv"):
+        assert r.status == 200, r.body
+        if format == "json":
+            return [(x["accession"], x["predictor"]) for x in r.json()]
+        return [tuple(x.split("\t")[5:7]) for x in r.text.splitlines()[1:]]
+
+    @pytest.mark.parametrize("route", SCORE_ROUTES)
+    def test_tsv_rows_with_the_predictors_direction_and_licence_in_a_header(self, api, route):
+        r = call(api, route)
+        assert r.status == 200 and r.headers["content-type"].startswith("text/tab-separated-values")
+        assert r.headers["x-dataset-version"] == RELEASE
+        assert r.headers["x-score-predictors"] == f"{AM},{ESM}"
+        header, *rows = r.text.splitlines()
+        assert "#" + header + "\n" == contract.header_line(contract.SCORE_COLUMNS)
+        # neither the gene that starts where CELSR2 does nor the accession outside the index
+        assert self.predictors(r) == [("Q9HCU4", "alphamissense")] * 2 + [("Q9HCU4", "esm1b")]
+        assert {x.split("\t")[0] for x in rows} == {CELSR2["ensg"]}
+        assert rows[1].split("\t")[9:] == ["NA", "0", "NA", "0.5", "19"]
+
+    def test_json_rows_are_typed_and_carry_columns_and_predictors(self, api):
+        r = call(api, "scores/Q9HCU4?format=json")
+        assert r.status == 200 and r.headers["content-type"] == "application/json"
+        assert r.headers["x-columns"].split(",") == [c for c, _ in contract.SCORE_COLUMNS]
+        assert (r.headers["x-score-predictors"], r.headers["x-dataset-version"]) == (f"{AM},{ESM}", RELEASE)
+        first, unscored, esm = r.json()
+        assert list(first) == [c for c, _ in contract.SCORE_COLUMNS]
+        assert (first["protein_position"], first["mean_snv"], first["n_snv"], first["percentile"], first["n_all"]) == (1, 0.81234, 6, 97.5, 19)
+        assert (unscored["mean_snv"], unscored["n_snv"], unscored["percentile"], unscored["mean_all"]) == (None, 0, None, 0.5)
+        assert (esm["predictor"], esm["mean_snv"], esm["percentile"]) == ("esm1b", -7.5, 12.345)
+
+    @pytest.mark.parametrize("query,names,header", [
+        ("predictor=esm1b", ["esm1b"], ESM),
+        ("predictor=alphamissense", ["alphamissense"] * 2, AM),
+        ("predictor=esm1b,alphamissense", ["alphamissense"] * 2 + ["esm1b"], f"{AM},{ESM}"),
+        ("predictor=esm1b&predictor=alphamissense", ["alphamissense"] * 2 + ["esm1b"], f"{AM},{ESM}"),
+    ])
+    @pytest.mark.parametrize("format", ["tsv", "json"])
+    def test_predictor_narrows_the_rows_and_the_header(self, api, query, names, header, format):
+        r = call(api, f"scores/CELSR2?{query}&format={format}")
+        assert [p for _, p in self.predictors(r, format)] == names
+        assert r.headers["x-score-predictors"] == header
+
+    @pytest.mark.parametrize("query", ["predictor=sift", "predictor=alphamissense,sift", "predictor=", "predictor=ALPHAMISSENSE",
+                                       "predictor=alphamissense&predictor=sift"])
+    def test_an_unknown_predictor_is_a_422_naming_what_there_is(self, api, query):
+        r = call(api, f"scores/CELSR2?{query}")
+        assert r.status == 422 and "alphamissense, esm1b" in r.json()["detail"]
+
+    def test_a_predictor_without_rows_for_the_protein_is_a_404(self, api, service):
+        service.tables[f"{BASE}/{contract.SCORES_FILE}"] = [score_line(CELSR2, "CELSR2", "Q9HCU4", "alphamissense", 1)]
+        assert call(api, "scores/CELSR2?predictor=esm1b").status == 404
+        assert call(api, "scores/CELSR2").status == 200
+
+    def test_a_release_without_scores_is_a_404_that_says_so_and_serves_the_rest(self, api, service):
+        service._release = make_release(release_rows(), scores=False)
+        service.tables[f"{BASE}/{contract.RESIDUES_FILE}"] = [residue_line(CELSR2, "CELSR2", "Q9HCU4", F1, 1)]
+        for route in SCORE_ROUTES + ["scores/NOSUCH", "scores/CELSR2?predictor=esm1b", "scores/CELSR2?format=json"]:
+            r = call(api, route)
+            assert r.status == 404 and "holds no predictor scores" in r.json()["detail"], route
+        assert call(api, "residues/CELSR2").status == 200 and call(api, "models/CELSR2").status == 200
+
+    @pytest.mark.parametrize("refused,kept,header", [("esm1b", "CC-BY-4.0", AM), ("alphamissense", "CC-BY-NC-4.0", ESM)])
+    def test_a_predictor_under_an_unserved_licence_is_in_no_format_and_no_header(self, api, service, refused, kept, header):
+        service._release = make_release(release_rows(), served_scores=frozenset({kept}))
+        for route in SCORE_ROUTES:
+            for format in ("tsv", "json"):
+                r = call(api, f"{route}?format={format}")
+                names = {p for _, p in self.predictors(r, format)}
+                assert names and refused not in names, (route, format)
+                assert refused.encode() not in r.body
+                assert r.headers["x-score-predictors"] == header
+            r = call(api, f"{route}?predictor={refused}")
+            assert r.status == 422 and refused not in r.json()["detail"].split("it has")[1]
+
+    def test_a_deployment_serving_no_score_licence_is_a_404(self, api, service):
+        service._release = make_release(release_rows(), served_scores=frozenset())
+        r = call(api, "scores/CELSR2")
+        assert r.status == 404 and "serves no predictor scores" in r.json()["detail"]
+
+    def test_a_row_of_a_predictor_the_manifest_does_not_name_is_not_served(self, api, service):
+        service.tables[f"{BASE}/{contract.SCORES_FILE}"].append(score_line(CELSR2, "CELSR2", "Q9HCU4", "sift", 1))
+        assert "sift" not in {p for _, p in self.predictors(call(api, "scores/CELSR2"))}
+
+    def test_rows_of_an_accession_outside_the_index_are_never_served(self, api, service):
+        extra = model_row("AF3-A0A000-F1", "A0A000", 1, 1, 1, 30, gene_id=CELSR2["ensg"], gene_name="CELSR2",
+                          licence="AlphaFold Server output terms")
+        service._release = make_release(release_rows() + [extra])
+        assert {a for a, _ in self.predictors(call(api, "scores/CELSR2"))} == {"A0A000", "Q9HCU4"}
+        service._release = make_release(release_rows() + [extra], frozenset({"CC-BY-4.0"}))
+        for format in ("tsv", "json"):
+            assert {a for a, _ in self.predictors(call(api, f"scores/CELSR2?format={format}"), format)} == {"Q9HCU4"}
+        assert call(api, "scores/A0A000").status == 404
+
+    def test_what_has_no_rows_is_a_404(self, api):
+        for protein, why in (("TP53", "No score rows"), ("Q00002", "listed under no gene"), ("NOSUCH", "neither"), ("ENSG00000123456", "GENCODE")):
+            r = call(api, f"scores/{protein}")
+            assert r.status == 404 and why in r.json()["detail"], protein
+
+    def test_a_row_of_another_width_is_not_served(self, api, service):
+        service.tables[f"{BASE}/{contract.SCORES_FILE}"] = [score_line(CELSR2, "CELSR2", "Q9HCU4", "esm1b", 1).replace("\tM\t", "\t")]
+        assert call(api, "scores/CELSR2").status == 500
+
+    def test_the_largest_gene_the_build_allows_fits_one_tsv_response_and_json_says_what_to_do(self, api, service):
+        # worst case for the NA rewrite: no row has a single-nucleotide mean
+        lines = [score_line(CELSR2, "CELSR2", "Q9HCU4", p, 30000, mean_snv="") for p in ("alphamissense", "esm1b")]
+        n = BUILD_MAX_GENE_RESIDUE_BYTES // sum(len(x) for x in lines)
+        service.tables[f"{BASE}/{contract.SCORES_FILE}"] = lines * n
+        r = call(api, "scores/CELSR2")
+        assert r.status == 200 and r.body.count(b"\n") == 2 * n + 1
+        assert BUILD_MAX_GENE_RESIDUE_BYTES < len(r.body) < contract.MAX_RESPONSE_BYTES
+        r = call(api, "scores/CELSR2?format=json")
+        assert r.status == 413 and "format=tsv" in r.json()["detail"] and "predictor=" in r.json()["detail"]
+        r = call(api, "scores/CELSR2?format=json&predictor=esm1b")
+        assert r.status == 200 and len(r.json()) == n
+
+    def test_the_predictors_header_is_one_item_per_predictor(self):
+        release = make_release(release_rows())
+        header = routes.score_predictors_header(list(release.predictors.values()))[routes.SCORE_PREDICTORS_HEADER]
+        parsed = {item.split(";")[0]: dict(kv.split("=") for kv in item.split(";")[1:]) for item in header.split(",")}
+        assert parsed == {
+            name: {"direction": contract.SCORE_DIRECTIONS[name], "licence": score_sources()[name]["licence"]}
+            for name in contract.SCORE_DIRECTIONS
+        }
 
 
 class TestStructure:

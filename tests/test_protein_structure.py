@@ -30,7 +30,7 @@ from app.services.protein_structure import (
 )
 
 POINTER = "gs://test-bucket/protein_structure/releases/CURRENT"
-RELEASE = "20261112-120000"
+RELEASE = "2026-11-12-120000"
 AF3_LICENCE = "LicenseRef-AlphaFold-Server-output-terms"
 
 
@@ -53,6 +53,16 @@ def model_row(mid, accession, window, n_windows, start, end, gene_id="ENSG000001
     }
     row.update(override)
     return row
+
+
+def score_sources(**override) -> dict:
+    """The manifest's `score_sources` as the build writes it, cut to what a reader checks."""
+    sources = {
+        "alphamissense": {"source": "AlphaMissense", "licence": "CC-BY-4.0", "direction": "higher_is_more_damaging"},
+        "esm1b": {"source": "ESM1b", "licence": "CC-BY-NC-4.0", "direction": "lower_is_more_damaging"},
+    }
+    sources.update(override)
+    return {k: v for k, v in sources.items() if v is not None}
 
 
 def default_rows():
@@ -96,13 +106,21 @@ class FakeGcs:
         p.write_bytes(data)
 
     def publish(self, rows=None, header=None, manifest=None, pointer_version=None, manifest_sha=None,
-                release=RELEASE, models_raw=None):
+                release=RELEASE, models_raw=None, scores=None, list_scores=True):
+        """`scores`: the manifest's score_sources of a release with a scores object; None publishes one without."""
         base = f"gs://test-bucket/protein_structure/releases/{release}"
         if models_raw is None:
             models_raw = models_bytes(rows if rows is not None else default_rows(), header)
         if manifest is None:
             manifest = {"contract_version": contract.CONTRACT_VERSION, "release": release,
                         contract.MANIFEST_OBJECTS: {contract.MODELS_FILE: object_entry(models_raw)}}
+            if scores is not None:
+                manifest["score_sources"] = scores
+                if list_scores:
+                    manifest[contract.MANIFEST_OBJECTS][contract.SCORES_FILE] = object_entry(b"")
+        if scores is not None:
+            name, columns, _ = svc.SCORES_HEADER
+            self.put(f"{base}/{name}", gzip.compress(contract.header_line(columns).encode()))
         manifest_raw = json.dumps(manifest).encode()
         self.put(f"{base}/{contract.MODELS_FILE}", models_raw)
         for name, columns, _ in svc.TABIX_HEADERS:
@@ -128,13 +146,13 @@ def gcs(tmp_path):
     return FakeGcs(tmp_path)
 
 
-def load(gcs, served=None):
-    return asyncio.run(load_release(POINTER, gcs.fetch, served))
+def load(gcs, served=None, served_scores=None):
+    return asyncio.run(load_release(POINTER, gcs.fetch, served, served_scores))
 
 
-def refused(gcs, served=None) -> ContractCheckFailed:
+def refused(gcs, served=None, served_scores=None) -> ContractCheckFailed:
     with pytest.raises(ContractCheckFailed) as e:
-        load(gcs, served)
+        load(gcs, served, served_scores)
     return e.value
 
 
@@ -171,7 +189,12 @@ class TestContractMirror:
                 "MANIFEST_OBJECTS", "MAX_RESPONSE_BYTES"} <= set(constants)
         for name in constants:
             assert getattr(contract, name) == getattr(munge, name), name
-        assert contract.MODEL_FILE_ID_RE.pattern == munge.MODEL_FILE_ID_RE.pattern
+        patterns = [n for n, v in vars(contract).items() if n.isupper() and hasattr(v, "pattern")]
+        assert {"MODEL_FILE_ID_RE", "RELEASE_RE"} <= set(patterns)
+        for name in patterns:
+            assert getattr(contract, name).pattern == getattr(munge, name).pattern, name
+        assert contract.manifest_object_names() == munge.manifest_object_names()
+        assert contract.header_line(contract.SCORE_COLUMNS) == munge.header_line(munge.SCORE_COLUMNS)
         assert contract.header_line(contract.MODEL_COLUMNS) == munge.header_line(munge.MODEL_COLUMNS)
         assert contract.manifest_object_names() == munge.manifest_object_names()
         for pair in (("", ""), ("ENSG1", "A"), ("ENSG1,ENSG2", "A,B")):
@@ -210,6 +233,19 @@ class TestConfig:
         from app.config.profiles.daly import protein_structure as daly
 
         assert daly.release_pointer is None
+
+    def test_daly_serves_every_licence_and_a_profile_without_the_feature_has_no_say(self, monkeypatch):
+        from app.config import profile as profile_loader
+
+        # scores fail closed: a predictor under a licence not named here is left out
+        assert (config.served_licences, config.served_score_licences) == (None, frozenset({"CC-BY-4.0", "CC-BY-NC-4.0"}))
+        monkeypatch.setattr(profile_loader, "CONFIG_PROFILE", "finngen")
+        try:
+            finngen = importlib.reload(config)
+            assert (finngen.release_pointer, finngen.served_score_licences) == (None, None)
+        finally:
+            monkeypatch.undo()
+            importlib.reload(config)
 
     @pytest.mark.parametrize("pointer,registered", [(None, False), (POINTER, True)])
     def test_routes_exist_only_where_a_release_is_named(self, monkeypatch, pointer, registered):
@@ -320,7 +356,7 @@ class TestLoader:
         elif entry == "other-sha":
             entry = {**object_entry(raw), contract.OBJECT_SHA256: "0" * 64}
         objects = {} if entry is None else {contract.MODELS_FILE: entry}
-        gcs.publish(manifest={"contract_version": contract.CONTRACT_VERSION, contract.MANIFEST_OBJECTS: objects})
+        gcs.publish(manifest={"contract_version": contract.CONTRACT_VERSION, "release": RELEASE, contract.MANIFEST_OBJECTS: objects})
         e = refused(gcs)
         assert e.check == "models_object" and contract.MODELS_FILE in str(e)
 
@@ -332,7 +368,7 @@ class TestLoader:
             return data[:-5] if path == f"{base}/{contract.MODELS_FILE}" else data
 
         with pytest.raises(ContractCheckFailed) as e:
-            asyncio.run(load_release(POINTER, fetch, None))
+            asyncio.run(load_release(POINTER, fetch, None, None))
         assert e.value.check == "models_object" and "bytes" in str(e.value)
 
     @pytest.mark.parametrize("name,columns,check", svc.TABIX_HEADERS)
@@ -354,7 +390,7 @@ class TestLoader:
             asked[path] = max_bytes
             return await gcs.fetch(path, max_bytes)
 
-        asyncio.run(load_release(POINTER, fetch, None))
+        asyncio.run(load_release(POINTER, fetch, None, None))
         for name, _, _ in svc.TABIX_HEADERS:
             assert asked[f"{base}/{name}"] < svc._BGZF_MAX_BLOCK
 
@@ -395,7 +431,7 @@ class TestLoader:
             return data
 
         with pytest.raises(ContractCheckFailed) as e:
-            asyncio.run(load_release(POINTER, fetch, None))
+            asyncio.run(load_release(POINTER, fetch, None, None))
         assert e.value.check == "object_too_large" and reads[-1] == 11
 
     def test_an_oversized_pointer_is_refused(self, gcs):
@@ -564,7 +600,7 @@ class TestService:
         async def scenario():
             await access.warm_all()
             assert access._task is None
-            gcs.publish(release="20261201-000000")
+            gcs.publish(release="2026-12-01-000000")
             await asyncio.sleep(0.05)
 
         asyncio.run(scenario())
@@ -647,3 +683,165 @@ class TestStartupCheck:
         with caplog.at_level(logging.WARNING, logger=startup_checks.logger.name):
             startup_checks._check_protein_structure_release()
         assert "RELEASE REFUSED" in caplog.text
+
+
+class TestScores:
+    def test_a_release_without_a_scores_object_loads_without_scores(self, gcs):
+        base = gcs.publish()
+        asked = []
+
+        async def fetch(path, max_bytes):
+            asked.append(path)
+            return await gcs.fetch(path, max_bytes)
+
+        r = asyncio.run(load_release(POINTER, fetch, None, None))
+        assert r.predictors is None and set(r.by_accession) == {"Q9HCU4", "P04637"}
+        assert f"{base}/{contract.SCORES_FILE}" not in asked
+
+    def test_score_sources_without_the_object_is_a_release_without_scores(self, gcs):
+        base = gcs.publish(scores={}, list_scores=False)
+        gcs.local(f"{base}/{contract.SCORES_FILE}").unlink()
+        assert load(gcs).predictors is None
+
+    def test_the_predictors_are_the_manifests_with_licence_and_direction(self, gcs):
+        gcs.publish(scores=score_sources())
+        p = load(gcs).predictors
+        assert list(p) == ["alphamissense", "esm1b"]
+        assert tuple(p["alphamissense"]) == ("alphamissense", "AlphaMissense", "CC-BY-4.0", contract.SCORE_HIGHER_IS_DAMAGING)
+        assert tuple(p["esm1b"]) == ("esm1b", "ESM1b", "CC-BY-NC-4.0", contract.SCORE_LOWER_IS_DAMAGING)
+
+    def test_a_predictor_the_mirror_does_not_know_is_taken_from_the_manifest(self, gcs):
+        gcs.publish(scores=score_sources(newer={"source": "N", "licence": "MIT", "direction": "lower_is_more_damaging"}))
+        assert load(gcs).predictors["newer"].direction == contract.SCORE_LOWER_IS_DAMAGING
+
+    def test_a_scores_file_under_another_header_is_refused(self, gcs):
+        name, columns, check = svc.SCORES_HEADER
+        assert check == "scores_header"
+        base = gcs.publish(scores=score_sources())
+        for bad in (contract.header_line(columns[:-1]), contract.header_line(contract.RESIDUE_COLUMNS), contract.header_line(columns).lstrip("#")):
+            gcs.put(f"{base}/{name}", gzip.compress(bad.encode() + b"row\n"))
+            assert refused(gcs).check == "scores_header"
+        gcs.local(f"{base}/{name}").unlink()
+        assert refused(gcs).check == "object_missing"
+
+    @pytest.mark.parametrize("sources", [
+        None,
+        {},
+        [],
+        "alphamissense",
+        score_sources(esm1b="CC-BY-NC-4.0"),
+        score_sources(esm1b={"source": "ESM1b", "direction": "lower_is_more_damaging"}),
+        score_sources(esm1b={"source": "ESM1b", "licence": "", "direction": "lower_is_more_damaging"}),
+        score_sources(esm1b={"source": "ESM1b", "licence": "CC-BY-4.0,x;licence=y", "direction": "lower_is_more_damaging"}),
+        score_sources(esm1b={"source": "ESM1b", "licence": "CC-BY-NC-4.0\n", "direction": "lower_is_more_damaging"}),
+        score_sources(esm1b={"source": "ESM1b", "licence": ["CC-BY-NC-4.0"], "direction": "lower_is_more_damaging"}),
+        score_sources(esm1b={"licence": "CC-BY-NC-4.0", "direction": "lower_is_more_damaging"}),
+        score_sources(esm1b={"source": "ESM1b", "licence": "CC-BY-NC-4.0"}),
+        score_sources(esm1b={"source": "ESM1b", "licence": "CC-BY-NC-4.0", "direction": "damaging"}),
+        # a known predictor turned round
+        score_sources(esm1b={"source": "ESM1b", "licence": "CC-BY-NC-4.0", "direction": "higher_is_more_damaging"}),
+        score_sources(newer={"source": "N", "licence": "MIT", "direction": "damaging"}),
+        # values of another JSON type, on a known and an unknown predictor
+        score_sources(esm1b={"source": "ESM1b", "licence": "CC-BY-NC-4.0", "direction": ["lower_is_more_damaging"]}),
+        score_sources(newer={"source": "N", "licence": "MIT", "direction": ["lower_is_more_damaging"]}),
+        score_sources(newer={"source": "N", "licence": "MIT", "direction": {"lower_is_more_damaging": True}}),
+        score_sources(newer={"source": "N", "licence": "MIT", "direction": 1}),
+        score_sources(newer={"source": "N", "licence": {"id": "MIT"}, "direction": "lower_is_more_damaging"}),
+        score_sources(newer={"source": "N", "licence": 4, "direction": "lower_is_more_damaging"}),
+        score_sources(newer={"source": ["N"], "licence": "MIT", "direction": "lower_is_more_damaging"}),
+        score_sources(newer={"source": {"name": "N"}, "licence": "MIT", "direction": "lower_is_more_damaging"}),
+        score_sources(newer=["N", "MIT", "lower_is_more_damaging"]),
+        score_sources(newer={"source": "N", "licence": "MIT"}),
+        score_sources(**{"esm1b,x": {"source": "E", "licence": "MIT", "direction": "lower_is_more_damaging"}}),
+        score_sources(**{"": {"source": "E", "licence": "MIT", "direction": "lower_is_more_damaging"}}),
+    ])
+    def test_malformed_score_sources_refuse_the_release(self, gcs, sources):
+        base = gcs.publish(scores=score_sources())
+        manifest = json.loads(gcs.local(f"{base}/{contract.MANIFEST_FILE}").read_bytes())
+        if sources is None:
+            del manifest["score_sources"]
+        else:
+            manifest["score_sources"] = sources
+        # rewritten in place: publishing again would gzip the models table under a new mtime
+        manifest_raw = json.dumps(manifest).encode()
+        gcs.put(f"{base}/{contract.MANIFEST_FILE}", manifest_raw)
+        pointer = json.loads(gcs.local(POINTER).read_bytes())
+        gcs.put(POINTER, json.dumps({**pointer, "manifest_sha256": hashlib.sha256(manifest_raw).hexdigest()}).encode())
+        assert refused(gcs).check == "score_sources"
+        # refused whatever this deployment serves: the entry is checked before the licence filter
+        assert refused(gcs, served_scores=frozenset({"CC-BY-4.0"})).check == "score_sources"
+
+    def test_an_unserved_licence_leaves_the_predictor_out(self, gcs):
+        gcs.publish(scores=score_sources())
+        assert list(load(gcs, served_scores=frozenset({"CC-BY-4.0"})).predictors) == ["alphamissense"]
+        assert list(load(gcs, served_scores=frozenset({"CC-BY-NC-4.0"})).predictors) == ["esm1b"]
+        assert load(gcs, served_scores=frozenset()).predictors == {}
+        # the model licence decision is a separate one
+        r = load(gcs, served=frozenset({"CC-BY-4.0"}))
+        assert list(r.predictors) == ["alphamissense", "esm1b"] and "P04637" not in r.by_accession
+
+    @pytest.mark.parametrize("name", [
+        "20261112-120000", "2026-11-12-120000\n", "2026-11-12-120000/../x", "../2026-11-12-120000", "", 20261112,
+        "2026-11-12-12000\u0660",
+    ])
+    def test_a_release_name_outside_the_contracts_pattern_refuses_the_pointer(self, gcs, name):
+        gcs.publish()
+        pointer = json.loads(gcs.local(POINTER).read_bytes())
+        pointer["release"] = name
+        gcs.put(POINTER, json.dumps(pointer).encode())
+        assert refused(gcs).check == "pointer"
+
+    @pytest.mark.parametrize("uri_release", ["2026-11-12-120001", "x", ""])
+    def test_a_pointer_whose_uri_is_another_release_is_refused(self, gcs, uri_release):
+        other = gcs.publish(release=uri_release or "2026-11-12-120001")
+        pointer = json.loads(gcs.local(POINTER).read_bytes())
+        assert pointer["uri"] == other
+        gcs.put(POINTER, json.dumps({**pointer, "release": RELEASE, "uri": other if uri_release else other.rsplit("/", 1)[0] + "/"}).encode())
+        e = refused(gcs)
+        assert e.check == "pointer" and "does not end in" in str(e)
+
+    def test_a_trailing_slash_on_the_uri_is_still_the_release(self, gcs):
+        base = gcs.publish()
+        pointer = json.loads(gcs.local(POINTER).read_bytes())
+        gcs.put(POINTER, json.dumps({**pointer, "uri": base + "/"}).encode())
+        assert load(gcs).name == RELEASE
+
+    @pytest.mark.parametrize("manifest_release", ["2026-11-12-120001", None, 20261112, [RELEASE], "absent"])
+    def test_a_manifest_of_another_release_is_refused(self, gcs, manifest_release):
+        base = gcs.publish()
+        manifest = json.loads(gcs.local(f"{base}/{contract.MANIFEST_FILE}").read_bytes())
+        if manifest_release == "absent":
+            del manifest["release"]
+        else:
+            manifest["release"] = manifest_release
+        manifest_raw = json.dumps(manifest).encode()
+        gcs.put(f"{base}/{contract.MANIFEST_FILE}", manifest_raw)
+        pointer = json.loads(gcs.local(POINTER).read_bytes())
+        gcs.put(POINTER, json.dumps({**pointer, "manifest_sha256": hashlib.sha256(manifest_raw).hexdigest()}).encode())
+        e = refused(gcs)
+        assert e.check == "manifest" and RELEASE in str(e)
+
+    def test_daly_leaves_out_a_predictor_under_a_licence_it_has_not_cleared(self, gcs):
+        from app.config.profiles.daly import protein_structure as daly
+
+        gcs.publish(scores=score_sources(newer={"source": "N", "licence": "CC-BY-NC-SA-4.0", "direction": "lower_is_more_damaging"}))
+        assert list(load(gcs, daly.served_licences, daly.served_score_licences).predictors) == ["alphamissense", "esm1b"]
+        assert "newer" in load(gcs).predictors
+
+    def test_the_startup_check_names_a_failed_scores_check(self, gcs, monkeypatch, caplog):
+        monkeypatch.setattr(startup_checks, "_read_object", gcs.read)
+        monkeypatch.setattr(config, "release_pointer", POINTER)
+        gcs.publish(scores={})
+        with caplog.at_level(logging.WARNING, logger=startup_checks.logger.name):
+            startup_checks._check_protein_structure_release()
+        assert "check 'score_sources' failed" in caplog.text
+
+    def test_the_service_loads_with_the_deployments_score_licences(self, gcs, monkeypatch):
+        monkeypatch.setattr(gcloud_tabix_base, "ensure_gcs_token", lambda: None)
+        monkeypatch.setattr(config, "release_pointer", POINTER)
+        monkeypatch.setattr(config, "served_score_licences", frozenset({"CC-BY-4.0"}))
+        gcs.publish(scores=score_sources())
+        a = ProteinStructureAccess()
+        monkeypatch.setattr(a, "_fetch_capped", gcs.fetch)
+        asyncio.run(a.warm_all())
+        assert list(a.release.predictors) == ["alphamissense"]

@@ -27,6 +27,7 @@ import hashlib
 import io
 import json
 import logging
+import re
 import zlib
 from dataclasses import dataclass
 from typing import Awaitable, Callable, NamedTuple
@@ -120,6 +121,15 @@ class Model(NamedTuple):
         return contract.pae_path(self.model_file_id) if self.has_pae else None
 
 
+class Predictor(NamedTuple):
+    """One missense predictor of the release's scores object, as the manifest states it."""
+
+    name: str
+    source: str
+    licence: str
+    direction: str
+
+
 @dataclass(frozen=True)
 class Release:
     pointer: Pointer
@@ -130,6 +140,9 @@ class Release:
     # unversioned Ensembl gene id -> accessions, a model under several genes being listed under
     # each; rows without a gene_id are not reachable by gene
     by_gene: dict[str, tuple[str, ...]]
+    # the predictors this deployment serves, by name; None when the release has no scores
+    # object. A score row of a predictor not in here is never served
+    predictors: dict[str, Predictor] | None = None
 
     @property
     def name(self) -> str:
@@ -152,10 +165,13 @@ def parse_pointer(raw: bytes) -> Pointer:
     release, uri, version, sha = (
         doc.get("release"), doc.get("uri"), doc.get("contract_version"), doc.get("manifest_sha256")
     )
-    if not isinstance(release, str) or not release:
-        raise ContractCheckFailed("pointer", "no 'release'")
+    if not isinstance(release, str) or not contract.RELEASE_RE.fullmatch(release):
+        raise ContractCheckFailed("pointer", f"'release' is not <YYYY-MM-DD>-<HHMMSS>: {_clip(release)}")
     if not isinstance(uri, str) or not uri.startswith("gs://"):
         raise ContractCheckFailed("pointer", f"'uri' is not a gs:// location: {_clip(uri)}")
+    # the name reported with every response must be the directory the objects are read from
+    if uri.rstrip("/").rsplit("/", 1)[-1] != release:
+        raise ContractCheckFailed("pointer", f"'uri' {_clip(uri)} does not end in its 'release' {release}")
     if not isinstance(sha, str) or len(sha) != _SHA256_HEX_LEN:
         raise ContractCheckFailed("pointer", "no 'manifest_sha256'")
     # bool is an int subclass; `true` is not version 1
@@ -183,6 +199,10 @@ def parse_manifest(pointer: Pointer, raw: bytes) -> dict:
             "contract_version",
             f"manifest names contract {_clip(version)}, this server implements {contract.CONTRACT_VERSION}",
         )
+    if doc.get("release") != pointer.release:
+        raise ContractCheckFailed(
+            "manifest", f"manifest is of release {_clip(doc.get('release'))}, the pointer names {pointer.release}"
+        )
     return doc
 
 
@@ -206,8 +226,7 @@ def _model(f: list[str], shared: dict[str, str]) -> Model:
         return s(name) or None
 
     mid = _field(f, "model_file_id")
-    # the only guard between a release row and an object path or URL: fullmatch, because `$`
-    # also matches before a trailing newline
+    # the only guard between a release row and an object path or URL
     if not contract.MODEL_FILE_ID_RE.fullmatch(mid):
         raise ValueError(f"model file id outside the allowed charset: {_clip(mid)}")
     if _field(f, "structure_path") != contract.structure_path(mid):
@@ -385,6 +404,59 @@ TABIX_HEADERS = (
 )
 
 
+SCORES_HEADER = (contract.SCORES_FILE, contract.SCORE_COLUMNS, "scores_header")
+
+# predictor names and licence tags are sent in a response header as `name;key=value` items
+# joined by commas, so neither may hold a separator
+_PREDICTOR_RE = re.compile(r"[a-z0-9][a-z0-9_.-]{0,31}")
+_LICENCE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+-]{0,63}")
+_DIRECTIONS = frozenset(contract.SCORE_DIRECTIONS.values())
+
+
+def has_scores(manifest: dict) -> bool:
+    """Whether the release holds a scores object; one built before predictor scores existed lists none."""
+    return contract.SCORES_FILE in manifest[contract.MANIFEST_OBJECTS]
+
+
+def parse_score_sources(manifest: dict, served_licences: frozenset[str] | None) -> dict[str, Predictor]:
+    """The predictors of a release that lists a scores object, less those under an unserved licence.
+
+    Every entry is checked before any is left out, so a malformed entry refuses the release
+    whether or not this deployment would have served it.
+    """
+    sources = manifest.get("score_sources")
+    if not isinstance(sources, dict) or not sources:
+        raise ContractCheckFailed(
+            "score_sources", f"the manifest lists {contract.SCORES_FILE} and names no predictor: {_clip(sources)}"
+        )
+    predictors: dict[str, Predictor] = {}
+    for name, entry in sources.items():
+        if not _PREDICTOR_RE.fullmatch(name):
+            raise ContractCheckFailed("score_sources", f"predictor name outside the allowed charset: {_clip(name)}")
+        if not isinstance(entry, dict):
+            raise ContractCheckFailed("score_sources", f"{name}: not an object")
+        source, licence, direction = entry.get("source"), entry.get("licence"), entry.get("direction")
+        if not isinstance(source, str) or not source:
+            raise ContractCheckFailed("score_sources", f"{name}: no 'source'")
+        if not isinstance(licence, str) or not _LICENCE_RE.fullmatch(licence):
+            raise ContractCheckFailed("score_sources", f"{name}: 'licence' is not a licence id: {_clip(licence)}")
+        # the type first: a list or an object is unhashable and would escape the membership test
+        if not isinstance(direction, str) or direction not in _DIRECTIONS:
+            raise ContractCheckFailed("score_sources", f"{name}: 'direction' is not one the contract defines: {_clip(direction)}")
+        # a manifest that turned a known predictor round would have every track coloured backwards
+        if contract.SCORE_DIRECTIONS.get(name, direction) != direction:
+            raise ContractCheckFailed(
+                "score_sources", f"{name}: direction {direction}, the contract says {contract.SCORE_DIRECTIONS[name]}"
+            )
+        if served_licences is None or licence in served_licences:
+            predictors[name] = Predictor(name=name, source=source, licence=licence, direction=direction)
+    if len(predictors) < len(sources):
+        logger.info(
+            f"protein structure: predictors left out for an unserved licence: {sorted(set(sources) - set(predictors))}"
+        )
+    return predictors
+
+
 def check_tabix_header(check: str, name: str, columns: list[tuple[str, type]], head: bytes) -> None:
     """The first line of a bgzf file, given its leading bytes, against the contract's header."""
     try:
@@ -400,7 +472,12 @@ def check_tabix_header(check: str, name: str, columns: list[tuple[str, type]], h
         raise ContractCheckFailed(check, f"{name} header {_clip(line[:MAX_LINE_BYTES])} is not the contract's")
 
 
-async def load_release(pointer_uri: str, fetch: Fetch, served_licences: frozenset[str] | None) -> Release:
+async def load_release(
+    pointer_uri: str,
+    fetch: Fetch,
+    served_licences: frozenset[str] | None,
+    served_score_licences: frozenset[str] | None,
+) -> Release:
     """Read and check the release `pointer_uri` names. Raises ContractCheckFailed naming the check."""
 
     async def read(path: str, max_bytes: int) -> bytes:
@@ -418,7 +495,11 @@ async def load_release(pointer_uri: str, fetch: Fetch, served_licences: frozense
     models_raw = await read(paths[contract.MODELS_FILE], MAX_MODELS_GZ_BYTES)
     check_models_object(manifest, models_raw)
     models, by_accession, by_gene = await asyncio.to_thread(parse_models, models_raw, served_licences)
-    for name, columns, check in TABIX_HEADERS:
+    headers, predictors = TABIX_HEADERS, None
+    if has_scores(manifest):
+        predictors = parse_score_sources(manifest, served_score_licences)
+        headers += (SCORES_HEADER,)
+    for name, columns, check in headers:
         path = f"{pointer.base}/{name}"
         try:
             # deliberately not `read`: the file is far over this many bytes and only its head is wanted
@@ -426,7 +507,10 @@ async def load_release(pointer_uri: str, fetch: Fetch, served_licences: frozense
         except Exception as e:
             raise ContractCheckFailed("object_missing", f"cannot read {path}: {_clip(str(e))}")
         check_tabix_header(check, name, columns, head)
-    return Release(pointer=pointer, manifest=manifest, models=models, by_accession=by_accession, by_gene=by_gene)
+    return Release(
+        pointer=pointer, manifest=manifest, models=models, by_accession=by_accession, by_gene=by_gene,
+        predictors=predictors,
+    )
 
 
 class ProteinStructureAccess(GCloudTabixBase):
@@ -467,7 +551,9 @@ class ProteinStructureAccess(GCloudTabixBase):
 
     async def _load(self) -> bool:
         try:
-            self._release = await load_release(self.pointer_uri, self._fetch_capped, config.served_licences)
+            self._release = await load_release(
+                self.pointer_uri, self._fetch_capped, config.served_licences, config.served_score_licences
+            )
         except Exception as e:
             logger.error(
                 f"protein structure: release from {self.pointer_uri} not served, "
@@ -477,7 +563,8 @@ class ProteinStructureAccess(GCloudTabixBase):
         r = self._release
         logger.info(
             f"protein structure: serving release {r.name} ({r.pointer.uri}): {len(r.models)} model files, "
-            f"{len(r.by_accession)} accessions, {len(r.by_gene)} genes"
+            f"{len(r.by_accession)} accessions, {len(r.by_gene)} genes, predictor scores: "
+            f"{sorted(r.predictors) if r.predictors is not None else 'none in this release'}"
         )
         return True
 

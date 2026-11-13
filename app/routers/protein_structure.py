@@ -19,6 +19,7 @@ from app.services.data_access_protein_structure import (
     FEATURES,
     MAX_STRUCTURE_TEXT_BYTES,
     RESIDUES,
+    SCORES,
     ObjectMismatch,
     ProteinStructureData,
     ResponseTooLarge,
@@ -30,7 +31,7 @@ from app.services.data_access_protein_structure import (
     tsv_chunks,
 )
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
-from app.services.protein_structure import Model, Release, ReleaseUnavailable
+from app.services.protein_structure import Model, Predictor, Release, ReleaseUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,9 @@ _OBJECT_CACHE_CONTROL = "private, no-cache"
 _PDB_MEDIA_TYPE = "chemical/x-pdb"
 PAE_SIZE_HEADER = "X-PAE-Size"
 PAE_ROWS_HEADER = "X-PAE-Rows"
+# what a score row's values mean, per predictor the response may hold: `percentile` ranks the
+# raw score ascending, so without the direction a caller cannot tell which end is damaging
+SCORE_PREDICTORS_HEADER = "X-Score-Predictors"
 # the app's gzip middleware passes a response that states a content coding through untouched.
 # A PAE body is megabytes of bytes it would otherwise deflate on the event loop in one call,
 # and an identity model file must not be gzipped for a client that refused gzip
@@ -151,6 +155,38 @@ async def _prepend(first: list[bytes], rest: AsyncIterator[list[bytes]]) -> Asyn
         yield item
 
 
+def score_predictors_header(predictors: list[Predictor]) -> dict[str, str]:
+    """`name;direction=...;licence=...` per predictor, comma-separated; the loader keeps separators out of each part."""
+    return {
+        SCORE_PREDICTORS_HEADER: ",".join(
+            f"{p.name};direction={p.direction};licence={p.licence}" for p in predictors
+        )
+    }
+
+
+def _predictors(release: Release, asked: list[str] | None) -> list[Predictor]:
+    """The served predictors a scores request is about: all of them, or those it names."""
+    if release.predictors is None:
+        raise HTTPException(status_code=404, detail=f"Release {release.name} holds no predictor scores")
+    if not release.predictors:
+        raise HTTPException(
+            status_code=404, detail=f"This deployment serves no predictor scores of release {release.name}"
+        )
+    if asked is None:
+        return list(release.predictors.values())
+    names = {n.strip() for item in asked for n in item.split(",")}
+    unknown = sorted(n for n in names if n not in release.predictors)
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"No predictor {', '.join(repr(n[:40]) for n in unknown[:5])} in release {release.name}; "
+                f"it has {', '.join(release.predictors)}"
+            ),
+        )
+    return [p for name, p in release.predictors.items() if name in names]
+
+
 async def _rows_response(
     request: Request,
     protein: str,
@@ -159,9 +195,14 @@ async def _rows_response(
     format: str,
     data_access: ProteinStructureData,
     mapping: GeneNameAndPositionMapping,
+    release: Release | None = None,
+    predictors: list[Predictor] | None = None,
 ) -> Response:
     start_time = time.time()
-    release = _release(data_access)
+    if release is None:
+        release = _release(data_access)
+    narrowed = frozenset(p.name for p in predictors) if predictors is not None else None
+    extra_headers = score_predictors_header(predictors) if predictors is not None else {}
     accession, ensgs = _resolve(protein, release, mapping)
     if accession is not None and not ensgs:
         raise HTTPException(
@@ -179,7 +220,7 @@ async def _rows_response(
         )
     async def rows() -> AsyncIterator[list[bytes]]:
         try:
-            found = data_access.stream_rows(release, table, genes, accession)
+            found = data_access.stream_rows(release, table, genes, accession, narrowed)
             # read ahead by one row: a protein without rows is a 404, which a started stream cannot say
             first = await anext(found, None)
         except Exception as e:
@@ -207,6 +248,7 @@ async def _rows_response(
                     detail=(
                         f"The {kind} rows of {protein.strip()} are over {contract.MAX_RESPONSE_BYTES} "
                         "bytes as JSON; request format=tsv"
+                        + (", or one predictor at a time with predictor=" if len(predictors or ()) > 1 else "")
                     ),
                 )
             except Exception as e:
@@ -214,6 +256,7 @@ async def _rows_response(
                 raise HTTPException(status_code=500, detail="Error streaming or parsing data")
         response = Response(body, media_type="application/json", headers=columns_header(table.names))
     response.headers[DATASET_VERSION_HEADER] = release.name
+    response.headers.update(extra_headers)
     return response
 
 
@@ -321,6 +364,61 @@ async def features(
     """UniProt features and TED domains; `start` and `end` are protein positions, 1-based inclusive."""
     return await _rows_response(
         request, protein, FEATURES, "feature", format, data_access, gene_name_and_position_mapping
+    )
+
+
+@router.get(
+    "/protein_structure/scores/{protein}",
+    summary="Get per-residue missense predictor scores of a protein",
+    responses={
+        200: {
+            "description": (
+                f"Successful response; {SCORE_PREDICTORS_HEADER} gives each predictor's direction and licence"
+            ),
+            "content": {
+                "text/tab-separated-values": {
+                    "schema": {"type": "string"},
+                    "example": "\t".join(SCORES.names) + "\n...",
+                }
+            },
+        },
+        **_ROWS_RESPONSES,
+        404: {
+            "description": (
+                "Not an accession or gene of the release, it has no such rows, or the release "
+                "holds no predictor scores"
+            )
+        },
+        422: {"description": "A predictor the release does not hold or this deployment does not serve"},
+    },
+)
+async def scores(
+    request: Request,
+    protein: str = _PROTEIN,
+    format: Literal["tsv", "json"] = Query(default="tsv", description="Response format"),
+    predictor: list[str] | None = Query(
+        default=None,
+        description=(
+            "Only these predictors: one name, several comma-separated, or the parameter repeated. "
+            "Default: every predictor served."
+        ),
+        examples=["alphamissense"],
+    ),
+    data_access: ProteinStructureData = Depends(get_protein_structure),
+    gene_name_and_position_mapping: GeneNameAndPositionMapping = Depends(get_gene_name_mapping),
+) -> Response:
+    """One row per (accession, predictor, protein position): the mean raw score and its percentile.
+
+    `percentile` ranks the predictor's raw `mean_snv` ascending; it is not turned so that high
+    means damaging. Which end is the damaging one differs by predictor and is stated, with the
+    predictor's licence, in the X-Score-Predictors response header. A residue without a row
+    has no score from that predictor, which says nothing about its tolerance. Rows are per
+    protein position, not per model window: join to the residue rows with `is_owner`.
+    """
+    release = _release(data_access)
+    return await _rows_response(
+        request, protein, SCORES, "score", format, data_access, gene_name_and_position_mapping,
+        release, _predictors(release, predictor),
     )
 
 

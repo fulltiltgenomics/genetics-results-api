@@ -17,6 +17,7 @@ MODELS_FILE = "models.tsv.gz"
 RESIDUES_FILE = "residues.tsv.gz"
 FEATURES_FILE = "features.tsv.gz"
 VARIANTS_FILE = "variants.tsv.gz"
+SCORES_FILE = "scores.tsv.gz"
 STRUCTURE_DIR = "structures"
 PAE_DIR = "pae"
 
@@ -24,7 +25,7 @@ PAE_DIR = "pae"
 GENCODE_VERSION = 49
 
 # model file ids appear in URLs and object paths, so an id outside this is refused at load
-MODEL_FILE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+MODEL_FILE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
 
 
 def structure_path(mid: str) -> str:
@@ -40,7 +41,7 @@ def header_line(columns: list[tuple[str, type]]) -> str:
 
 
 MANIFEST_KEYS = ("contract_version", "release", "built_at", "bundle", "gencode", "lab_inputs",
-                 "feature_sources", "counts", "drops", "objects", "directories")
+                 "feature_sources", "score_sources", "counts", "drops", "objects", "directories")
 # `objects` maps a release-relative path to {OBJECT_BYTES, OBJECT_SHA256}, one entry per name in
 # manifest_object_names(); structures and PAE objects are sized per row in models.tsv.gz instead
 MANIFEST_OBJECTS = "objects"
@@ -48,7 +49,7 @@ MANIFEST_DIRECTORIES = "directories"
 OBJECT_BYTES = "bytes"
 OBJECT_SHA256 = "sha256"
 DIRECTORY_OBJECTS = "objects"
-TABIX_FILES = (RESIDUES_FILE, FEATURES_FILE, VARIANTS_FILE)
+TABIX_FILES = (RESIDUES_FILE, FEATURES_FILE, VARIANTS_FILE, SCORES_FILE)
 
 
 def manifest_object_names() -> list[str]:
@@ -145,6 +146,29 @@ VARIANT_COLUMNS = [
     ("mu_snp", float),
 ]
 
+# which end of a predictor's raw score is the damaging one. `percentile` ranks the raw mean
+# ascending for every predictor, so it is read through this and never as "high = damaging"
+SCORE_HIGHER_IS_DAMAGING = "higher_is_more_damaging"
+SCORE_LOWER_IS_DAMAGING = "lower_is_more_damaging"
+SCORE_DIRECTIONS = {
+    "alphamissense": SCORE_HIGHER_IS_DAMAGING,
+    "esm1b": SCORE_LOWER_IS_DAMAGING,
+}
+
+# long: one row per (gene_id, accession, protein_position, predictor), never per model window.
+# No row means the source has no score for that residue
+SCORE_COLUMNS = _GENE_ANCHOR + [
+    ("accession", str),
+    ("predictor", str),
+    ("protein_position", int),
+    ("aa_ref", str),
+    ("mean_snv", float),
+    ("n_snv", int),
+    ("percentile", float),
+    ("mean_all", float),
+    ("n_all", int),
+]
+
 # PAE: one row-major n x n uint8 object per model file, value = code / PAE_SCALE
 PAE_SCALE = 8
 PAE_NO_VALUE = 255
@@ -158,3 +182,8 @@ def pae_rows_per_request(n: int) -> int:
     if n < 1:
         raise ValueError("n must be positive")
     return MAX_RESPONSE_BYTES // n
+
+
+# `<UTC date>-<HHMMSS>` of the build; it names a directory and travels in an HTTP header, so
+# nothing else may pass. `[0-9]`, not `\d`, which also matches every other script's digits
+RELEASE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}\Z")

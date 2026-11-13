@@ -6,9 +6,9 @@ release directory); the contract the release is checked against is
 app.config.protein_structure_contract, and the loader is app.services.protein_structure.
 
 The pointer is the per-deployment switch. A profile without a `protein_structure` module
-cannot turn the feature on at all, even through the environment: AF3 models are served only
-where a deployment has cleared their terms, and a stray env value on another profile must
-not publish them.
+cannot turn the feature on at all, even through the environment: AF3 models and
+non-commercially licensed predictor scores are served only where a deployment has cleared
+their terms, and a stray env value on another profile must not publish them.
 """
 
 import os
@@ -35,3 +35,9 @@ release_pointer: str | None = (
 # its residue and feature rows, by accession or by gene), so no protein is served with a
 # window missing.
 served_licences: frozenset[str] | None = _profile.served_licences if _profile is not None else None
+
+# licences whose predictor scores this deployment serves, matched against each predictor's
+# `licence` in the manifest's `score_sources`; None serves every predictor the release holds.
+# A predictor outside the set is left out whole: its rows in every format, and its name from
+# the predictors a response lists.
+served_score_licences: frozenset[str] | None = _profile.served_score_licences if _profile is not None else None

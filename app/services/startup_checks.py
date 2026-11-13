@@ -310,7 +310,9 @@ def _check_protein_structure_release() -> None:
         return await asyncio.to_thread(_read_object, path, max_bytes)
 
     try:
-        release = asyncio.run(load_release(cfg.release_pointer, fetch, cfg.served_licences))
+        release = asyncio.run(load_release(
+            cfg.release_pointer, fetch, cfg.served_licences, cfg.served_score_licences
+        ))
     except ContractCheckFailed as e:
         logger.warning(
             f"protein_structure: RELEASE REFUSED, check '{e.check}' failed for pointer "
