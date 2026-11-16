@@ -8,9 +8,9 @@ from app.config.expression import expression_data, simple_columns
 from app.config.sort_keys import SORT_CONFIG_EXPRESSION, create_sort_key
 from app.core.streams import chunk_iterator, start_iterators, tsv_line_iterator_simple
 from app.services.base_data_access import (
-    BaseDataAccess,
     BaseDataAccessObject,
-    BaseFactory,
+    ConfigListDataAccess,
+    ConfigListFactory,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,39 +40,18 @@ class DataAccessObjectExpression(BaseDataAccessObject):
         pass
 
 
-class DataAccessFactoryExpression(BaseFactory):
+class DataAccessFactoryExpression(ConfigListFactory):
     """Factory for creating per-resource data access objects based on configuration."""
 
-    def get_config_entry(self, resource: str) -> dict:
-        """Get configuration entry for the resource."""
-        try:
-            return [c for c in expression_data if c["resource"] == resource][0]
-        except IndexError:
-            raise ValueError(
-                f"Expression data access object for resource '{resource}' not found in configuration"
-            )
-
+    entries = expression_data
+    label = "expression"
     implementations = {"gcloud": "app.services.gcloud_tabix_expression_data_access:GCloudTabixDataAccessExpression"}
 
 
-class DataAccessExpression(BaseDataAccess[DataAccessObjectExpression]):
+class DataAccessExpression(ConfigListDataAccess[DataAccessObjectExpression]):
     """Main data access class that manages per-resource data access objects."""
 
-    def create_factory(self) -> BaseFactory:
-        """Return the factory instance for this domain."""
-        return DataAccessFactoryExpression()
-
-    async def _get_resource_access(
-        self, resource: str, data_type: str = "cs"
-    ) -> DataAccessObjectExpression:
-        """Get or create a data access object for a specific resource and data type."""
-        return await super()._get_resource_access((resource, data_type), resource)
-
-    async def warm_all(self) -> None:
-        """Construct and warm (header + .tbi prefetch) every expression data access
-        object concurrently, so the first request pays no cold-start cost."""
-
-        await self._warm_each("expression", self._get_resource_access, ((c["resource"],) for c in expression_data))
+    factory_class = DataAccessFactoryExpression
 
     async def stream_range(
         self,

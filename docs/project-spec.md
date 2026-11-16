@@ -28,6 +28,7 @@ app/
 │   ├── limits.py       # per-credential response caps (16 MiB for a sandbox execution)
 │   ├── logging_config.py
 │   ├── query_params.py # rejection of undeclared query parameters
+│   ├── range_endpoints.py  # handler bodies shared by the mpra, variant_effect and open_chromatin routers
 │   ├── responses.py    # response formatting
 │   ├── sandbox_budget.py  # per-execution (`jti`) byte/request/concurrency limits, the pod-wide bound and its fairness reserve, the tracked-execution bound, the request deadline's value
 │   ├── sandbox_token.py   # validation of chat-backend's per-execution HS256 tokens
@@ -284,6 +285,12 @@ and never accounted (`app/core/limits.py` states the rule and why it is broader 
 `scripts/lint-staged.sh` runs ruff over the **staged** Python files from the `pre-commit`
 hook and **fails the commit** when anything is reported. `git commit --no-verify` is the
 bypass. It is the one pre-commit check that blocks; `scripts/check-doc-drift.sh` only warns.
+
+The hook scripts are not this repo's own: `scripts/lint-staged.sh`, `scripts/install-git-hooks.sh`
+and `scripts/doc-drift-lib.sh` are copies genetics-results-suite's `scripts/vendor.py` writes
+(`configs/vendored.yaml` there). Edit them in that repo; only the rules in
+`scripts/check-doc-drift.sh` are maintained here. The same
+mechanism supplies `tests/sandbox_contract.py` and `tests/checkout_guard.py`.
 
 - **Staged, not repo-wide.** A finding in a file the commit does not touch never blocks it.
   The other side of that coin is that a pre-existing finding is only ever cleared by

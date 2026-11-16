@@ -6,9 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Res
 
 import app.config.common as config_common
 import app.config.open_chromatin as config
-from app.core.exceptions import NotFoundException
-from app.core.responses import range_response
-from app.core.variant import var_re
+from app.core.range_endpoints import RangeEndpoints, parse_chrom_pos
 from app.dependencies import get_data_access_open_chromatin
 from app.services.data_access_open_chromatin import (
     DataAccessObjectOpenChromatin,
@@ -25,43 +23,9 @@ _OPEN_CHROMATIN_TSV_EXAMPLE = (
 )
 
 
-def _resolve_resources(resources: list[str] | None) -> list[str]:
-    """Default to all configured resources and reject unknown ones."""
-    available = [c["resource"] for c in config.open_chromatin_data]
-    if resources is None:
-        return available
-    invalid = [r for r in resources if r not in available]
-    if invalid:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Unrecognized resource(s): {', '.join(invalid)}. Available resources: "
-            + ", ".join(available),
-        )
-    return resources
-
-
-async def _range_stream_response(
-    request: Request,
-    stream_coro,
-    format: Literal["tsv", "json"],
-    start_time: float,
-) -> Response:
-    """Await a data-access stream coroutine and wrap it in a range response."""
-    try:
-        stream = await stream_coro
-    except NotFoundException as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.exception(e)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-    return await range_response(
-        str(request.url),
-        stream,
-        config.open_chromatin_header_schema,
-        format,
-        start_time,
-    )
+_endpoints = RangeEndpoints(
+    config.open_chromatin_data, config.open_chromatin_header_schema, logger
+)
 
 
 @router.get(
@@ -97,25 +61,8 @@ async def open_chromatin_by_region(
     data_access: DataAccessOpenChromatin = Depends(get_data_access_open_chromatin),
 ) -> Response:
     """Get all open-chromatin peaks overlapping the region [start, end]."""
-    start_time = time.time()
-
-    if end < start:
-        raise HTTPException(status_code=422, detail="end must be >= start")
-
-    resources = _resolve_resources(resources)
-
-    return await _range_stream_response(
-        request,
-        data_access.stream_by_region(
-            chrom,
-            start,
-            end,
-            resources,
-            config_common.read_chunk_size,
-            config_common.response_chunk_size,
-        ),
-        format,
-        start_time,
+    return await _endpoints.by_region(
+        request, chrom, start, end, resources, format, data_access
     )
 
 
@@ -158,21 +105,11 @@ async def open_chromatin_by_variant(
 
     # only chromosome and position define the overlap; accept both chr:pos:ref:alt
     # and bare chr:pos so callers need not supply alleles
-    parts = var_re.split(variant)
-    if len(parts) < 2:
-        raise HTTPException(
-            status_code=422,
-            detail="variant must be chr:pos:ref:alt or chr:pos (separators - _ : |)",
-        )
-    chrom = parts[0]
-    try:
-        pos = int(parts[1])
-    except ValueError:
-        raise HTTPException(status_code=422, detail="position must be an integer")
+    chrom, pos, _ = parse_chrom_pos(variant)
 
-    resources = _resolve_resources(resources)
+    resources = _endpoints.resolve_resources(resources)
 
-    return await _range_stream_response(
+    return await _endpoints.respond(
         request,
         data_access.stream_by_variant(
             chrom,
@@ -208,7 +145,7 @@ async def open_chromatin_by_peak(
     request: Request,
     peak_id: str = Path(
         ...,
-        description="Peak ID in format numchrom-start-end (chrX=23,Y=24,M=25)",
+        description="Peak ID in format numchrom-start-end (chrX=23,Y=24,M=26)",
         examples=["1-1000000-1000500", "23-1000000-1000500"],
     ),
     resources: list[str] | None = Query(
@@ -228,9 +165,9 @@ async def open_chromatin_by_peak(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    resources = _resolve_resources(resources)
+    resources = _endpoints.resolve_resources(resources)
 
-    return await _range_stream_response(
+    return await _endpoints.respond(
         request,
         data_access.stream_by_peak_id(
             peak_id,

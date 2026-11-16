@@ -7,6 +7,7 @@ against the auth helpers directly — no live server needed.
 
 import pytest
 from fastapi import Request
+from helpers.asgi import request_with_headers as _request
 
 import app.config.common as config
 from app.core import auth
@@ -14,17 +15,6 @@ from app.middleware_usage_logging import _extract_user_from_header
 
 INTERNAL_SECRET = "test-internal-secret"
 USER_HEADER = "X-Goog-Authenticated-User-Email"
-
-
-def _request(headers: dict[str, str]) -> Request:
-    return Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": "/api/v1/gene/GPT",
-            "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
-        }
-    )
 
 
 def _scope(headers: dict[str, str]) -> dict:

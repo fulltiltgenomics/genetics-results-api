@@ -31,9 +31,9 @@ from app.core.streams import (
 )
 from app.core.variant import Variant
 from app.services.base_data_access import (
-    BaseDataAccess,
     BaseDataAccessObject,
-    BaseFactory,
+    ConfigListDataAccess,
+    ConfigListFactory,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,37 +95,19 @@ class DataAccessObjectColoc(BaseDataAccessObject):
         pass
 
 
-class DataAccessFactoryColoc(BaseFactory):
+class DataAccessFactoryColoc(ConfigListFactory):
     """Factory for creating per-resource data access objects based on configuration."""
 
-    def get_config_entry(self, name: str) -> dict:
-        """Get configuration entry for the coloc name."""
-        try:
-            return [c for c in coloc if c["name"] == name][0]
-        except IndexError:
-            raise ValueError(
-                f"Coloc data access object for name '{name}' not found in configuration"
-            )
-
+    entries = coloc
+    key_field = "name"
+    label = "coloc"
     implementations = {"gcloud": "app.services.gcloud_tabix_coloc_data_access:GCloudTabixDataAccessColoc"}
 
 
-class DataAccessColoc(BaseDataAccess[DataAccessObjectColoc]):
+class DataAccessColoc(ConfigListDataAccess[DataAccessObjectColoc]):
     """Main data access class that manages per-resource data access objects."""
 
-    def create_factory(self) -> BaseFactory:
-        """Return the factory instance for this domain."""
-        return DataAccessFactoryColoc()
-
-    async def _get_resource_access(self, name: str) -> DataAccessObjectColoc:
-        """Get or create a coloc data access object."""
-        return await super()._get_resource_access((name,), name)
-
-    async def warm_all(self) -> None:
-        """Construct and warm (headers + .tbi prefetch) every coloc data access
-        object concurrently, so the first request pays no cold-start cost."""
-
-        await self._warm_each("coloc", self._get_resource_access, ((c["name"],) for c in coloc))
+    factory_class = DataAccessFactoryColoc
 
     # TODO can we manage the data with polars fast enough? this is very complex
     async def stream_coloc_by_variant(

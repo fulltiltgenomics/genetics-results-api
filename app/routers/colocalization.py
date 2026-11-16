@@ -34,49 +34,29 @@ _BY_VARIANT_PROPERTIES = {
     for name, t in coloc_config.coloc_credset_header_schema.items()
 }
 
-_BY_VARIANT_EXAMPLE_ROW = {
-    "resource1": "finngen",
-    "version1": "R14",
-    "resource2": "finngen",
-    "version2": "R14",
-    "dataset1": "FinnGen_R14",
-    "dataset2": "FinnGen_kanta",
-    "data_type1": "GWAS",
-    "data_type2": "GWAS",
-    "trait1": "E4_FH",
-    "trait1_original": "E4_FH",
-    "trait2": "nonHDL",
-    "trait2_original": "nonHDL",
-    "cell_type1": "NA",
-    "cell_type2": "NA",
-    "cs1_id": "chr1:53539974-56539974_1",
-    "cs2_id": "chr1:47813785-56873172_1",
-    "hit1": "1:55039974:G:T",
-    "hit2": "1:55039974:G:T",
-    "hit1_beta": 1,
-    "hit1_mlog10p": 100,
-    "hit2_beta": 2,
-    "hit2_mlog10p": 9.2,
-    "chr": 1,
-    "region_start_min": 47813785,
-    "region_end_max": 56873172,
-    "PP.H0.abf": 0,
-    "PP.H1.abf": 0,
-    "PP.H2.abf": 2.992e-15,
-    "PP.H3.abf": 2.643e-06,
-    "PP.H4.abf": 1,
-    "nsnps": 21673,
-    "nsnps1": 21725,
-    "nsnps2": 56697,
-    "cs1_log10bf": 11.4888,
-    "cs2_log10bf": 1e308,
-    "clpp": 0.9987,
-    "clpa": 0.9987,
-    "cs1_size": 1,
-    "cs2_size": 1,
-    "cs_overlap": 1,
-    "topInOverlap": "1,1",
-}
+# one value per coloc_header_schema column, in its order
+_BY_VARIANT_EXAMPLE_ROW = dict(
+    zip(
+        coloc_config.coloc_header_schema,
+        (
+            "finngen", "R14", "finngen", "R14",
+            "FinnGen_R14", "FinnGen_kanta", "GWAS", "GWAS",
+            "E4_FH", "E4_FH", "nonHDL", "nonHDL",
+            "NA", "NA",
+            "chr1:53539974-56539974_1", "chr1:47813785-56873172_1",
+            "1:55039974:G:T", "1:55039974:G:T",
+            1, 100, 2, 9.2,
+            1, 47813785, 56873172,
+            0, 0, 2.992e-15, 2.643e-06, 1,
+            21673, 21725, 56697,
+            11.4888, 1e308,
+            0.9987, 0.9987,
+            1, 1, 1,
+            "1,1",
+        ),
+        strict=True,
+    )
+)
 
 _BY_VARIANT_TSV_EXAMPLE = (
     "\t".join(coloc_config.coloc_header_schema)

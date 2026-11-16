@@ -14,40 +14,14 @@ import json
 
 import pytest
 from fastapi import HTTPException
+from helpers.gene_groups import make_gene_group_service
 
 from app.routers.gene_groups import gene_group_members
 from app.services.gene_group_service import GeneGroupService
 
-# hierarchy: 100 (root "Receptors") -> 110 ("GPCRs") -> 170 ("5-HT1 receptors")
-#            100 -> 120 ("Ion channels")
-# HTR1A's leaf is the deep child 170 -> it must still surface under root 100
-FAMILY_CSV = '''id,name,abbreviation
-100,"Receptors","RCPT"
-110,"GPCRs","GPCR"
-120,"Ion channels","ICH"
-170,"5-HT1 receptors","HTR1"
-180,"Olfactory receptors","OR"
-'''
-
-HIERARCHY_CLOSURE_CSV = '''parent_fam_id,child_fam_id,distance
-100,110,1
-100,170,2
-110,170,1
-100,120,1
-100,180,2
-110,180,1
-'''
-
-# real hgnc_gene_has_family.csv uses BARE numeric hgnc ids; the search index
-# (fake below) keys on the prefixed "HGNC:NNNN" form. The endpoint must resolve
-# across that mismatch -> symbols populated, not null.
-GENE_HAS_FAMILY_CSV = '''hgnc_id,family_id
-5286,170
-5287,170
-9999,120
-8000,180
-'''
-
+# the search index (fake below) keys on the prefixed "HGNC:NNNN" form while the fixture's
+# gene_has_family rows carry bare numeric ids. The endpoint must resolve across that
+# mismatch -> symbols populated, not null.
 
 # minimal fake of SearchIndex exposing only the bridge the router uses.
 # HGNC:5287 intentionally has NO record to exercise the null-fill path.
@@ -85,20 +59,6 @@ GENE_RECORDS = {
 }
 
 
-def _make_service(tmp_path):
-    fam = tmp_path / "hgnc_family.csv"
-    closure = tmp_path / "hgnc_hierarchy_closure.csv"
-    ghf = tmp_path / "hgnc_gene_has_family.csv"
-    fam.write_text(FAMILY_CSV)
-    closure.write_text(HIERARCHY_CLOSURE_CSV)
-    ghf.write_text(GENE_HAS_FAMILY_CSV)
-    return GeneGroupService(
-        gene_has_family_file=str(ghf),
-        hierarchy_closure_file=str(closure),
-        family_file=str(fam),
-    )
-
-
 def _call(service, search_index, **kwargs):
     # the route is invoked directly (no FastAPI layer), so Query(...) defaults
     # are not resolved -- supply the same default FastAPI would inject.
@@ -115,7 +75,7 @@ def _call(service, search_index, **kwargs):
 
 @pytest.fixture
 def service(tmp_path):
-    return _make_service(tmp_path)
+    return make_gene_group_service(tmp_path)
 
 
 @pytest.fixture

@@ -12,8 +12,8 @@ import asyncio
 import re
 from pathlib import Path
 
-import aiohttp.client_exceptions
 import pytest
+from helpers.fake_gcs import FakeGcsSession, FakeGcsStorage
 
 from app.services import gcloud_tabix_base
 from app.services.gcloud_tabix_data_access import GCloudTabixDataAccess
@@ -21,40 +21,6 @@ from app.services.gcloud_tabix_data_access import GCloudTabixDataAccess
 SERVICES_DIR = Path(__file__).resolve().parent.parent / "app" / "services"
 APP_DIR = Path(__file__).resolve().parent.parent / "app"
 ACCESSOR_MODULE = SERVICES_DIR / "gcloud_tabix_base.py"
-
-
-class _FakeResponse:
-    def __init__(self, status: int):
-        self._status = status
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    def raise_for_status(self):
-        if self._status >= 400:
-            raise aiohttp.client_exceptions.ClientResponseError(
-                request_info=None, history=(), status=self._status
-            )
-
-
-class _FakeSession:
-    closed = False
-
-    def __init__(self, status: int, log: list):
-        self._status = status
-        self._log = log
-
-    def head(self, url, headers=None):
-        self._log.append(("HEAD", url, headers))
-        return _FakeResponse(self._status)
-
-
-class _FakeStorage:
-    async def _headers(self):
-        return {"Authorization": "Bearer fake"}
 
 
 def _stub_gcs(access, status: int) -> list:
@@ -65,8 +31,8 @@ def _stub_gcs(access, status: int) -> list:
     """
     log: list = []
     access._init_storage = lambda: (
-        setattr(access, "_session", _FakeSession(status, log)),
-        setattr(access, "_storage", _FakeStorage()),
+        setattr(access, "_session", FakeGcsSession(status, log)),
+        setattr(access, "_storage", FakeGcsStorage()),
     )
     return log
 

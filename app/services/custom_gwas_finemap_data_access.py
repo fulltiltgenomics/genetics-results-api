@@ -25,7 +25,11 @@ from app.core.streams import (
 )
 from app.services.custom_gwas_catalog import CustomGwasCatalog, get_catalog
 from app.services.data_access import DataAccessObject
-from app.services.gcloud_tabix_base import GCloudTabixBase, validate_path_component
+from app.services.gcloud_tabix_base import (
+    CHROM_CODES,
+    GCloudTabixBase,
+    validate_path_component,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +41,6 @@ SERVED_HEADER = [
     "mlog10p", "beta", "se", "pip", "cs_id", "cs_size", "cs_min_r2", "aaf",
     "most_severe", "gene_most_severe",
 ]
-
-_CHR_ALIASES = {"X": "23", "Y": "24", "MT": "25", "M": "25"}
-
 
 def _parse_tsv(text: str) -> tuple[list[str], list[dict[str, str]]]:
     lines = [line for line in text.split("\n") if line.strip()]
@@ -95,7 +96,7 @@ def translate_susie(
             logger.warning(f"{trait}: skipping credible-set row with variant {v!r}")
             continue
         chrom, pos, ref, alt = parts
-        chrom = _CHR_ALIASES.get(chrom.removeprefix("chr"), chrom.removeprefix("chr"))
+        chrom = CHROM_CODES.get(chrom.removeprefix("chr"), chrom.removeprefix("chr"))
         cs = sets.get((m.get("region"), m.get("cs")), {})
         try:
             sort_key = (int(chrom), int(pos))
@@ -196,19 +197,6 @@ class CustomGwasFinemapDataAccess(GCloudTabixBase, DataAccessObject):
         self, phenotype: str, interval: Literal[95, 99] | None, chunk_size: int
     ) -> AsyncGenerator[bytes, None]:
         return self._line_stream(phenotype, interval)
-
-    async def json_phenotype(
-        self,
-        phenotype: str,
-        interval: Literal[95, 99] | None,
-        header_schema: dict[str, type],
-        data_type: str,
-        chunk_size: int,
-    ) -> list[dict[str, Any]]:
-        _, rows = await self.json_phenotype_with_header(
-            phenotype, interval, header_schema, data_type, chunk_size
-        )
-        return rows
 
     async def json_phenotype_with_header(
         self,

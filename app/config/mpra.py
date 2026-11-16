@@ -27,7 +27,7 @@ from app.config.profile import load_profile_module
 # per-row *_mlog10p values may be NA, handled by the TSV -> typed parser.
 mpra_header_schema = {
     "resource": str,
-    "chrom": str,  # numeric string "1".."22","23"(X),"24"(Y),"25"(M/MT), no "chr" prefix
+    "chrom": str,  # numeric string "1".."22","23"(X),"24"(Y),"26"(M/MT), no "chr" prefix
     "pos": int,
     "variant": str,
     "ref": str,

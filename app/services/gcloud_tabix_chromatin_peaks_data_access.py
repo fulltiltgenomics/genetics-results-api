@@ -3,41 +3,29 @@ from typing import AsyncGenerator
 
 from app.config.chromatin_peaks import chromatin_peaks_data
 from app.services.data_access_chromatin_peaks import DataAccessObjectChromatinPeaks
-from app.services.gcloud_tabix_base import GCloudTabixBase
+from app.services.gcloud_tabix_base import GCloudTabixSingleFile
 
 logger = logging.getLogger(__name__)
 
 
 class GCloudTabixDataAccessChromatinPeaks(
-    GCloudTabixBase, DataAccessObjectChromatinPeaks
+    GCloudTabixSingleFile, DataAccessObjectChromatinPeaks
 ):
     """GCloud Storage tabix / direct file access implementation for chromatin peaks data."""
 
     def __init__(self, resource: str):
         DataAccessObjectChromatinPeaks.__init__(self, resource)
-        GCloudTabixBase.__init__(self)
-
-        self.resource_config = [
-            c for c in chromatin_peaks_data if c["resource"] == resource
-        ][0]
-        self.file = self.resource_config["file"]
+        self.resource_config = self._init_single_file(chromatin_peaks_data, "resource", resource)
         self.file_by_gene = self.resource_config.get("file_by_gene")
-        # header fetched lazily by get_header() and prefetched (non-blocking) by
-        # warm() at startup, so construction no longer blocks on tabix -H
-        self.header = None
         self.header_by_gene = None
 
     async def warm(self) -> None:
-        """Prefetch the header and .tbi index without blocking the event loop."""
-        self.header = await self._cache_header_async("header", self.file)
+        """Prefetch both headers and .tbi indexes without blocking the event loop."""
+        await super().warm()
         if self.file_by_gene is not None:
             self.header_by_gene = await self._cache_header_async(
                 "header_by_gene", self.file_by_gene
             )
-
-    def get_header(self) -> list[bytes]:
-        """Get the header for the chromatin peaks data file."""
-        return self._cache_header("header", self.file)
 
     def get_resource_name(self) -> str:
         """Get the resource name for this data access object."""

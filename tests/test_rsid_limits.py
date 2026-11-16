@@ -12,11 +12,10 @@ The fix is a bound applied to every caller with no sandbox special case, which i
 the invariant hold rather than merely tightening the caller that chose to identify itself.
 """
 
-import asyncio
-import json
 
 import pytest
 from fastapi import FastAPI, HTTPException
+from helpers.asgi import call_asgi
 
 from app.routers import rsid
 
@@ -71,38 +70,15 @@ def _post(body: bytes):
     api.include_router(rsid.router)
     api.dependency_overrides[rsid.get_rsid_db] = lambda: _FakeRsidDb()
 
-    messages = []
-    chunks = [body[i:i + 4096] for i in range(0, len(body), 4096)] or [b""]
-
-    async def receive():
-        chunk = chunks.pop(0) if chunks else b""
-        return {"type": "http.request", "body": chunk, "more_body": bool(chunks)}
-
-    async def send(message):
-        messages.append(message)
-
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0", "spec_version": "2.3"},
-        "http_version": "1.1",
-        "method": "POST",
-        "scheme": "http",
-        "path": "/rsid/variants",
-        "raw_path": b"/rsid/variants",
-        "query_string": b"",
-        "root_path": "",
-        "headers": [(b"content-length", str(len(body)).encode())],
-        "client": ("testclient", 50000),
-        "server": ("testserver", 80),
-        "state": {},
-    }
-    asyncio.run(api(scope, receive, send))
-
-    start = next(m for m in messages if m["type"] == "http.response.start")
-    payload = b"".join(
-        bytes(m.get("body", b"")) for m in messages if m["type"] == "http.response.body"
+    response = call_asgi(
+        api,
+        "POST",
+        "/rsid/variants",
+        headers=[("content-length", str(len(body)))],
+        body=body,
+        body_chunk_size=4096,
     )
-    return start["status"], json.loads(payload)
+    return response.status_code, response.json()
 
 
 def test_post_accepts_a_batch_at_the_limit():

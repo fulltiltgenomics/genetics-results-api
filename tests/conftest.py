@@ -3,12 +3,16 @@ import socket
 
 # Add the project root to Python path so we can import app modules
 import sys
-from pathlib import Path
 
 import pytest
 import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+# before anything imports it: its asserts are test assertions
+pytest.register_assert_rewrite("sandbox_contract")
+
+from checkout_guard import refuse_foreign_namespace_package  # noqa: E402
 
 
 def pytest_configure(config):
@@ -27,26 +31,9 @@ def pytest_configure(config):
     confusing test failure. Importing `app` here runs no code: the namespace package has
     no `__init__.py`.
     """
-    import app
-
-    rootdir = Path(config.rootpath).resolve()
-    outside = [p for p in app.__path__ if not Path(p).resolve().is_relative_to(rootdir)]
-    if outside:
-        raise pytest.UsageError(
-            "the `app` namespace package spans directories OUTSIDE the tree pytest is "
-            "testing, so this run can import another checkout's source and report green.\n"
-            "    outside this tree : " + ", ".join(outside) + "\n"
-            f"    pytest rootdir    : {rootdir}\n"
-            f"    interpreter       : {sys.executable}\n"
-            f"    PYTHONPATH        : {os.environ.get('PYTHONPATH', '(unset)')}\n"
-            "Almost always PYTHONPATH points at another checkout. Fix, from "
-            f"{rootdir}:\n"
-            "    unset PYTHONPATH   # or set it to this tree, which bare scripts need\n"
-            "    uv sync --extra dev\n"
-            '    uv run python -c "import app, sys; print(list(app.__path__)); '
-            'print(sys.executable)"\n'
-            f"Every printed path must be under {rootdir}."
-        )
+    refuse_foreign_namespace_package(
+        config, "app", unset_note="   # or set it to this tree, which bare scripts need"
+    )
 
 
 # ============================================================================

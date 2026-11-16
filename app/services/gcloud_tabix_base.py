@@ -19,6 +19,7 @@ from google.auth import default
 from google.auth.transport.requests import Request
 
 from app.core.exceptions import NotFoundException, ParseException
+from app.services.base_data_access import DataAccessObjectPerDataset
 from app.services.tabix_query import (
     TabixIndex,
     bgzf_block_size,
@@ -793,3 +794,98 @@ class GCloudTabixBase:
                         yield chunk
 
         return _iterator()
+
+
+# the suite's numeric chromosome codes, as the munged files and the BigQuery views spell them
+CHROM_CODES = {"X": "23", "Y": "24", "M": "26", "MT": "26"}
+
+
+def to_numeric_seqname(chrom: str) -> str:
+    """Normalize a chromosome token to a NUMERIC tabix seqname.
+
+    For files whose seqnames are "1".."22","23"(X),"24"(Y),"26"(M/MT) with NO "chr"
+    prefix. Accepts any user-supplied form (1, chr1, X, chrX, 23, chr23, Y, M, MT), so
+    a region path param, a parsed variant chromosome and a gene-mapping numeric chrom
+    all hit the file's index.
+    """
+    c = str(chrom).strip()
+    c = c[3:] if c.lower().startswith("chr") else c
+    c = c.upper()
+    return CHROM_CODES.get(c, c)
+
+
+class GCloudTabixSingleFile(GCloudTabixBase):
+    """A config entry served from the one tabix file its ``file`` key names."""
+
+    def _init_single_file(self, entries: list[dict], key_field: str, identifier: str) -> dict:
+        """Run the base init, bind ``self.file`` and return the entry whose `key_field`
+        is the identifier."""
+        GCloudTabixBase.__init__(self)
+        entry = [c for c in entries if c[key_field] == identifier][0]
+        self.file = entry["file"]
+        # fetched lazily by get_header() and prefetched (non-blocking) by warm() at
+        # startup, so construction does not block on tabix -H
+        self.header = None
+        return entry
+
+    async def warm(self) -> None:
+        """Prefetch the header and .tbi index without blocking the event loop."""
+        self.header = await self._cache_header_async("header", self.file)
+
+    def get_header(self) -> list[bytes]:
+        """Get the header of the data file."""
+        return self._cache_header("header", self.file)
+
+
+class GCloudTabixPerDataset(GCloudTabixSingleFile, DataAccessObjectPerDataset):
+    """Point-indexed variant file with numeric seqnames, one per ``dataset_id``."""
+
+    entries: list[dict]
+    # names the data in the query log line
+    label: str
+
+    def __init__(self, dataset_id: str):
+        DataAccessObjectPerDataset.__init__(self, dataset_id)
+        self.dataset_config = self._init_single_file(self.entries, "dataset_id", dataset_id)
+
+    def get_resource_name(self) -> str:
+        """Get the resource name (prepended to each row) for this dataset."""
+        return self.dataset_config["resource"]
+
+    def get_version(self) -> str:
+        """Get the version for this data access object."""
+        return self.dataset_config["version"]
+
+    async def stream_range(
+        self, chrom: str, start: int, end: int, chunk_size: int
+    ) -> AsyncGenerator[bytes, None]:
+        """
+        Stream all variants at/within a positional range.
+
+        Reuses GCloudTabixBase._stream_range on the point-indexed file (begin == end
+        column): a single-position variant query is start == end == pos (the base's
+        point-query fast path applies), a region query is start..end.
+
+        Args:
+            chrom: Chromosome (e.g. "chr1", "1", "X")
+            start: Range start (1-based, inclusive)
+            end: Range end (1-based, inclusive)
+            chunk_size: Size of chunks to read
+
+        Returns:
+            AsyncGenerator yielding record chunks at/within the range
+        """
+        seqname = to_numeric_seqname(chrom)
+
+        # logged under the subclass's module, which is where the domain is named
+        logging.getLogger(type(self).__module__).info(
+            f"Querying {self.label} for {seqname}:{start}-{end} ({self.dataset_id})"
+        )
+
+        return await self._stream_range(
+            self.file,
+            [seqname],
+            [start],
+            [end],
+            chunk_size,
+        )

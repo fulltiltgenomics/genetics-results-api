@@ -77,10 +77,10 @@ class TabixIndex:
         return sum(r.nbytes for r in self.refs) + sum(len(n) for n in self.names)
 
     def tid_for_chrom(self, chrom: int) -> int | None:
-        """Resolve a numeric chromosome (X=23, Y=24, MT=25) to a tid, tolerating
+        """Resolve a numeric chromosome (X=23, Y=24, MT=26) to a tid, tolerating
         common seqname spellings the file might use."""
         candidates = [str(chrom).encode()]
-        special = {23: b"X", 24: b"Y", 25: b"MT"}.get(chrom)
+        special = {23: b"X", 24: b"Y", 26: b"MT"}.get(chrom)
         if special:
             candidates += [special, b"chr" + special]
         candidates.append(b"chr" + str(chrom).encode())

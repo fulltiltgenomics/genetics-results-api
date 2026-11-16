@@ -13,12 +13,15 @@ from app.core.streams import (
     tsv_line_iterator_prepend_resource,
 )
 from app.services.base_data_access import (
-    BaseDataAccess,
     BaseDataAccessObject,
-    BaseFactory,
+    ConfigListDataAccess,
+    ConfigListFactory,
+    parse_peak_id,
 )
 
 logger = logging.getLogger(__name__)
+
+_PEAK_ID = re.compile(r"^(?:chr)?([0-9XYM]+)-(\d+)-(\d+)$", re.IGNORECASE)
 
 
 class DataAccessObjectOpenChromatin(BaseDataAccessObject):
@@ -76,7 +79,7 @@ class DataAccessObjectOpenChromatin(BaseDataAccessObject):
         peak_id is "<numchrom>-<start>-<end>" (e.g. "23-817095-817594"), matching
         the file's numeric chrom convention. A leading "chr" (and the X/Y/M
         spellings) are still tolerated; the returned chrom is normalized to the
-        file seqname downstream by _to_seqname.
+        file seqname downstream by to_numeric_seqname.
 
         Args:
             peak_id: Peak ID in format "23-817095-817594"
@@ -87,52 +90,21 @@ class DataAccessObjectOpenChromatin(BaseDataAccessObject):
         Raises:
             ValueError: If peak_id format is invalid
         """
-        match = re.match(r"^(?:chr)?([0-9XYM]+)-(\d+)-(\d+)$", peak_id, re.IGNORECASE)
-        if not match:
-            raise ValueError(
-                f"Invalid peak_id format: '{peak_id}'. Expected format: '23-817095-817594'"
-            )
-
-        chrom = match.group(1)
-        start = int(match.group(2))
-        end = int(match.group(3))
-
-        return chrom, start, end
+        return parse_peak_id(peak_id, _PEAK_ID, "23-817095-817594")
 
 
-class DataAccessFactoryOpenChromatin(BaseFactory):
+class DataAccessFactoryOpenChromatin(ConfigListFactory):
     """Factory for creating per-resource data access objects based on configuration."""
 
-    def get_config_entry(self, resource: str) -> dict:
-        """Get configuration entry for the resource."""
-        try:
-            return [c for c in open_chromatin_data if c["resource"] == resource][0]
-        except IndexError:
-            raise ValueError(
-                f"Open chromatin data access object for resource '{resource}' not found in configuration"
-            )
-
+    entries = open_chromatin_data
+    label = "open chromatin"
     implementations = {"gcloud": "app.services.gcloud_tabix_open_chromatin_data_access:GCloudTabixDataAccessOpenChromatin"}
 
 
-class DataAccessOpenChromatin(BaseDataAccess[DataAccessObjectOpenChromatin]):
+class DataAccessOpenChromatin(ConfigListDataAccess[DataAccessObjectOpenChromatin]):
     """Main data access class that manages per-resource data access objects."""
 
-    def create_factory(self) -> BaseFactory:
-        """Return the factory instance for this domain."""
-        return DataAccessFactoryOpenChromatin()
-
-    async def _get_resource_access(
-        self, resource: str
-    ) -> DataAccessObjectOpenChromatin:
-        """Get or create a data access object for a specific resource."""
-        return await super()._get_resource_access(resource, resource)
-
-    async def warm_all(self) -> None:
-        """Construct and warm (header + .tbi prefetch) every open-chromatin data
-        access object concurrently, so the first request pays no cold-start cost."""
-
-        await self._warm_each("open chromatin", self._get_resource_access, ((c["resource"],) for c in open_chromatin_data))
+    factory_class = DataAccessFactoryOpenChromatin
 
     async def stream_by_region(
         self,

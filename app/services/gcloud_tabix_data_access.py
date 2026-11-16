@@ -172,20 +172,6 @@ class GCloudTabixDataAccess(GCloudTabixBase, DataAccessObject):
         line_stream = tsv_line_iterator_str(stream)
         return await accumulate_cs_leads(line_stream, header_schema)
 
-    async def json_phenotype(
-        self,
-        phenotype: str,
-        interval: Literal[95, 99] | None,
-        header_schema: dict[str, type],
-        data_type: str,
-        chunk_size: int,
-    ) -> list[dict[str, Any]]:
-        """Get data as JSON response from GCloud Storage."""
-        _, rows = await self.json_phenotype_with_header(
-            phenotype, interval, header_schema, data_type, chunk_size
-        )
-        return rows
-
     async def json_phenotype_with_header(
         self,
         phenotype: str,

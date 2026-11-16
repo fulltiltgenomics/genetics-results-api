@@ -10,50 +10,17 @@ manager, and the checks for one request run concurrently.
 import asyncio
 
 import aiohttp.client_exceptions
+from helpers.fake_gcs import FakeGcsSession, FakeGcsStorage
 
 from app.services.sumstats_data_access import SumstatsDataAccess
-
-
-class _FakeResponse:
-    def __init__(self, status, log):
-        self.status = status
-        self._log = log
-
-    async def __aenter__(self):
-        self._log.append("enter")
-        return self
-
-    async def __aexit__(self, *exc):
-        self._log.append("exit")
-        return False
-
-
-class _FakeSession:
-    def __init__(self, status, log):
-        self._status = status
-        self._log = log
-        self.inflight = 0
-        self.high = 0
-
-    def head(self, url, headers=None):
-        self._log.append(("HEAD", url))
-        return _FakeResponse(self._status, self._log)
-
-    def get(self, url, headers=None):
-        raise AssertionError("existence check must not GET the object")
-
-
-class _FakeStorage:
-    async def _headers(self):
-        return {"Authorization": "Bearer fake"}
 
 
 def _access(status):
     log = []
     access = SumstatsDataAccess()
     access._initialized = True
-    access._session = _FakeSession(status, log)
-    access._storage = _FakeStorage()
+    access._session = FakeGcsSession(status, log, track_release=True)
+    access._storage = FakeGcsStorage()
     access._ensure_storage = lambda: None
     return access, log
 
@@ -75,7 +42,7 @@ def test_missing_file_by_status_and_by_raised_404():
 
     access, _ = _access(200)
 
-    class _Raising(_FakeSession):
+    class _Raising(FakeGcsSession):
         def head(self, url, headers=None):
             raise aiohttp.client_exceptions.ClientResponseError(
                 request_info=None, history=(), status=404

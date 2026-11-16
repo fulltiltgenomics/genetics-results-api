@@ -11,6 +11,7 @@ import asyncio
 import json
 
 import pytest
+from helpers.harmonizer import harmonize_by_code, metadata_config
 
 from app.routers import metadata as metadata_router
 from app.services.metadata_harmonizer import MetadataHarmonizer
@@ -58,20 +59,17 @@ ITEMS = [
     },
 ]
 
-CONFIG = {
-    "type": "finngen_meta",
-    "author": "FinnGen Consortium",
-    "publication_date": "2026-07-24",
-    "version_label": "R14",
-    "resource": "finngen_mvp_ukbb_aou",
-}
+CONFIG = metadata_config(
+    type="finngen_meta",
+    resource="finngen_mvp_ukbb_aou",
+    author="FinnGen Consortium",
+    publication_date="2026-07-24",
+    version_label="R14",
+)
 
 
 def _harmonize():
-    rows = MetadataHarmonizer().harmonize_metadata(
-        "finngen_mvp_ukbb_aou", ITEMS, {"metadata": CONFIG}
-    )
-    return {row.phenotype_code: row for row in rows}
+    return harmonize_by_code("finngen_mvp_ukbb_aou", ITEMS, CONFIG)
 
 
 def test_binary_item_keeps_counts_and_name():
