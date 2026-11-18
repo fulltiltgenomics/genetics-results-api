@@ -705,3 +705,25 @@ class TestSearchIndexIndexing:
         idx = self._build_index(monkeypatch, phenos)
         codes = [r["code"] for r in idx.search("J10_ASTHMA", limit=10, types=["phenotypes"])]
         assert "J10_ASTHMA_EXMORE" in codes
+
+    @pytest.mark.parametrize("query", ["pcsk9", "PCSK9", "pCsK9", "c1orf112", "C1ORF112"])
+    def test_gene_symbol_match_ignores_case(self, query):
+        """A symbol resolves as an exact match whatever the case of the query; mixed-case
+        ORF symbols mean neither upper- nor lowercasing the query alone would do."""
+        from app.services import search_service as ss
+
+        idx = ss.SearchIndex.__new__(ss.SearchIndex)
+        idx.on_request_items = []
+        idx.search_items = [
+            {
+                "item": {"type": "gene", "symbol": symbol},
+                "search_key": symbol,
+                "primary": symbol,
+                "is_symbol": True,
+            }
+            for symbol in ["PCSK9", "C1orf112", "TP53"]
+        ]
+
+        top = idx.search(query, limit=5, types=["genes"])[0]
+        assert top["symbol"].lower() == query.lower()
+        assert top["match_type"] == "exact"
