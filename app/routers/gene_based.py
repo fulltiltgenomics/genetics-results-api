@@ -69,8 +69,10 @@ async def _run_tabix(data_file: dict, gene_coords: list[dict], file_path: str | 
     query can run against one per-trait file instead.
     """
     file_path = file_path or data_file["gene_based"]["file"]
+    # the files are point-indexed on gene_start, so the gene's own start is the whole query:
+    # asking for start..end also returns every gene that merely STARTS inside the span
     regions = "\n".join(
-        f"{c['chrom']}\t{c['gene_start']}\t{c['gene_end']}" for c in gene_coords
+        f"{c['chrom']}\t{c['gene_start']}\t{c['gene_start']}" for c in gene_coords
     )
     process = await asyncio.create_subprocess_exec(
         "tabix",
