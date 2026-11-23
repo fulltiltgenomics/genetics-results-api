@@ -39,9 +39,13 @@ def _stub_gcs(access, status: int) -> list:
 
 @pytest.fixture
 def unwarmed_ibd_exome(monkeypatch):
-    """The one resource whose `warm()` opens nothing: it has no combined file."""
+    """A resource with per-phenotype files only: with no combined file, `warm()` opens nothing.
+
+    The served entry has a combined file, so it is taken out of this object's config.
+    """
     monkeypatch.setattr(gcloud_tabix_base, "ensure_gcs_token", lambda: None)
     access = GCloudTabixDataAccess("ibd_exome_2026", "exome")
+    monkeypatch.delitem(access.resource_config, "all_exome_file")
     assert access._combined_file() is None
     asyncio.run(access.warm())
     assert access._session is None, "warm() must not have opened a session here"

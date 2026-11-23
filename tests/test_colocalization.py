@@ -190,3 +190,35 @@ class TestColocalizationByCredibleSetId:
             f"Status: {response.status_code}\n"
             f"Response: {response.text[:500]}"
         )
+
+
+class TestColocalizationByGene:
+    """Test /api/v1/colocalization_by_gene/{gene} endpoint."""
+
+    # has both cis and trans QTL colocalizations
+    GENE = "PCSK9"
+
+    def test_rows_are_the_genes_qtls_cis_and_trans(self, server_url):
+        endpoint = f"{server_url}/api/v1/colocalization_by_gene/{self.GENE}"
+        response = requests.get(endpoint, params={"format": "json"}, timeout=60)
+        assert response.status_code == 200, response.text[:500]
+        rows = response.json()
+        assert rows
+        assert {r["qtl_gene"] for r in rows} == {self.GENE}
+        for r in rows:
+            assert r[f"data_type{r['qtl_side']}"] in ("eQTL", "pQTL", "sQTL")
+        assert any(r["chr"] != r["gene_chr"] for r in rows), "no trans pair returned"
+        assert any(r["chr"] == r["gene_chr"] for r in rows), "no cis pair returned"
+
+    def test_tsv_format(self, server_url):
+        endpoint = f"{server_url}/api/v1/colocalization_by_gene/{self.GENE}"
+        response = requests.get(endpoint, params={"format": "tsv"}, timeout=60)
+        assert response.status_code == 200, response.text[:500]
+        assert "text/tab-separated-values" in response.headers.get("content-type", "")
+        validation = validate_tsv_response(response.text)
+        assert validation["valid"], f"TSV validation failed: {validation['errors']}"
+
+    def test_unknown_gene_is_404(self, server_url):
+        endpoint = f"{server_url}/api/v1/colocalization_by_gene/NOTAGENE123"
+        assert requests.get(endpoint, timeout=30).status_code == 404
+

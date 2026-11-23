@@ -215,6 +215,22 @@ row came from and only then through the registry-wide lookup. `pairs` is therefo
 the `/datasets` partner list: a pair missing from it leaves that file's rows on the
 registry-wide version, and a file pairing two releases under one label fails at import.
 
+### Colocalization by gene
+
+The pair file is indexed on the colocalizing region, which is where the *variant* is, so a
+gene's colocalizations cannot be read from it by the gene's position: a trans QTL sits on
+another chromosome. `/colocalization_by_gene/{gene}` reads `coloc_gene_file` instead, a copy
+of the pair file that carries the QTL gene's coordinates and is indexed on them (built by
+genetics-results-munge `scripts/coloc/create_gene_indexed_coloc_file.sh`, the same idea as
+`all_cs_qtl_file` for credible sets). It holds the pairs with an eQTL, pQTL or sQTL on a
+side, once per such side; caQTL pairs are absent because a peak is not a gene.
+
+A range read returns every gene overlapping the locus, so `tsv_line_iterator_coloc_gene`
+keeps rows by exact `gene_chr`/`gene_start`/`gene_end`. Those must therefore come from the
+GENCODE version the entry names in `gene_gencode_version`, which is the version the route
+resolves the query gene in for that file. A coloc entry without `coloc_gene_file` is skipped
+by the route, and a profile with none answers 404.
+
 ### Authentication
 
 - Auth dependency applied globally via `dependencies=[Depends(auth_required)]`, with the `@is_public` decorator exempting individual endpoints

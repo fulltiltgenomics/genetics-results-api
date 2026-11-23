@@ -15,7 +15,7 @@ from app.config.sort_keys import (
     SORT_CONFIG_COLOC_CREDSET,
     create_sort_key,
 )
-from app.core.exceptions import DataException
+from app.core.exceptions import DataException, NotFoundException
 from app.core.streams import (
     CsKey,
     chunk_iterator,
@@ -28,6 +28,7 @@ from app.core.streams import (
     tsv_line_iterator_coloc,
     tsv_line_iterator_coloc_by_trait,
     tsv_line_iterator_coloc_credset,
+    tsv_line_iterator_coloc_gene,
 )
 from app.core.variant import Variant
 from app.services.base_data_access import (
@@ -93,6 +94,10 @@ class DataAccessObjectColoc(BaseDataAccessObject):
     ) -> AsyncGenerator[bytes, None]:
         """Stream coloc data (pairs of colocalizations) for a chromosome range."""
         pass
+
+    def has_gene_data(self) -> bool:
+        """Whether this coloc file has a gene-indexed copy."""
+        return False
 
 
 class DataAccessFactoryColoc(ConfigListFactory):
@@ -557,6 +562,59 @@ class DataAccessColoc(ConfigListDataAccess[DataAccessObjectColoc]):
                 b"version2",
             ] + header
             sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_COLOC)
+        merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
+        header_line = b"\t".join(header_with_resources) + b"\n"
+
+        return chunk_iterator(merged_iterator, header_line, out_chunk_size)
+
+    async def stream_coloc_by_gene(
+        self,
+        coords: dict,
+        in_chunk_size: int,
+        out_chunk_size: int,
+    ) -> AsyncGenerator[bytes, None]:
+        """
+        Stream the colocalized pairs in which one side is a QTL of a gene, cis or trans.
+
+        `coords` is the gene's loci by GENCODE version, as
+        GeneNameAndPositionMapping.get_coordinates_by_gene_name returns them. Each coloc
+        file is read at the loci of the version its gene-indexed copy was built with.
+        """
+        accesses = [await self._get_resource_access(c["name"]) for c in coloc]
+        accesses = [
+            a for a in accesses if a.has_gene_data() and coords.get(a.gene_gencode_version)
+        ]
+        if not accesses:
+            raise NotFoundException("No gene-indexed colocalization data for this gene")
+
+        chunk_iterators = await asyncio.gather(
+            *[
+                access.stream_coloc_gene_range(
+                    [pos["chrom"] for pos in coords[access.gene_gencode_version]],
+                    [pos["gene_start"] for pos in coords[access.gene_gencode_version]],
+                    [pos["gene_end"] for pos in coords[access.gene_gencode_version]],
+                    in_chunk_size,
+                )
+                for access in accesses
+            ]
+        )
+        header = accesses[0].get_coloc_gene_header()
+        line_iterators = [
+            tsv_line_iterator_coloc_gene(
+                iterator,
+                access.get_coloc_gene_header(),
+                coords[access.gene_gencode_version],
+                coloc_label_versions[access.name],
+            )
+            for access, iterator in zip(accesses, chunk_iterators)
+        ]
+        header_with_resources = [
+            b"resource1",
+            b"version1",
+            b"resource2",
+            b"version2",
+        ] + header
+        sort_key_fn = create_sort_key(header_with_resources, SORT_CONFIG_COLOC)
         merged_iterator = merge(*await start_iterators(line_iterators), key=sort_key_fn)
         header_line = b"\t".join(header_with_resources) + b"\n"
 

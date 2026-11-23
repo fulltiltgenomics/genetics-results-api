@@ -463,6 +463,47 @@ def coloc_side_key_fns(header: list[bytes], offset: int = 0):
     return side(b"1"), side(b"2")
 
 
+def tsv_line_iterator_coloc_gene(
+    stream: AsyncIterator[bytes],
+    header: list[bytes],
+    gene_loci: list[dict],
+    label_versions: dict[bytes, tuple[bytes, bytes]] | None = None,
+) -> AsyncIterator[list[bytes]]:
+    """
+    Iterate over the lines of a gene-indexed coloc file, keeping the rows of the genes at
+    `gene_loci` (dicts with chrom, gene_start, gene_end).
+
+    A range read returns every gene overlapping the locus, so rows are matched on the exact
+    coordinates the file was built with. Adds dual resource/version columns like
+    tsv_line_iterator_coloc.
+    """
+
+    dataset1_index = header.index(b"dataset1")
+    dataset2_index = header.index(b"dataset2")
+    chr_index = header.index(b"gene_chr")
+    start_index = header.index(b"gene_start")
+    end_index = header.index(b"gene_end")
+    wanted = {
+        (
+            str(locus["chrom"]).encode(),
+            str(locus["gene_start"]).encode(),
+            str(locus["gene_end"]).encode(),
+        )
+        for locus in gene_loci
+    }
+    resource_version = _coloc_resource_version(label_versions)
+
+    def filter_fn(s: list[bytes]) -> bool:
+        return (s[chr_index], s[start_index], s[end_index]) in wanted
+
+    def transform_fn(s: list[bytes]) -> list[bytes]:
+        resource1, version1 = resource_version(s[dataset1_index])
+        resource2, version2 = resource_version(s[dataset2_index])
+        return [resource1, version1, resource2, version2] + s
+
+    return tsv_line_iterator_base(stream, filter_fn, transform_fn)
+
+
 def tsv_line_iterator_coloc(
     stream: AsyncIterator[bytes],
     header: list[bytes],

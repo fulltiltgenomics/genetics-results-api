@@ -240,6 +240,21 @@ class TestExomeResultsByGene:
 
         assert response.status_code == 200
 
+    def test_exome_results_by_gene_serves_ibd_exome(self, server_url):
+        """A resource stored one file per trait is reachable by gene through its combined file."""
+        response = requests.get(
+            f"{server_url}/api/v1/exome_results_by_gene/NOD2",
+            params={"format": "json", "resources": ["ibd_exome_2026"]},
+            timeout=30,
+        )
+
+        assert response.status_code == 200, response.text[:500]
+        rows = response.json()
+        assert rows
+        assert {r["dataset"] for r in rows} == {"IBD_exome"}
+        # every trait of the resource, not one trait's file
+        assert len({r["trait_original"] for r in rows}) > 1
+
     def test_exome_results_by_gene_not_found(self, server_url):
         """Test that non-existent gene returns 404."""
         fake_gene = "NONEXISTENT_GENE_12345"

@@ -8,13 +8,15 @@ import app.config.coloc as coloc_config
 import app.config.common as config_common
 from app.core.exceptions import (
     DataException,
+    GeneNotFoundException,
     NotFoundException,
     ParseException,
 )
 from app.core.responses import range_response
 from app.core.variant import Variant
-from app.dependencies import get_data_access_coloc
+from app.dependencies import get_data_access_coloc, get_gene_name_mapping
 from app.services.data_access_coloc import DataAccessColoc
+from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 
 logger = logging.getLogger(__name__)
 
@@ -383,3 +385,66 @@ async def colocalization_by_credible_set_id(
         else coloc_config.coloc_header_schema
     )
     return await range_response(str(request.url), stream, schema, format, start_time)
+
+
+@router.get(
+    "/colocalization_by_gene/{gene}",
+    summary="Get colocalized pairs in which one side is a QTL of the given gene.",
+    responses={
+        200: {
+            "description": "Successful response",
+            "content": {
+                "text/tab-separated-values": {"schema": {"type": "string"}},
+                "application/json": {
+                    "schema": {"type": "array", "items": {"type": "object"}}
+                },
+            },
+        },
+        401: {"description": "Not authenticated"},
+        404: {"description": "Gene not found, or no gene-indexed colocalization data"},
+        422: {"description": "Invalid format parameter"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def colocalization_by_gene(
+    request: Request,
+    gene: str = Path(..., description="Gene name or Ensembl gene id", examples=["IL23R"]),
+    format: Literal["tsv", "json"] = Query(
+        default="tsv", description="Response format"
+    ),
+    gene_name_and_position_mapping: GeneNameAndPositionMapping = Depends(
+        get_gene_name_mapping
+    ),
+    data_access_coloc: DataAccessColoc = Depends(get_data_access_coloc),
+) -> Response:
+    """
+    Get colocalized pairs in which one side is an eQTL, pQTL or sQTL of the gene.
+
+    Pairs are found by the QTL's target gene, not by position, so a trans QTL signal on
+    another chromosome is returned with the cis ones: compare `chr` with `gene_chr` (and the
+    region with `gene_start`/`gene_end`) to tell them apart. `qtl_side` says which side of
+    the pair is the gene's QTL, and `qtl_gene` is the symbol its trait was resolved to. A
+    pair of two QTLs of different genes is returned under each. caQTL pairs are not
+    included: a peak is not a gene. The build-time filters and version labels are those
+    described for /colocalization_by_variant/{variant}.
+    """
+    start_time = time.time()
+    try:
+        coords = gene_name_and_position_mapping.get_coordinates_by_gene_name(gene)
+    except GeneNotFoundException as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    try:
+        stream = await data_access_coloc.stream_coloc_by_gene(
+            coords or {},
+            config_common.read_chunk_size,
+            config_common.response_chunk_size,
+        )
+    except NotFoundException as e:
+        logger.warning(e)
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+    return await range_response(
+        str(request.url), stream, coloc_config.coloc_header_schema_gene, format, start_time
+    )

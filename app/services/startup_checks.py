@@ -109,6 +109,8 @@ def _collect_tabix_files() -> list[TabixCheck]:
             unchecked.append((f"coloc_credset:{c['name']}", c["credset_file"]))
         if "coloc_file" in c:
             unchecked.append((f"coloc:{c['name']}", c["coloc_file"]))
+        if "coloc_gene_file" in c:
+            unchecked.append((f"coloc_gene:{c['name']}", c["coloc_gene_file"]))
 
     # only the fixed single-file sumstats entries; prefix/suffix ones are per-phenotype
     for df in sumstats_files:
