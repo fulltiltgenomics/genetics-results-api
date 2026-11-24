@@ -4,14 +4,15 @@ The release index is built from the contract mirror and the tabix reader is repl
 rows it would return, as in test_protein_structure_routes.py.
 """
 
-import asyncio
 import logging
 import sys
-from json import dumps, loads
+from json import dumps
 from urllib.parse import urlencode
 
 import pytest
 from fastapi import FastAPI
+from helpers.asgi import DecodedResponse, call_asgi
+from helpers.fake_gcs import in_chunks
 from test_protein_structure import model_row
 from test_protein_structure_routes import BASE, RELEASE, make_release
 
@@ -71,52 +72,24 @@ def access(pointer, loaded=True) -> ProteinStructureAccess:
     return a
 
 
-class Reply:
-    def __init__(self, status_code: int, headers: dict[str, str], body: bytes):
-        self.status_code, self.headers, self.text = status_code, headers, body.decode()
-
-    def json(self):
-        return loads(self.text)
-
-
 class Client:
     """The app called over ASGI in process: the test client proper needs httpx, which is not installed."""
 
     def __init__(self, app: FastAPI, service: VariantAnnotationService):
         self.app, self.service = app, service
 
-    def get(self, path, params=None) -> Reply:
-        return asyncio.run(self._call("GET", path, params, b""))
+    def get(self, path, params=None) -> DecodedResponse:
+        return self._call("GET", path, params, b"")
 
-    def post(self, path, json=None, params=None) -> Reply:
-        return asyncio.run(self._call("POST", path, params, dumps(json).encode()))
+    def post(self, path, json=None, params=None) -> DecodedResponse:
+        return self._call("POST", path, params, dumps(json).encode())
 
-    async def _call(self, method, path, params, body) -> Reply:
-        messages, asked = [], []
-
-        async def receive():
-            if not asked:
-                asked.append(True)
-                return {"type": "http.request", "body": body, "more_body": False}
-            await asyncio.Event().wait()
-
-        async def send(message):
-            messages.append(message)
-
-        scope = {
-            "type": "http", "asgi": {"version": "3.0", "spec_version": "2.3"}, "http_version": "1.1",
-            "method": method, "scheme": "http", "path": path, "raw_path": path.encode(),
-            "query_string": urlencode(params or {}).encode(), "root_path": "",
-            "headers": [(b"content-type", b"application/json")],
-            "client": ("testclient", 50000), "server": ("testserver", 80), "state": {},
-        }
-        await self.app(scope, receive, send)
-        start = next(m for m in messages if m["type"] == "http.response.start")
-        return Reply(
-            start["status"],
-            {k.decode().lower(): v.decode() for k, v in start["headers"]},
-            b"".join(bytes(m.get("body", b"")) for m in messages if m["type"] == "http.response.body"),
+    def _call(self, method, path, params, body) -> DecodedResponse:
+        sent = call_asgi(
+            self.app, method, path, query=urlencode(params or {}),
+            headers=[("content-type", "application/json")], body=body,
         )
+        return DecodedResponse(sent.messages)
 
 
 def client(service: VariantAnnotationService) -> Client:
@@ -130,12 +103,7 @@ def client(service: VariantAnnotationService) -> Client:
                    for c, s, e in zip(chroms, starts, ends))
         ).encode()
 
-        async def gen():
-            # chunk boundaries fall inside lines
-            for i in range(0, len(blob), 37):
-                yield blob[i:i + 37]
-
-        return gen()
+        return in_chunks(blob, 37)
 
     service._stream_range = stream_range
     app = FastAPI()

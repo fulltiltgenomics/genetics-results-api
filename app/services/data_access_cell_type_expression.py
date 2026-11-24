@@ -255,16 +255,6 @@ class CellTypeExpressionAccess(GCloudTabixBase):
             kept_datasets=kept,
         )
 
-    async def cleanup(self) -> None:
-        if self._task is not None:
-            self._task.cancel()
-            try:
-                await self._task
-            except (asyncio.CancelledError, Exception):
-                pass
-            self._task = None
-        await super().cleanup()
-
     async def _rows(self, path: str, genes: list[dict]) -> AsyncGenerator[list[bytes], None]:
         """Rows of `path` belonging to the given genes, split into fields.
 

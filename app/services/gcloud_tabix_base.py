@@ -239,6 +239,8 @@ class GCloudTabixBase:
     # they resolve even for a subclass that defers GCloudTabixBase.__init__
     _storage: "Storage | None" = None
     _session: "aiohttp.ClientSession | None" = None
+    # the one background task a subclass may keep (a refresh or retry loop); cleanup() stops it
+    _task: "asyncio.Task | None" = None
 
     def __init__(self):
         os.makedirs("/tmp/tbi_cache", exist_ok=True)
@@ -277,6 +279,15 @@ class GCloudTabixBase:
 
     async def cleanup(self):
         """Clean up resources."""
+        # a subclass's background loop goes first: left running, it could open a session
+        # after the ones below are closed
+        task, self._task = self._task, None
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
         # the backing fields, not the properties: shutting down must never open a session
         if self._session:
             await self._session.close()

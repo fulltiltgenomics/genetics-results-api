@@ -13,6 +13,7 @@ import polars as pl
 import pytest
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
+from helpers.asgi import DecodedResponse, acall_asgi
 from test_protein_structure import model_row, models_bytes, score_sources
 
 import app.config.protein_structure as config
@@ -181,16 +182,9 @@ class Mapping:
         return {self.by_name[upper]}
 
 
-class Response:
-    def __init__(self, status: int, headers: dict[str, str], body: bytes):
-        self.status, self.headers, self.body = status, headers, body
-
-    @property
-    def text(self) -> str:
-        return self.body.decode()
-
-    def json(self):
-        return json.loads(self.body)
+class Response(DecodedResponse):
+    status = property(lambda self: self.status_code)
+    body = property(lambda self: self.content)
 
 
 def call(api, path: str, headers: dict[str, str] | None = None) -> Response:
@@ -199,28 +193,10 @@ def call(api, path: str, headers: dict[str, str] | None = None) -> Response:
 
 async def acall(api, path: str, headers: dict[str, str] | None = None) -> Response:
     path, _, query = path.partition("?")
-    messages, asked = [], []
-
-    async def receive():
-        if not asked:
-            asked.append(True)
-            return {"type": "http.request", "body": b"", "more_body": False}
-        await asyncio.Event().wait()
-
-    async def send(message):
-        messages.append(message)
-
-    scope = {
-        "type": "http", "asgi": {"version": "3.0", "spec_version": "2.3"}, "http_version": "1.1",
-        "method": "GET", "scheme": "http", "path": "/api/v1/protein_structure/" + path,
-        "raw_path": ("/api/v1/protein_structure/" + path).encode(), "query_string": query.encode(),
-        "root_path": "", "headers": [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()],
-        "client": ("testclient", 50000), "server": ("testserver", 80), "state": {},
-    }
-    await api(scope, receive, send)
-    start = next(m for m in messages if m["type"] == "http.response.start")
-    body = b"".join(bytes(m.get("body", b"")) for m in messages if m["type"] == "http.response.body")
-    return Response(start["status"], {k.decode().lower(): v.decode() for k, v in start["headers"]}, body)
+    sent = await acall_asgi(
+        api, "GET", "/api/v1/protein_structure/" + path, query=query, headers=(headers or {}).items()
+    )
+    return Response(sent.messages)
 
 
 @pytest.fixture(autouse=True)

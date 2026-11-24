@@ -18,6 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from helpers.fake_gcs import in_chunks
 
 import app.config.cell_type_expression as config
 from app.routers.cell_type_expression import cell_type_expression
@@ -121,12 +122,8 @@ class FakeGcs:
         regions = [f"{c}:{s}-{e}" for c, s, e in zip(chroms, starts, ends)]
         out = subprocess.run(["tabix", self.local(gs_path), *regions], capture_output=True, check=True).stdout
 
-        async def gen():
-            # arbitrary chunk boundaries: the consumer must not depend on them being line-aligned
-            for i in range(0, len(out), 700):
-                yield out[i : i + 700]
-
-        return gen()
+        # arbitrary chunk boundaries: the consumer must not depend on them being line-aligned
+        return in_chunks(out, 700)
 
 
 @pytest.fixture

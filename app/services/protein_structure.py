@@ -581,13 +581,3 @@ class ProteinStructureAccess(GCloudTabixBase):
             if await self._load():
                 self._task = None
                 return
-
-    async def cleanup(self) -> None:
-        if self._task is not None:
-            self._task.cancel()
-            try:
-                await self._task
-            except (asyncio.CancelledError, Exception):
-                pass
-            self._task = None
-        await super().cleanup()

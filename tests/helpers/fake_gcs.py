@@ -49,3 +49,9 @@ class FakeGcsSession:
 class FakeGcsStorage:
     async def _headers(self):
         return {"Authorization": "Bearer fake"}
+
+
+async def in_chunks(blob: bytes, size: int):
+    """`blob` as a faked range read streams it: in pieces whose boundaries fall inside lines."""
+    for i in range(0, len(blob), size):
+        yield blob[i : i + size]
