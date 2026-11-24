@@ -65,6 +65,16 @@ coloc_header_schema = {
     "topInOverlap": str,
 }
 
+# the gene-indexed copy: the pair as served elsewhere, then which side's QTL targets the gene
+coloc_header_schema_gene = {
+    **coloc_header_schema,
+    "qtl_gene": str,
+    "qtl_side": int,
+    "gene_chr": int,
+    "gene_start": int,
+    "gene_end": int,
+}
+
 # simple format schema (without "1" or "2" suffixes)
 coloc_header_schema_simple = {
     "resource": str,

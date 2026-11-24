@@ -22,6 +22,9 @@ class GCloudTabixDataAccessColoc(GCloudTabixBase, DataAccessObjectColoc):
         # startup, so constructing the object does not block on tabix -H
         self.credible_set_header = None
         self.coloc_header = None
+        self.coloc_gene_file = self.configuration.get("coloc_gene_file")
+        self.gene_gencode_version = self.configuration.get("gene_gencode_version")
+        self.coloc_gene_header = None
 
     async def warm(self) -> None:
         """Prefetch both headers and their .tbi indexes without blocking the event loop."""
@@ -31,6 +34,10 @@ class GCloudTabixDataAccessColoc(GCloudTabixBase, DataAccessObjectColoc):
         self.coloc_header = await self._cache_header_async(
             "coloc_header", self.coloc_file
         )
+        if self.coloc_gene_file is not None:
+            self.coloc_gene_header = await self._cache_header_async(
+                "coloc_gene_header", self.coloc_gene_file
+            )
 
     def get_credible_set_header(self) -> list[bytes]:
         """Get the header for the credible set file."""
@@ -51,3 +58,16 @@ class GCloudTabixDataAccessColoc(GCloudTabixBase, DataAccessObjectColoc):
     ) -> AsyncGenerator[bytes, None]:
         """Stream data from a tabix-indexed file for a chromosome range."""
         return await self._stream_range(self.coloc_file, [chr], [start], [end], chunk_size)
+
+    def has_gene_data(self) -> bool:
+        return self.coloc_gene_file is not None and self.gene_gencode_version is not None
+
+    def get_coloc_gene_header(self) -> list[bytes]:
+        """Get the header for the gene-indexed coloc file."""
+        return self._cache_header("coloc_gene_header", self.coloc_gene_file)
+
+    async def stream_coloc_gene_range(
+        self, chr: list[int], start: list[int], end: list[int], chunk_size: int
+    ) -> AsyncGenerator[bytes, None]:
+        """Stream the gene-indexed coloc file for gene loci."""
+        return await self._stream_range(self.coloc_gene_file, chr, start, end, chunk_size)
