@@ -8,7 +8,9 @@ chunk sizes, and other common constants.
 import logging
 import os
 
-from app.config.datasets import dataset_to_resource  # noqa: F401 - re-exported for the profile-agnostic config surface
+from app.config.datasets import (
+    dataset_to_resource,  # noqa: F401 - re-exported for the profile-agnostic config surface
+)
 from app.config.profile import load_profile_module
 
 log_level = "INFO"
@@ -142,7 +144,6 @@ _profile = load_profile_module("common")
 
 hgnc_file = _profile.hgnc_file
 rsid_db = _profile.rsid_db
-gnomad = _profile.gnomad
 dataset_mapping_files = _profile.dataset_mapping_files
 dataset_display_names = _profile.dataset_display_names
 variant_set_files = _profile.variant_set_files

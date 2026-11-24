@@ -3,14 +3,7 @@
 hgnc_file = "gs://daly-genetics-results/mapping_files/hgnc_complete_set.txt"
 
 rsid_db = {
-    "file": "gs://daly-genetics-results/gnomad/gnomad.genomes.exomes.v4.0.rsid.v2.tsv.gz",
-}
-
-gnomad = {
-    "file": "gs://daly-genetics-results/gnomad/gnomad.genomes.exomes.v4.0.sites.v2.tsv.bgz",
-    "populations": ["afr", "amr", "asj", "eas", "fin", "mid", "nfe", "oth", "sas"],
-    "url": "https://gnomad.broadinstitute.org/variant/[VARIANT]?dataset=gnomad_r4",
-    "version": "4.0",
+    "file": "gs://daly-genetics-results/gnomad/gnomad.genomes.exomes.v4.1.1.rsid.tsv.gz",
 }
 
 dataset_mapping_files = [

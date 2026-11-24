@@ -143,7 +143,6 @@ def _collect_tabix_files() -> list[TabixCheck]:
     for source, cfg in common.variant_annotation_sources.items():
         unchecked.append((f"variant_annotation:{source}", cfg["file"]))
 
-    unchecked.append(("gnomad", common.gnomad["file"]))
     unchecked.append(("rsid_db", common.rsid_db["file"]))
 
     files.extend((label, path, None) for label, path in unchecked)

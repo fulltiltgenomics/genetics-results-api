@@ -6,13 +6,6 @@ rsid_db = {
     "file": "gs://finngen-commons/results_api_data/gnomad/gnomad.genomes.exomes.v4.0.rsid.v2.tsv.gz",
 }
 
-gnomad = {
-    "file": "gs://finngen-commons/results_api_data/gnomad/gnomad.genomes.exomes.v4.0.sites.v2.tsv.bgz",
-    "populations": ["afr", "amr", "asj", "eas", "fin", "mid", "nfe", "oth", "sas"],
-    "url": "https://gnomad.broadinstitute.org/variant/[VARIANT]?dataset=gnomad_r4",
-    "version": "4.0",
-}
-
 dataset_mapping_files = [
     (
         "gs://finngen-commons/results_api_data/mapping_files/eqtl_catalogue_r8_dataset_metadata.tsv",
