@@ -323,4 +323,20 @@ data_files = [
             ("finngen_custom_r12", "AAGWASREFINEDSYC21APR2025"),
         )
     ],
+    {
+        # GWAS of principal components of the individuals x core endpoints matrix; served on
+        # request only (the registry entry), so the combined file answers a variant, gene or
+        # region query only when the request names this resource
+        "id": "finngen_phenotype_pca_r14",
+        "dataset_id": "finngen_phenotype_pca_r14",
+        "resource": "finngen_phenotype_pca",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "PPC1",
+        "gencode_version": 49,
+        "cs": {
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/finngen_phenotype_pca/r14/individual/",
+            "suffix_95": ".SUSIE.munged.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/finngen_phenotype_pca/r14/FinnGen_phenotype_PCs_credible_sets.tsv.gz",
+        },
+    },
 ]

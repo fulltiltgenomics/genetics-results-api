@@ -520,7 +520,7 @@ async def credible_sets_by_region(
     ),
     resources: list[str] | None = Query(
         default=None,
-        description="Comma-separated list of resources to get data from (if not given, all available resources are used)",
+        description="Comma-separated list of resources to get data from (if not given, every resource except the on-request ones is used)",
     ),
     interval: int = Query(
         default=95, description="Credible set threshold (95 or 99)", ge=95, le=99
@@ -550,7 +550,7 @@ async def credible_sets_by_region(
         raise HTTPException(status_code=422, detail=str(e))
 
     if resources is None:  # use all credible set resources if none given
-        resources = config_util.get_resources(data_type="cs")
+        resources = config_util.get_default_resources(data_type="cs")
     if not request_util.check_resources(resources, data_type="cs"):
         raise HTTPException(
             status_code=404,
@@ -660,7 +660,7 @@ async def credible_sets_by_variant(
     ),
     resources: list[str] | None = Query(
         default=None,
-        description="Comma-separated list of resources to get data from (if not given, all available resources are used)",
+        description="Comma-separated list of resources to get data from (if not given, every resource except the on-request ones is used)",
     ),
     interval: int = Query(
         default=95, description="Credible set threshold (95 or 99)", ge=95, le=99
@@ -692,7 +692,7 @@ async def credible_sets_by_variant(
         raise HTTPException(status_code=422, detail=str(e))
 
     if resources is None:  # use all credible set resources if none given
-        resources = config_util.get_resources(data_type="cs")
+        resources = config_util.get_default_resources(data_type="cs")
     if not request_util.check_resources(resources, data_type="cs"):
         raise HTTPException(
             status_code=404,
@@ -753,7 +753,7 @@ async def credible_sets_by_variant_post(
     body: VariantsRequest,
     resources: list[str] | None = Query(
         default=None,
-        description="Comma-separated list of resources to get data from (if not given, all available resources are used)",
+        description="Comma-separated list of resources to get data from (if not given, every resource except the on-request ones is used)",
     ),
     interval: int = Query(
         default=95, description="Credible set threshold (95 or 99)", ge=95, le=99
@@ -790,7 +790,7 @@ async def credible_sets_by_variant_post(
             raise HTTPException(status_code=422, detail=f"Invalid variant '{vs}': {e}")
 
     if resources is None:
-        resources = config_util.get_resources(data_type="cs")
+        resources = config_util.get_default_resources(data_type="cs")
     if not request_util.check_resources(resources, data_type="cs"):
         raise HTTPException(
             status_code=404,
@@ -902,7 +902,7 @@ async def credible_sets_by_gene(
     ),
     resources: list[str] | None = Query(
         default=None,
-        description="Comma-separated list of resources to get data from (if not given, all available resources are used)",
+        description="Comma-separated list of resources to get data from (if not given, every resource except the on-request ones is used)",
     ),
     interval: int = Query(
         default=95, description="Credible set threshold (95 or 99)", ge=95, le=99
@@ -956,7 +956,7 @@ async def credible_sets_by_gene(
         ]
 
     if resources is None:  # use all credible set resources if none given
-        resources = config_util.get_resources(data_type="cs")
+        resources = config_util.get_default_resources(data_type="cs")
     if not request_util.check_resources(resources, data_type="cs"):
         raise HTTPException(
             status_code=404,
@@ -1068,7 +1068,7 @@ async def credible_sets_by_qtl_gene(
     gene: str = Path(..., description="Gene name, ENSG ID, or comma-separated list of gene names", examples=["PCSK9"]),
     resources: list[str] | None = Query(
         default=None,
-        description="Comma-separated list of resources to get data from (if not given, all available resources are used)",
+        description="Comma-separated list of resources to get data from (if not given, every resource except the on-request ones is used)",
     ),
     interval: int = Query(
         default=95, description="Credible set threshold (95 or 99)", ge=95, le=99
@@ -1091,7 +1091,7 @@ async def credible_sets_by_qtl_gene(
     start_time = time.time()
     data_type_filter = _parse_data_types(data_types)
     if resources is None:  # use all credible set resources if none given
-        resources = config_util.get_resources(data_type="cs")
+        resources = config_util.get_default_resources(data_type="cs")
     if not request_util.check_resources(resources, data_type="cs"):
         raise HTTPException(
             status_code=404,
