@@ -262,6 +262,11 @@ class GeneNameAndPositionMapping:
             return self._gene_name_lowercase_to_actual[gene_name_lower]
         raise GeneNotFoundException(f"Gene {gene_name} not found")
 
+    def known_gene_name(self, gene_name: str) -> str:
+        """The name as the mappings spell it (case corrected); raises for an unknown one.
+        An alias or previous symbol comes back as itself, not as the approved symbol."""
+        return self._resolve_gene_name(gene_name)
+
     def get_ensg_ids_by_gene_name(self, gene_name: str) -> set[str]:
         """
         Get the ENSG IDs a gene name maps to, across all GENCODE versions (case-insensitive).

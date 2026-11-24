@@ -111,6 +111,8 @@ def _collect_tabix_files() -> list[TabixCheck]:
             unchecked.append((f"coloc_credset:{c['name']}", c["credset_file"]))
         if "coloc_file" in c:
             unchecked.append((f"coloc:{c['name']}", c["coloc_file"]))
+        if "coloc_gene_file" in c:
+            unchecked.append((f"coloc_gene:{c['name']}", c["coloc_gene_file"]))
 
     # only the fixed single-file sumstats entries; prefix/suffix ones are per-phenotype
     for df in sumstats_files:
@@ -162,6 +164,7 @@ def _collect_mapping_files() -> list[tuple[str, str]]:
     yet) and the phenotype-markdown template (a per-request {resource}/{phenocode} path).
     """
     import app.config.common as config
+    import app.config.gene_summary as gene_summary
     from app.config.gene_disease import gene_disease
     from app.config.genes import genes
 
@@ -180,6 +183,9 @@ def _collect_mapping_files() -> list[tuple[str, str]]:
     for key, cfg in gene_disease.items():
         if isinstance(cfg, dict) and "file" in cfg:
             files.append((f"gene_disease:{key}", cfg["file"]))
+
+    if gene_summary.prefix is not None:
+        files.append(("gene_summary:manifest", gene_summary.prefix + gene_summary.MANIFEST_FILE))
 
     # curated variant sets served by the variant_set router
     for name, cfg in config.variant_set_files.items():

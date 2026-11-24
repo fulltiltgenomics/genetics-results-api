@@ -15,14 +15,11 @@ works under.
 """
 
 import asyncio
-import json
 
 import aiohttp
 import pytest
-from fastapi import FastAPI
+from helpers.ld import StubLDService, call_ld_router
 
-from app.dependencies import get_ld_service
-from app.routers import ld as ld_router
 from app.services.ld_service import (
     LD_ENTRY_FIELDS,
     LDPanelUnknown,
@@ -39,77 +36,16 @@ ENTRY = {
 }
 
 
-class StubService:
-    def __init__(self, entries=None, raises=None):
-        self.entries = entries if entries is not None else [ENTRY]
-        self.raises = raises
-        self.calls = []
-
-    async def variants_in_ld(self, variant, *, window, r2_threshold, panel):
-        self.calls.append(
-            {"variant": variant, "window": window, "r2_threshold": r2_threshold, "panel": panel}
-        )
-        if self.raises:
-            raise self.raises
-        return self.entries
-
-
-class _Response:
-    def __init__(self, status, body):
-        self.status_code, self.content = status, body
-
-    def json(self):
-        return json.loads(self.content)
+def stub_service(entries=None, raises=None) -> StubLDService:
+    return StubLDService([ENTRY] if entries is None else entries, raises)
 
 
 def call(service, path, query=""):
-    """Drive the router's ASGI app for one GET and collect the response."""
-    api = FastAPI()
-    api.include_router(ld_router.router, prefix="/api/v1")
-    api.dependency_overrides[get_ld_service] = lambda: service
-
-    messages = []
-    delivered = []
-
-    async def receive():
-        if not delivered:
-            delivered.append(True)
-            return {"type": "http.request", "body": b"", "more_body": False}
-        return {"type": "http.disconnect"}
-
-    async def send(message):
-        messages.append(message)
-
-    asyncio.run(
-        api(
-            {
-                "type": "http",
-                "asgi": {"version": "3.0", "spec_version": "2.3"},
-                "http_version": "1.1",
-                "method": "GET",
-                "scheme": "http",
-                "path": path,
-                "raw_path": path.encode(),
-                "query_string": query.encode(),
-                "root_path": "",
-                "headers": [],
-                "client": ("testclient", 50000),
-                "server": ("testserver", 80),
-                "state": {},
-            },
-            receive,
-            send,
-        )
-    )
-    start = next(m for m in messages if m["type"] == "http.response.start")
-    body = b"".join(
-        bytes(m.get("body", b"")) for m in messages if m["type"] == "http.response.body"
-    )
-    return _Response(start["status"], body)
+    return call_ld_router(path, query, upstream=service)
 
 
 def test_a_query_variant_returns_the_upstream_entries_under_a_named_envelope():
-    service = StubService()
+    service = stub_service()
     response = call(
         service, "/api/v1/ld/12:49048170:A:C", "window=250000&r2_threshold=0.2"
     )
@@ -120,18 +56,11 @@ def test_a_query_variant_returns_the_upstream_entries_under_a_named_envelope():
     assert body["r2_threshold"] == 0.2
     assert body["panel"] == "sisu42"
     assert body["ld"] == [ENTRY]
-    assert service.calls == [
-        {
-            "variant": "12:49048170:A:C",
-            "window": 250000,
-            "r2_threshold": 0.2,
-            "panel": "sisu42",
-        }
-    ]
+    assert service.calls == [("scan", "12:49048170:A:C", 250000, 0.2, "sisu42")]
 
 
 def test_nothing_above_the_threshold_is_an_answer_and_not_an_error():
-    response = call(StubService(entries=[]), "/api/v1/ld/12:49048170:A:C")
+    response = call(stub_service(entries=[]), "/api/v1/ld/12:49048170:A:C")
     assert response.status_code == 200
     assert response.json()["ld"] == []
 
@@ -148,7 +77,7 @@ def test_nothing_above_the_threshold_is_an_answer_and_not_an_error():
     ],
 )
 def test_a_variant_that_is_not_chr_pos_ref_alt_is_refused_before_the_upstream(variant):
-    service = StubService()
+    service = stub_service()
     response = call(service, f"/api/v1/ld/{variant}")
     assert response.status_code == 422
     assert service.calls == [], "the upstream was called with an unvalidated variant"
@@ -156,11 +85,11 @@ def test_a_variant_that_is_not_chr_pos_ref_alt_is_refused_before_the_upstream(va
 
 @pytest.mark.parametrize("variant", ["12:49048170:A:C", "chr12:49048170:A:C", "X:1:A:T"])
 def test_the_spellings_the_suite_actually_uses_are_accepted(variant):
-    assert call(StubService(), f"/api/v1/ld/{variant}").status_code == 200
+    assert call(stub_service(), f"/api/v1/ld/{variant}").status_code == 200
 
 
 def test_a_panel_that_is_not_a_name_is_refused_but_an_unknown_name_is_not():
-    service = StubService()
+    service = stub_service()
     refused = call(service, "/api/v1/ld/12:49048170:A:C", "panel=a+b%26c%3Dd")
     assert refused.status_code == 422
     assert service.calls == []
@@ -173,7 +102,7 @@ def test_a_panel_that_is_not_a_name_is_refused_but_an_unknown_name_is_not():
 @pytest.mark.parametrize("window", ["0", "-1", "99999", "5000001"])
 def test_a_window_outside_the_bound_is_refused_rather_than_clamped(window):
     """Clamping returns fewer variants and reads as a sparse locus rather than as a limit."""
-    service = StubService()
+    service = stub_service()
     response = call(service, "/api/v1/ld/12:49048170:A:C", f"window={window}")
     assert response.status_code == 422
     assert service.calls == []
@@ -181,12 +110,12 @@ def test_a_window_outside_the_bound_is_refused_rather_than_clamped(window):
 
 @pytest.mark.parametrize("threshold", ["-0.1", "1.1"])
 def test_an_r2_threshold_outside_zero_to_one_is_refused(threshold):
-    response = call(StubService(), "/api/v1/ld/12:49048170:A:C", f"r2_threshold={threshold}")
+    response = call(stub_service(), "/api/v1/ld/12:49048170:A:C", f"r2_threshold={threshold}")
     assert response.status_code == 422
 
 
 def test_an_unknown_panel_is_422_naming_the_panels_the_upstream_has():
-    service = StubService(raises=LDPanelUnknown("1kg", ["sisu3", "sisu4", "sisu42"]))
+    service = stub_service(raises=LDPanelUnknown("1kg", ["sisu3", "sisu4", "sisu42"]))
     response = call(service, "/api/v1/ld/12:49048170:A:C", "panel=1kg")
     assert response.status_code == 422
     assert "sisu3, sisu4, sisu42" in response.json()["detail"]
@@ -194,7 +123,7 @@ def test_an_unknown_panel_is_422_naming_the_panels_the_upstream_has():
 
 def test_an_upstream_failure_is_502_and_not_the_callers_fault():
     response = call(
-        StubService(raises=LDUpstreamError("the LD server could not be reached")),
+        stub_service(raises=LDUpstreamError("the LD server could not be reached")),
         "/api/v1/ld/12:49048170:A:C",
     )
     assert response.status_code == 502
@@ -204,7 +133,7 @@ def test_an_upstream_failure_is_502_and_not_the_callers_fault():
 def test_a_variant_the_panel_does_not_carry_is_404_and_not_an_outage():
     """A 502 here sends the caller off to wait for a server that is working."""
     response = call(
-        StubService(raises=LDVariantNotInPanel("12:2427715:G:A is not in LD panel sisu42")),
+        stub_service(raises=LDVariantNotInPanel("12:2427715:G:A is not in LD panel sisu42")),
         "/api/v1/ld/12:2427715:G:A",
     )
     assert response.status_code == 404

@@ -6,7 +6,6 @@ service also serves files that spell X as a letter, so both spellings are driven
 Offline: the router runs in-process and the "GCS" range reads are local file reads.
 """
 
-import asyncio
 import importlib
 import json
 import pathlib
@@ -16,6 +15,8 @@ from urllib.parse import urlencode
 
 import pytest
 from fastapi import FastAPI
+from helpers.asgi import call_asgi
+from helpers.local_tabix import LocalTabixReads
 
 from app.core.exceptions import ParseException
 from app.core.responses import DATASET_VERSION_HEADER
@@ -23,7 +24,6 @@ from app.core.variant import Variant
 from app.dependencies import get_gene_name_mapping, get_variant_annotation_service
 from app.routers import variant_annotation
 from app.services import gcloud_tabix_base
-from app.services.tabix_query import parse_tabix_index
 from app.services.variant_annotation_service import VariantAnnotationService
 
 HEADER = (
@@ -59,21 +59,12 @@ def _write_tabix(path, contig_names: dict[str, str]) -> str:
     return f"{path}.gz"
 
 
-class _LocalFileService(VariantAnnotationService):
+class _LocalFileService(LocalTabixReads, VariantAnnotationService):
     """The real lookup path, with the index and block reads taken from local disk."""
 
     def __init__(self, sources: dict) -> None:
         self._sources = sources
         self._headers = {name: [h.encode() for h in HEADER] for name in sources}
-
-    async def _get_index(self, file_path):
-        with open(file_path + ".tbi", "rb") as fh:
-            return parse_tabix_index(fh.read())
-
-    async def _fetch_blocks(self, url, start, last_block_off):
-        with open(url, "rb") as fh:
-            fh.seek(start)
-            return fh.read(last_block_off - start + gcloud_tabix_base._MAX_BGZF_BLOCK)
 
 
 @pytest.fixture
@@ -109,38 +100,16 @@ def api(tmp_path, monkeypatch):
 
 def _request(app, method: str, path: str, params: dict, body: dict | None = None):
     """Drive the ASGI app directly: httpx (and so TestClient) is not installed here."""
-    payload = json.dumps(body).encode() if body is not None else b""
-    messages, sent = [], []
-
-    async def receive():
-        if not sent:
-            sent.append(True)
-            return {"type": "http.request", "body": payload, "more_body": False}
-        await asyncio.Event().wait()
-
-    async def send(message):
-        messages.append(message)
-
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0", "spec_version": "2.3"},
-        "http_version": "1.1",
-        "method": method,
-        "scheme": "http",
-        "path": path,
-        "raw_path": path.encode(),
-        "query_string": urlencode(params).encode(),
-        "root_path": "",
-        "headers": [(b"content-type", b"application/json")],
-        "client": ("testclient", 50000),
-        "server": ("testserver", 80),
-        "state": {},
-    }
-    asyncio.run(app(scope, receive, send))
-    start = next(m for m in messages if m["type"] == "http.response.start")
-    content = b"".join(m.get("body", b"") for m in messages if m["type"] == "http.response.body")
-    headers = {k.decode().lower(): v.decode() for k, v in start["headers"]}
-    return start["status"], headers, content
+    response = call_asgi(
+        app,
+        method,
+        path,
+        query=urlencode(params),
+        headers=[("content-type", "application/json")],
+        body=json.dumps(body).encode() if body is not None else b"",
+    )
+    headers = {k.decode().lower(): v.decode() for k, v in response.headers}
+    return response.status_code, headers, response.content
 
 
 def _rows(app, source: str, **params) -> list[dict]:

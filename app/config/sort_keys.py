@@ -52,7 +52,7 @@ def create_sort_key(
     def sort_key(x: list[bytes]) -> tuple:
         """Sort key function created from the configuration."""
         return tuple(
-            typ(x[idx]) if typ != bytes else x[idx] for idx, typ in zip(indices, types)
+            typ(x[idx]) if typ is not bytes else x[idx] for idx, typ in zip(indices, types)
         )
 
     return sort_key
@@ -112,7 +112,7 @@ SORT_CONFIG_CHROMATIN_PEAKS = [
 ]
 
 # open_chromatin keeps the numeric chrom string verbatim (see open_chromatin config;
-# "1".."25", no "chr" prefix), so chrom is sorted as bytes; a range/variant/peak query
+# "1".."24" and "26", no "chr" prefix), so chrom is sorted as bytes; a range/variant/peak query
 # is single-chromosome, so start/end fully order the merged per-resource streams within it.
 SORT_CONFIG_OPEN_CHROMATIN = [
     ("chrom", bytes),
@@ -121,14 +121,14 @@ SORT_CONFIG_OPEN_CHROMATIN = [
 ]
 
 # variant_effect keeps the numeric chrom string verbatim (see variant_effect config;
-# "1".."25", no "chr" prefix), so chrom is sorted as bytes; a variant/region/gene query
+# "1".."24" and "26", no "chr" prefix), so chrom is sorted as bytes; a variant/region/gene query
 # is single-chromosome, so pos fully orders the merged per-dataset streams within it.
 SORT_CONFIG_VARIANT_EFFECT = [
     ("chrom", bytes),
     ("pos", int),
 ]
 
-# mpra keeps the numeric chrom string verbatim (see mpra config; "1".."25", no "chr"
+# mpra keeps the numeric chrom string verbatim (see mpra config; "1".."24" and "26", no "chr"
 # prefix), so chrom is sorted as bytes; a variant/region/gene query is single-chromosome,
 # so pos fully orders the merged per-dataset streams within it.
 SORT_CONFIG_MPRA = [

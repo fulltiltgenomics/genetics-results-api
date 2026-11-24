@@ -34,25 +34,32 @@ MAX_TRAITS = 50
 _EXAMPLE_TSV_HEADER = "dataset\ttrait\tgene\tgene_id\tgene_chr\tgene_start_pos\tgene_end_pos\tannotation\tmlog10p_burden\tbeta\tse\ttotal_variants\ttotal_variants_pheno\tn_cases\tn_controls\ttrait_original\tflags"
 _EXAMPLE_TSV_ROW = "genebass\tOperative procedures - main OPCS4 | S06.8 Other specified other excision of skin\tNOC2L\tENSG00000188976\t1\t944203\t959309\tmissense|LC\t4.83494e+00\t5.95443e-02\t1.37380e-02\t608\t608\t195\t394646\tcategorical_41210_both_sexes_S068_\tNA"
 
-_EXAMPLE_JSON_ROW = {
-    "dataset": "genebass",
-    "trait": "Operative procedures - main OPCS4 | S06.8 Other specified other excision of skin",
-    "gene": "NOC2L",
-    "gene_id": "ENSG00000188976",
-    "gene_chr": 1,
-    "gene_start_pos": 944203,
-    "gene_end_pos": 959309,
-    "annotation": "missense|LC",
-    "mlog10p_burden": 4.83494,
-    "beta": 0.0595443,
-    "se": 0.013738,
-    "total_variants": 608,
-    "total_variants_pheno": 608,
-    "n_cases": 195,
-    "n_controls": 394646,
-    "trait_original": "categorical_41210_both_sexes_S068_",
-    "flags": None,
-}
+# one value per gene_based_header_schema column, in its order
+_EXAMPLE_JSON_ROW = dict(
+    zip(
+        gene_based_header_schema,
+        (
+            "genebass",
+            "Operative procedures - main OPCS4 | S06.8 Other specified other excision of skin",
+            "NOC2L",
+            "ENSG00000188976",
+            1,
+            944203,
+            959309,
+            "missense|LC",
+            4.83494,
+            0.0595443,
+            0.013738,
+            608,
+            608,
+            195,
+            394646,
+            "categorical_41210_both_sexes_S068_",
+            None,
+        ),
+        strict=True,
+    )
+)
 
 
 async def _run_tabix(data_file: dict, gene_coords: list[dict], file_path: str | None = None) -> bytes:
@@ -62,8 +69,10 @@ async def _run_tabix(data_file: dict, gene_coords: list[dict], file_path: str | 
     query can run against one per-trait file instead.
     """
     file_path = file_path or data_file["gene_based"]["file"]
+    # the files are point-indexed on gene_start, so the gene's own start is the whole query:
+    # asking for start..end also returns every gene that merely STARTS inside the span
     regions = "\n".join(
-        f"{c['chrom']}\t{c['gene_start']}\t{c['gene_end']}" for c in gene_coords
+        f"{c['chrom']}\t{c['gene_start']}\t{c['gene_start']}" for c in gene_coords
     )
     process = await asyncio.create_subprocess_exec(
         "tabix",

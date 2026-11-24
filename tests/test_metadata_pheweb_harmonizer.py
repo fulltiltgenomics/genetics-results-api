@@ -8,9 +8,10 @@ stub DataAccess, so neither a live server nor GCS access is needed.
 import asyncio
 import json
 
+from helpers.harmonizer import harmonize_by_code, metadata_config
+
 from app.routers.metadata import trait_name_mapping
 from app.services.config_util import get_harmonizer_types_for_resource
-from app.services.metadata_harmonizer import MetadataHarmonizer
 
 # one binary meta-analysis trait, one ancestry stratum of it, one quantitative trait.
 # `category` is the sex stratum in this file shape, not a trait type.
@@ -37,20 +38,17 @@ PHEWEB_ITEMS = [
     },
 ]
 
-CONFIG = {
-    "type": "pheweb",
-    "author": "BRaVa Consortium",
-    "publication_date": "2026-05-24",
-    "version_label": "2026",
-    "resource": "brava",
-}
+CONFIG = metadata_config(
+    type="pheweb",
+    resource="brava",
+    author="BRaVa Consortium",
+    publication_date="2026-05-24",
+    version_label="2026",
+)
 
 
 def _harmonize():
-    rows = MetadataHarmonizer().harmonize_metadata(
-        "brava", PHEWEB_ITEMS, {"metadata": CONFIG}
-    )
-    return {row.phenotype_code: row for row in rows}
+    return harmonize_by_code("brava", PHEWEB_ITEMS, CONFIG)
 
 
 def test_binary_item_keeps_case_and_control_counts():

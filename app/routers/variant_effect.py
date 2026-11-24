@@ -1,14 +1,11 @@
 import logging
-import time
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
+from fastapi import APIRouter, Depends, Path, Query, Request, Response
 
 import app.config.common as config_common
 import app.config.variant_effect as config
-from app.core.exceptions import NotFoundException
-from app.core.responses import range_response
-from app.core.variant import var_re
+from app.core.range_endpoints import RangeEndpoints
 from app.dependencies import get_data_access_variant_effect, get_gene_name_mapping
 from app.services.data_access_variant_effect import DataAccessVariantEffect
 from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
@@ -23,48 +20,9 @@ _VARIANT_EFFECT_TSV_EXAMPLE = (
 )
 
 
-def _resolve_resources(resources: list[str] | None) -> list[str]:
-    """Default to all configured resources and reject unknown ones.
-
-    Resources are drawn from the per-dataset config entries (both Marderstein
-    predictor datasets share the resource "marderstein"), so the set is deduped.
-    """
-    available = sorted({c["resource"] for c in config.variant_effect_data})
-    if resources is None:
-        return available
-    invalid = [r for r in resources if r not in available]
-    if invalid:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Unrecognized resource(s): {', '.join(invalid)}. Available resources: "
-            + ", ".join(available),
-        )
-    return resources
-
-
-async def _range_stream_response(
-    request: Request,
-    stream_coro,
-    format: Literal["tsv", "json"],
-    start_time: float,
-) -> Response:
-    """Await a data-access stream coroutine and wrap it in a range response."""
-    try:
-        stream = await stream_coro
-    except NotFoundException as e:
-        # includes GeneNotFoundException (by-gene resolution) -> 404
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.exception(e)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-    return await range_response(
-        str(request.url),
-        stream,
-        config.variant_effect_header_schema,
-        format,
-        start_time,
-    )
+_endpoints = RangeEndpoints(
+    config.variant_effect_data, config.variant_effect_header_schema, logger, per_dataset=True
+)
 
 
 @router.get(
@@ -107,39 +65,7 @@ async def variant_effect_by_variant(
     the matching allele pair, otherwise every model/context row at the position is
     returned.
     """
-    start_time = time.time()
-
-    parts = var_re.split(variant)
-    if len(parts) < 2:
-        raise HTTPException(
-            status_code=422,
-            detail="variant must be chr:pos:ref:alt or chr:pos (separators - _ : |)",
-        )
-    chrom = parts[0]
-    try:
-        pos = int(parts[1])
-    except ValueError:
-        raise HTTPException(status_code=422, detail="position must be an integer")
-
-    ref = parts[2] if len(parts) >= 4 else None
-    alt = parts[3] if len(parts) >= 4 else None
-
-    resources = _resolve_resources(resources)
-
-    return await _range_stream_response(
-        request,
-        data_access.stream_by_variant(
-            chrom,
-            pos,
-            resources,
-            config_common.read_chunk_size,
-            config_common.response_chunk_size,
-            ref,
-            alt,
-        ),
-        format,
-        start_time,
-    )
+    return await _endpoints.by_variant(request, variant, resources, format, data_access)
 
 
 @router.get(
@@ -175,25 +101,8 @@ async def variant_effect_by_region(
     data_access: DataAccessVariantEffect = Depends(get_data_access_variant_effect),
 ) -> Response:
     """Get predicted variant effects for every scored variant in the region [start, end]."""
-    start_time = time.time()
-
-    if end < start:
-        raise HTTPException(status_code=422, detail="end must be >= start")
-
-    resources = _resolve_resources(resources)
-
-    return await _range_stream_response(
-        request,
-        data_access.stream_by_region(
-            chrom,
-            start,
-            end,
-            resources,
-            config_common.read_chunk_size,
-            config_common.response_chunk_size,
-        ),
-        format,
-        start_time,
+    return await _endpoints.by_region(
+        request, chrom, start, end, resources, format, data_access
     )
 
 
@@ -237,20 +146,12 @@ async def variant_effect_by_gene(
     ),
 ) -> Response:
     """Get predicted variant effects for scored variants within a gene (± window)."""
-    start_time = time.time()
-
-    resources = _resolve_resources(resources)
-
-    return await _range_stream_response(
+    return await _endpoints.by_gene(
         request,
-        data_access.stream_by_gene(
-            gene,
-            gene_name_and_position_mapping,
-            resources,
-            window,
-            config_common.read_chunk_size,
-            config_common.response_chunk_size,
-        ),
+        gene,
+        window,
+        resources,
         format,
-        start_time,
+        data_access,
+        gene_name_and_position_mapping,
     )

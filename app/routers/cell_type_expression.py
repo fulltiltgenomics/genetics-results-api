@@ -21,9 +21,10 @@ router = APIRouter()
 _SUMMARY_EXAMPLE = (
     "gene_id\tchrom\tgene_start\tgene_end\tgene_name\tsource_gene_ids\tcell_type_rollup_ontology_term_id"
     "\tcell_type_rollup\ttissue_general_ontology_term_id\ttissue_general\tn_cells\tn_donors\tn_datasets"
-    "\tmean_log1p_cp10k\tfrac_expressing\tdonor_pseudobulk_mean_cp10k\tdonor_pseudobulk_n_donors\ttau\n"
+    "\tmean_log1p_cp10k\tfrac_expressing\tdonor_pseudobulk_mean_cp10k\tdonor_pseudobulk_n_donors\ttau"
+    "\tlow_support\n"
     "ENSG00000227232.6\t1\t14696\t29570\tWASH7P\tENSG00000227232\tCL:0000057\tfibroblast"
-    "\tUBERON:0002048\tlung\t2234\t3\t1\t0.0074\t0.0113\t0.0\t3\tNA\n..."
+    "\tUBERON:0002048\tlung\t2234\t3\t1\t0.0074\t0.0113\t0.0\t3\tNA\ttrue\n..."
 )
 _DATASET_EXAMPLE = (
     "gene_id\tchrom\tgene_start\tgene_end\tgene_name\tsource_gene_id\tdataset_id\t...\tn_cells\tn_donors"
@@ -86,7 +87,10 @@ async def cell_type_expression(
         description=(
             "summary: normal tissue, pooled across datasets per (cell type, tissue), leaving out "
             "broad lineage labels such as 'leukocyte' or 'epithelial cell' and datasets whose "
-            "donors are all prenatal. "
+            "donors are all prenatal. Each row carries low_support: true when the pooled row has "
+            "few donors or cells, with a higher bar for a row that comes from a single dataset "
+            "(the thresholds are in app.config.cell_type_expression); such a row is served, and "
+            "is meant to be hidden by default. "
             "dataset: every group of every dataset that passes the suppression thresholds. "
             "A dataset that has at least one such group and measured the gene but has no row "
             "for it gets one placeholder row (status=measured_no_row): the gene has no "

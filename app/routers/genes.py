@@ -132,7 +132,7 @@ async def genes_in_region(
             .replace("chr", "")
             .replace("x", "23")
             .replace("y", "24")
-            .replace("mt", "25")
+            .replace("mt", "26")
             .strip()
         )
     except ValueError:

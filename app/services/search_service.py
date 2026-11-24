@@ -493,6 +493,9 @@ class SearchIndex:
             query,
             [item["search_key"] for item in filtered_items],
             scorer=fuzz.WRatio,
+            # WRatio compares raw characters: without this "pcsk9" scores 0 against "PCSK9"
+            # and is cut before the case-insensitive re-ranking below ever sees it
+            processor=str.lower,
             limit=limit * 3,  # get more candidates for re-ranking
             score_cutoff=60,  # minimum similarity threshold
         )

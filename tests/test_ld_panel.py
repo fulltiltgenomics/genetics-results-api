@@ -10,16 +10,14 @@ dispatch between a local panel and the upstream proxy. Offline: nothing touches 
 """
 
 import asyncio
-import json
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from fastapi import FastAPI
+from helpers.ld import StubLDService, call_ld_router
+from helpers.local_tabix import LocalTabixReads
 
 from app.config import ld as ld_config
-from app.dependencies import get_ld_panel_service, get_ld_service
-from app.routers import ld as ld_router
 from app.services import gcloud_tabix_base, ld_panel_service, startup_checks
 from app.services.gcloud_tabix_base import GCloudTabixBase
 from app.services.ld_panel_service import LDPanelService
@@ -29,7 +27,6 @@ from app.services.ld_service import (
     LDService,
     LDVariantNotInPanel,
 )
-from app.services.tabix_query import parse_tabix_index
 
 PANEL = "test_panel"
 
@@ -69,17 +66,8 @@ def _write_panel(tmp_path) -> str:
     return str(tmp_path / "ld_chr{chrom}.tsv.gz")
 
 
-class _LocalPanel(ld_panel_service._LDPanel):
+class _LocalPanel(LocalTabixReads, ld_panel_service._LDPanel):
     """The real read path with the index and block reads taken from local disk."""
-
-    async def _get_index(self, file_path):
-        with open(file_path + ".tbi", "rb") as fh:
-            return parse_tabix_index(fh.read())
-
-    async def _fetch_blocks(self, url, start, last_block_off):
-        with open(url, "rb") as fh:
-            fh.seek(start)
-            return fh.read(last_block_off - start + gcloud_tabix_base._MAX_BGZF_BLOCK)
 
 
 @pytest.fixture
@@ -247,65 +235,13 @@ def test_a_variant_against_itself_is_one_by_definition(panels):
 # ------------------------------------------------------------------------------ the router
 
 
-class StubUpstream:
-    def __init__(self, entries=None):
-        self.entries = entries if entries is not None else []
-        self.calls = []
-
-    async def variants_in_ld(self, variant, *, window, r2_threshold, panel):
-        self.calls.append(("scan", variant, window, r2_threshold, panel))
-        return self.entries
-
-    async def pair(self, variant, other, *, r2_threshold, panel):
-        self.calls.append(("pair", variant, other, r2_threshold, panel))
-        return self.entries
-
-
 def call(panel_service, upstream, path, query=""):
-    api = FastAPI()
-    api.include_router(ld_router.router, prefix="/api/v1")
-    api.dependency_overrides[get_ld_panel_service] = lambda: panel_service
-    api.dependency_overrides[get_ld_service] = lambda: upstream
-
-    messages, delivered = [], []
-
-    async def receive():
-        if not delivered:
-            delivered.append(True)
-            return {"type": "http.request", "body": b"", "more_body": False}
-        return {"type": "http.disconnect"}
-
-    async def send(message):
-        messages.append(message)
-
-    asyncio.run(
-        api(
-            {
-                "type": "http",
-                "asgi": {"version": "3.0", "spec_version": "2.3"},
-                "http_version": "1.1",
-                "method": "GET",
-                "scheme": "http",
-                "path": path,
-                "raw_path": path.encode(),
-                "query_string": query.encode(),
-                "root_path": "",
-                "headers": [],
-                "client": ("testclient", 50000),
-                "server": ("testserver", 80),
-                "state": {},
-            },
-            receive,
-            send,
-        )
-    )
-    start = next(m for m in messages if m["type"] == "http.response.start")
-    body = b"".join(bytes(m.get("body", b"")) for m in messages if m["type"] == "http.response.body")
-    return start["status"], json.loads(body)
+    response = call_ld_router(path, query, upstream=upstream, panel_service=panel_service)
+    return response.status_code, response.json()
 
 
 def test_the_route_serves_a_local_panel_and_states_its_floor_and_cap(panels):
-    upstream = StubUpstream()
+    upstream = StubLDService()
     status, body = call(panels, upstream, "/api/v1/ld/22:1000:A:G", f"panel={PANEL}&r2_threshold=0")
     assert status == 200
     assert body["panel"] == PANEL
@@ -318,7 +254,7 @@ def test_the_route_serves_a_local_panel_and_states_its_floor_and_cap(panels):
 
 
 def test_any_other_panel_name_goes_to_the_upstream_with_its_own_fields(panels):
-    upstream = StubUpstream(
+    upstream = StubLDService(
         [{"variation1": "22:1000:A:G", "variation2": "22:1500:C:T", "r2": 0.8, "d_prime": 0.9}]
     )
     status, body = call(panels, upstream, "/api/v1/ld/22:1000:A:G", "panel=sisu42")
@@ -333,13 +269,13 @@ def test_any_other_panel_name_goes_to_the_upstream_with_its_own_fields(panels):
 
 def test_fields_selects_a_subset_in_the_order_asked_without_duplicates(panels):
     status, body = call(
-        panels, StubUpstream(), "/api/v1/ld/22:1000:A:G", f"panel={PANEL}&r2_threshold=0&fields=r2,r,r2"
+        panels, StubLDService(), "/api/v1/ld/22:1000:A:G", f"panel={PANEL}&r2_threshold=0&fields=r2,r,r2"
     )
     assert status == 200
     assert body["fields"] == ["r2", "r"]
     assert body["ld"][0] == {"variation1": "22:1000:A:G", "variation2": "22:1500:C:T", "r2": 0.81, "r": 0.9}
 
-    status, body = call(panels, StubUpstream(), "/api/v1/ld/22:1000:A:G", f"panel={PANEL}&fields=r")
+    status, body = call(panels, StubLDService(), "/api/v1/ld/22:1000:A:G", f"panel={PANEL}&fields=r")
     assert set(body["ld"][0]) == {"variation1", "variation2", "r"}
 
 
@@ -354,13 +290,13 @@ def test_fields_selects_a_subset_in_the_order_asked_without_duplicates(panels):
     ],
 )
 def test_a_field_the_panel_lacks_or_nobody_has_is_422_naming_what_there_is(panels, fields, detail):
-    status, body = call(panels, StubUpstream(), "/api/v1/ld/22:1000:A:G", f"panel={PANEL}&fields={fields}")
+    status, body = call(panels, StubLDService(), "/api/v1/ld/22:1000:A:G", f"panel={PANEL}&fields={fields}")
     assert status == 422
     assert detail in body["detail"]
 
 
 def test_asking_the_upstream_for_signed_r_is_422_rather_than_a_null(panels):
-    upstream = StubUpstream()
+    upstream = StubLDService()
     status, body = call(panels, upstream, "/api/v1/ld/22:1000:A:G", "panel=sisu42&fields=r")
     assert status == 422
     assert "LD panel sisu42 does not carry r; it carries r2, d_prime" == body["detail"]
@@ -368,42 +304,42 @@ def test_asking_the_upstream_for_signed_r_is_422_rather_than_a_null(panels):
 
 
 def test_the_router_turns_a_missing_variant_into_404(panels):
-    status, body = call(panels, StubUpstream(), "/api/v1/ld/22:1000:G:A", f"panel={PANEL}")
+    status, body = call(panels, StubLDService(), "/api/v1/ld/22:1000:G:A", f"panel={PANEL}")
     assert status == 404
     assert "22:1000:A:G" in body["detail"]
 
 
 @pytest.mark.parametrize("variant", ["Y:1000:A:G", "MT:1000:A:G", "22:1000:N:A"])
 def test_a_variant_the_panel_engine_cannot_parse_is_422_on_a_local_panel(panels, variant):
-    status, _body = call(panels, StubUpstream(), f"/api/v1/ld/{variant}", f"panel={PANEL}")
+    status, _body = call(panels, StubLDService(), f"/api/v1/ld/{variant}", f"panel={PANEL}")
     assert status == 422
 
 
 def test_the_pair_route_answers_found_below_floor_and_missing(panels):
-    status, body = call(panels, StubUpstream(), "/api/v1/ld/22:1000:A:G/22:1500:C:T", f"panel={PANEL}")
+    status, body = call(panels, StubLDService(), "/api/v1/ld/22:1000:A:G/22:1500:C:T", f"panel={PANEL}")
     assert status == 200
     assert body["variant"] == "22:1000:A:G" and body["other"] == "22:1500:C:T"
     assert body["r2_threshold"] == 0.0
     assert body["ld"] == [{"variation1": "22:1000:A:G", "variation2": "22:1500:C:T", "r": 0.9, "r2": 0.81}]
 
-    status, body = call(panels, StubUpstream(), "/api/v1/ld/22:1000:A:G/22:1000:A:T", f"panel={PANEL}&fields=r")
+    status, body = call(panels, StubLDService(), "/api/v1/ld/22:1000:A:G/22:1000:A:T", f"panel={PANEL}&fields=r")
     assert status == 200 and body["ld"] == [] and body["r2_floor"] == 0.01
 
-    status, body = call(panels, StubUpstream(), "/api/v1/ld/22:1000:A:G/22:7000:G:C", f"panel={PANEL}")
+    status, body = call(panels, StubLDService(), "/api/v1/ld/22:1000:A:G/22:7000:G:C", f"panel={PANEL}")
     assert status == 404 and body["detail"].startswith("22:7000:G:C is not in LD panel")
 
 
 def test_the_pair_route_refuses_what_the_panel_cannot_hold_before_reading(panels):
-    status, body = call(panels, StubUpstream(), "/api/v1/ld/22:1000:A:G/X:5000:A:C", f"panel={PANEL}")
+    status, body = call(panels, StubLDService(), "/api/v1/ld/22:1000:A:G/X:5000:A:C", f"panel={PANEL}")
     assert status == 422 and "different chromosomes" in body["detail"]
 
-    status, body = call(panels, StubUpstream(), "/api/v1/ld/22:1000:A:G/22:900000:T:C", f"panel={PANEL}")
+    status, body = call(panels, StubLDService(), "/api/v1/ld/22:1000:A:G/22:900000:T:C", f"panel={PANEL}")
     assert status == 422
     assert "899,000 bp apart" in body["detail"] and "up to 10,000 bp" in body["detail"]
 
 
 def test_the_pair_route_relays_an_upstream_panel(panels):
-    upstream = StubUpstream(
+    upstream = StubLDService(
         [{"variation1": "22:1000:A:G", "variation2": "22:1500:C:T", "r2": 0.8, "d_prime": 0.9}]
     )
     status, body = call(panels, upstream, "/api/v1/ld/22:1000:A:G/22:1500:C:T", "panel=sisu42&r2_threshold=0.2&fields=r2")
@@ -413,7 +349,7 @@ def test_the_pair_route_relays_an_upstream_panel(panels):
 
 
 def test_panels_lists_the_local_panels_with_their_semantics(panels):
-    status, body = call(panels, StubUpstream(), "/api/v1/ld/panels")
+    status, body = call(panels, StubLDService(), "/api/v1/ld/panels")
     assert status == 200
     assert body["panels"] == [
         {

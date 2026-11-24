@@ -7,65 +7,33 @@ The properties under test are: the sandbox token is discriminated on the JOSE ``
 rather than on dots (so Google Identity Tokens keep working), it is checked *before* the
 shared-secret comparison and never falls through to it or to ``verify_oauth2_token``, and it
 fails closed when the signing key is unset.
+
+What both validators must refuse is tests/sandbox_contract.py's `TokenContract`, collected here
+as `TestTokenContract` and driven through `get_verified_user`.
 """
 
 import base64
-import json
 import logging
-import time
 
 import jwt
 import pytest
 from fastapi import HTTPException, Request
+from helpers.asgi import request_with_headers as _request
+from helpers.sandbox import INTERNAL_SECRET, configure_credentials
+from helpers.sandbox import mint as _mint
+from sandbox_contract import SIGNING_KEY, TokenContract
 
 import app.config.common as config
 from app.core import auth, sandbox_token
-
-INTERNAL_SECRET = "test-internal-secret"
-SIGNING_KEY = "test-sandbox-signing-key-that-is-32-bytes+"
-
-
-def _request(headers: dict[str, str]) -> Request:
-    return Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": "/api/v1/gene/GPT",
-            "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
-        }
-    )
 
 
 def _bearer(token: str) -> Request:
     return _request({"Authorization": f"Bearer {token}"})
 
 
-def _mint(key=SIGNING_KEY, audience="results-api", issuer="chat-backend", age=0, ttl=300, **over):
-    iat = int(time.time()) - age
-    claims = {
-        "iss": issuer,
-        "aud": audience,
-        "sub": "user@finngen.fi",
-        "sid": "session-abc",
-        "jti": "exec-123",
-        "iat": iat,
-        "exp": iat + ttl,
-        "scope": "query:views",
-    }
-    for k, v in over.items():
-        if v is None:
-            claims.pop(k, None)
-        else:
-            claims[k] = v
-    return jwt.encode(claims, key, algorithm="HS256")
-
-
 @pytest.fixture(autouse=True)
 def sandbox_config(monkeypatch):
-    monkeypatch.setattr(config, "internal_api_secret", INTERNAL_SECRET)
-    monkeypatch.setattr(config, "sandbox_token_signing_key", SIGNING_KEY)
-    monkeypatch.setattr(config, "allowed_email_domains", {"finngen.fi"})
-    monkeypatch.setattr(config, "allowed_emails", set())
+    configure_credentials(monkeypatch)
 
 
 # --- happy path -----------------------------------------------------------------------------
@@ -91,79 +59,25 @@ def test_principal_is_left_on_request_state_for_the_usage_log():
 # --- expiry, claims, audience, signature ------------------------------------------------------
 
 
-def test_expired_token_is_rejected():
-    with pytest.raises(HTTPException) as exc:
-        auth.get_verified_user(_bearer(_mint(age=400, ttl=300)))
-    assert exc.value.status_code == 401
+@pytest.fixture
+def accepts():
+    """Whether the bearer authenticated as the sandbox principal; a refusal must be a 401."""
+
+    def accepts(token):
+        try:
+            identity = auth.get_verified_user(_bearer(token))
+        except HTTPException as exc:
+            assert exc.status_code == 401
+            return False
+        assert identity == "sandbox:user@finngen.fi"
+        return True
+
+    return accepts
 
 
-def test_backdated_iat_is_rejected():
-    with pytest.raises(HTTPException):
-        auth.get_verified_user(_bearer(_mint(age=3600, ttl=7200)))
-
-
-@pytest.mark.parametrize("claim", ["iss", "aud", "sub", "sid", "jti", "iat", "exp", "scope"])
-def test_every_required_claim_is_required(claim):
-    with pytest.raises(HTTPException):
-        auth.get_verified_user(_bearer(_mint(**{claim: None})))
-
-
-@pytest.mark.parametrize("claim", ["sub", "sid", "jti"])
-def test_empty_attribution_claim_is_rejected(claim):
-    """`options={"require": ...}` only rejects missing/null; an empty string yields a principal
-    attributing the query to nobody, which defeats the point of the credential."""
-    with pytest.raises(HTTPException):
-        auth.get_verified_user(_bearer(_mint(**{claim: ""})))
-
-
-def test_multi_audience_token_is_rejected():
-    """PyJWT reads a list `aud` as membership, so this would otherwise validate at BOTH
-    services and one-token-per-audience would be a minter property, not a validator one."""
-    with pytest.raises(HTTPException):
-        auth.get_verified_user(_bearer(_mint(audience=["db-api", "results-api"])))
-
-
-def test_single_element_list_audience_is_also_rejected():
-    with pytest.raises(HTTPException):
-        auth.get_verified_user(_bearer(_mint(audience=["results-api"])))
-
-
-def test_freshly_minted_token_from_a_slightly_fast_minter_is_accepted():
-    """iat 3s in the future: PyJWT >= 2.10 raises ImmatureSignatureError with leeway=0, and the
-    minter and this service are different pods with different clocks."""
-    assert auth.get_verified_user(_bearer(_mint(age=-3))) == "sandbox:user@finngen.fi"
-
-
-def test_leeway_does_not_widen_the_300s_iat_bound():
-    """The MAX_TOKEN_AGE_SECONDS check is separate from the decoder and stays exact."""
-    assert auth.get_verified_user(_bearer(_mint(age=299, ttl=600))) == "sandbox:user@finngen.fi"
-    with pytest.raises(HTTPException):
-        auth.get_verified_user(_bearer(_mint(age=301, ttl=600)))
-
-
-def test_db_api_token_cannot_be_replayed_at_results_api():
-    """Audience binding: same key, same claims, minted for the other service."""
-    with pytest.raises(HTTPException):
-        auth.get_verified_user(_bearer(_mint(audience="db-api")))
-
-
-def test_foreign_issuer_is_rejected():
-    with pytest.raises(HTTPException):
-        auth.get_verified_user(_bearer(_mint(issuer="someone-else")))
-
-
-def test_wrong_signing_key_is_rejected():
-    with pytest.raises(HTTPException):
-        auth.get_verified_user(_bearer(_mint(key="a-different-key-also-32-bytes-long!")))
-
-
-def test_tampered_payload_is_rejected():
-    header, payload, signature = _mint().split(".")
-    claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
-    claims["sub"] = "attacker@example.com"
-    forged = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
-    with pytest.raises(HTTPException):
-        auth.get_verified_user(_bearer(f"{header}.{forged}.{signature}"))
+class TestTokenContract(TokenContract):
+    audience = "results-api"
+    other_audience = "db-api"
 
 
 # fetches Google's OAuth signing certs, so this one needs the network

@@ -1,5 +1,6 @@
 """Configuration for exome results data."""
 
+from app.config import credible_sets
 from app.config.profile import load_profile_module
 
 # header schema for exome results
@@ -27,14 +28,8 @@ exome_header_schema = {
     "trait_original": str,
 }
 
-# column names for merging data across files
-variant_columns = {
-    "chr": b"chr",
-    "pos": b"pos",
-    "ref": b"ref",
-    "alt": b"alt",
-    "dataset": b"dataset",
-}
+# column names for merging data across files: exome files name them as credible-set files do
+variant_columns = credible_sets.variant_columns
 
 # exome data files loaded from profile
 _profile = load_profile_module("exome_results")

@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 import app.config.cell_type_expression as cell_type_expression_config
+import app.config.gene_summary as gene_summary_config
 import app.config.protein_structure as protein_structure_config
 from app.core.auth import warn_if_wildcard_allow_list
 from app.core.logging_config import setup_logging
@@ -27,6 +28,7 @@ from app.routers import (
     gene_based,
     gene_disease,
     gene_groups,
+    gene_summary,
     genes,
     hla,
     ld,
@@ -142,6 +144,15 @@ def include_protein_structure(
     return True
 
 
+def include_gene_summary(app: FastAPI) -> bool:
+    """Register the gene summary route only where the deployment names a release, for the
+    reason `include_cell_type_expression` gives."""
+    if gene_summary_config.prefix is None:
+        return False
+    app.include_router(gene_summary.router, prefix="/api/v1", tags=["gene-summary"])
+    return True
+
+
 # FastAPI registers its docs/openapi routes with Starlette's add_route, which does NOT
 # apply the app-level `dependencies` below — so the built-in docs_url/redoc_url/openapi_url
 # were served without auth_required. Combined with the auth-gateway's `Authorization: Bearer`
@@ -194,6 +205,7 @@ app.include_router(colocalization.router, prefix="/api/v1", tags=["colocalizatio
 app.include_router(expression.router, prefix="/api/v1", tags=["expression"])
 include_cell_type_expression(app)
 include_protein_structure(app)
+include_gene_summary(app)
 app.include_router(genes.router, prefix="/api/v1", tags=["genes"])
 app.include_router(gene_groups.router, prefix="/api/v1", tags=["gene-groups"])
 app.include_router(gene_disease.router, prefix="/api/v1", tags=["gene-disease"])

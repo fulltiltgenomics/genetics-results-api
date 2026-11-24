@@ -8,13 +8,15 @@ import app.config.coloc as coloc_config
 import app.config.common as config_common
 from app.core.exceptions import (
     DataException,
+    GeneNotFoundException,
     NotFoundException,
     ParseException,
 )
 from app.core.responses import range_response
 from app.core.variant import Variant
-from app.dependencies import get_data_access_coloc
+from app.dependencies import get_data_access_coloc, get_gene_name_mapping
 from app.services.data_access_coloc import DataAccessColoc
+from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
 
 logger = logging.getLogger(__name__)
 
@@ -34,49 +36,29 @@ _BY_VARIANT_PROPERTIES = {
     for name, t in coloc_config.coloc_credset_header_schema.items()
 }
 
-_BY_VARIANT_EXAMPLE_ROW = {
-    "resource1": "finngen",
-    "version1": "R14",
-    "resource2": "finngen",
-    "version2": "R14",
-    "dataset1": "FinnGen_R14",
-    "dataset2": "FinnGen_kanta",
-    "data_type1": "GWAS",
-    "data_type2": "GWAS",
-    "trait1": "E4_FH",
-    "trait1_original": "E4_FH",
-    "trait2": "nonHDL",
-    "trait2_original": "nonHDL",
-    "cell_type1": "NA",
-    "cell_type2": "NA",
-    "cs1_id": "chr1:53539974-56539974_1",
-    "cs2_id": "chr1:47813785-56873172_1",
-    "hit1": "1:55039974:G:T",
-    "hit2": "1:55039974:G:T",
-    "hit1_beta": 1,
-    "hit1_mlog10p": 100,
-    "hit2_beta": 2,
-    "hit2_mlog10p": 9.2,
-    "chr": 1,
-    "region_start_min": 47813785,
-    "region_end_max": 56873172,
-    "PP.H0.abf": 0,
-    "PP.H1.abf": 0,
-    "PP.H2.abf": 2.992e-15,
-    "PP.H3.abf": 2.643e-06,
-    "PP.H4.abf": 1,
-    "nsnps": 21673,
-    "nsnps1": 21725,
-    "nsnps2": 56697,
-    "cs1_log10bf": 11.4888,
-    "cs2_log10bf": 1e308,
-    "clpp": 0.9987,
-    "clpa": 0.9987,
-    "cs1_size": 1,
-    "cs2_size": 1,
-    "cs_overlap": 1,
-    "topInOverlap": "1,1",
-}
+# one value per coloc_header_schema column, in its order
+_BY_VARIANT_EXAMPLE_ROW = dict(
+    zip(
+        coloc_config.coloc_header_schema,
+        (
+            "finngen", "R14", "finngen", "R14",
+            "FinnGen_R14", "FinnGen_kanta", "GWAS", "GWAS",
+            "E4_FH", "E4_FH", "nonHDL", "nonHDL",
+            "NA", "NA",
+            "chr1:53539974-56539974_1", "chr1:47813785-56873172_1",
+            "1:55039974:G:T", "1:55039974:G:T",
+            1, 100, 2, 9.2,
+            1, 47813785, 56873172,
+            0, 0, 2.992e-15, 2.643e-06, 1,
+            21673, 21725, 56697,
+            11.4888, 1e308,
+            0.9987, 0.9987,
+            1, 1, 1,
+            "1,1",
+        ),
+        strict=True,
+    )
+)
 
 _BY_VARIANT_TSV_EXAMPLE = (
     "\t".join(coloc_config.coloc_header_schema)
@@ -403,3 +385,66 @@ async def colocalization_by_credible_set_id(
         else coloc_config.coloc_header_schema
     )
     return await range_response(str(request.url), stream, schema, format, start_time)
+
+
+@router.get(
+    "/colocalization_by_gene/{gene}",
+    summary="Get colocalized pairs in which one side is a QTL of the given gene.",
+    responses={
+        200: {
+            "description": "Successful response",
+            "content": {
+                "text/tab-separated-values": {"schema": {"type": "string"}},
+                "application/json": {
+                    "schema": {"type": "array", "items": {"type": "object"}}
+                },
+            },
+        },
+        401: {"description": "Not authenticated"},
+        404: {"description": "Gene not found, or no gene-indexed colocalization data"},
+        422: {"description": "Invalid format parameter"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def colocalization_by_gene(
+    request: Request,
+    gene: str = Path(..., description="Gene name or Ensembl gene id", examples=["IL23R"]),
+    format: Literal["tsv", "json"] = Query(
+        default="tsv", description="Response format"
+    ),
+    gene_name_and_position_mapping: GeneNameAndPositionMapping = Depends(
+        get_gene_name_mapping
+    ),
+    data_access_coloc: DataAccessColoc = Depends(get_data_access_coloc),
+) -> Response:
+    """
+    Get colocalized pairs in which one side is an eQTL, pQTL or sQTL of the gene.
+
+    Pairs are found by the QTL's target gene, not by position, so a trans QTL signal on
+    another chromosome is returned with the cis ones: compare `chr` with `gene_chr` (and the
+    region with `gene_start`/`gene_end`) to tell them apart. `qtl_side` says which side of
+    the pair is the gene's QTL, and `qtl_gene` is the symbol its trait was resolved to. A
+    pair of two QTLs of different genes is returned under each. caQTL pairs are not
+    included: a peak is not a gene. The build-time filters and version labels are those
+    described for /colocalization_by_variant/{variant}.
+    """
+    start_time = time.time()
+    try:
+        coords = gene_name_and_position_mapping.get_coordinates_by_gene_name(gene)
+    except GeneNotFoundException as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    try:
+        stream = await data_access_coloc.stream_coloc_by_gene(
+            coords or {},
+            config_common.read_chunk_size,
+            config_common.response_chunk_size,
+        )
+    except NotFoundException as e:
+        logger.warning(e)
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+    return await range_response(
+        str(request.url), stream, coloc_config.coloc_header_schema_gene, format, start_time
+    )

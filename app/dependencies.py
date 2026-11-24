@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from app.services.gene_disease_data import GeneDiseaseData
     from app.services.gene_group_service import GeneGroupService
     from app.services.gene_name_and_position_mapping import GeneNameAndPositionMapping
+    from app.services.gene_summary_access import GeneSummaryAccess
     from app.services.ld_panel_service import LDPanelService
     from app.services.ld_service import LDService
     from app.services.request_util import RequestUtil
@@ -253,6 +254,11 @@ def get_gene_group_service() -> "GeneGroupService":
 def get_gene_disease_data() -> "GeneDiseaseData":
     """Get GeneDiseaseData service instance."""
     return container.get("gene_disease_data")
+
+
+def get_gene_summary_access() -> "GeneSummaryAccess":
+    """Get GeneSummaryAccess service instance."""
+    return container.get("gene_summary_access")
 
 
 def get_credible_set_stats_service() -> "CredibleSetStatsService":

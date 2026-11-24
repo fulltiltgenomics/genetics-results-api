@@ -173,7 +173,6 @@ class DataAccessObject(BaseDataAccessObject):
         """Stream phenotype data from the data source for this resource and data type."""
         pass
 
-    @abstractmethod
     async def json_phenotype(
         self,
         phenotype: str,
@@ -183,7 +182,10 @@ class DataAccessObject(BaseDataAccessObject):
         chunk_size: int,
     ) -> list[dict[str, Any]]:
         """Get phenotype data as JSON response for this resource and data type."""
-        pass
+        _, rows = await self.json_phenotype_with_header(
+            phenotype, interval, header_schema, data_type, chunk_size
+        )
+        return rows
 
     @abstractmethod
     async def json_phenotype_with_header(
@@ -261,9 +263,7 @@ class DataAccess(BaseDataAccess[DataAccessObject]):
         self, resource: str, data_type: str = "cs"
     ) -> DataAccessObject:
         """Get or create a data access object for a specific resource and data type."""
-        return await super()._get_resource_access(
-            (resource, data_type), resource, data_type
-        )
+        return await self._get_or_create((resource, data_type), resource, data_type)
 
     async def warm_all(self) -> None:
         """Construct and warm (header + .tbi prefetch) every configured tabix data

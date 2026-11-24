@@ -23,7 +23,6 @@ execution map, and `test_the_internal_secret_path_survives_but_the_sdk_no_longer
 the residue pinned as what it now is — a property of this service, not a route out of the sandbox.
 """
 
-import asyncio
 import importlib
 import logging
 import os
@@ -32,6 +31,7 @@ import time
 import jwt
 import pytest
 from fastapi import Request
+from helpers.asgi import call_asgi
 
 import app.config.common as config
 from app.core import sandbox_budget, sandbox_token
@@ -48,41 +48,9 @@ def _request_for(route) -> Request:
 
 
 def _drive(path: str, headers=()) -> tuple[int, bytes]:
-    """Run one request through the real ASGI app. httpx (and so TestClient) is not installed."""
-    messages: list[dict] = []
-    delivered = []
-
-    async def receive():
-        if not delivered:
-            delivered.append(True)
-            return {"type": "http.request", "body": b"", "more_body": False}
-        await asyncio.Event().wait()
-
-    async def send(message):
-        messages.append(message)
-
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0", "spec_version": "2.3"},
-        "http_version": "1.1",
-        "method": "GET",
-        "scheme": "http",
-        "path": path,
-        "raw_path": path.encode(),
-        "query_string": b"",
-        "root_path": "",
-        "headers": [(k.lower().encode(), v.encode()) for k, v in headers],
-        "client": ("testclient", 50000),
-        "server": ("testserver", 80),
-        "state": {},
-    }
-    asyncio.run(fastapi_app(scope, receive, send))
-
-    start = next(m for m in messages if m["type"] == "http.response.start")
-    body = b"".join(
-        bytes(m.get("body", b"")) for m in messages if m["type"] == "http.response.body"
-    )
-    return start["status"], body
+    """Run one request through the real ASGI app."""
+    response = call_asgi(fastapi_app, "GET", path, headers=headers)
+    return response.status_code, response.content
 
 
 def _public_routes():

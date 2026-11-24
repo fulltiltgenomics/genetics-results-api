@@ -18,52 +18,28 @@ The properties under test:
     token is capped there anyway so the caps stay testable locally.
 """
 
-import asyncio
-import json
-import time
-from urllib.parse import urlencode
-
 import jwt
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from helpers.sandbox import INTERNAL_SECRET, configure_credentials
+from helpers.sandbox import mint as _mint
+from sandbox_contract import get as _get
 
 import app.config.common as config
 from app.core import limits
 from app.dependencies import auth_required, is_public
 from app.middleware import SandboxResponseCapMiddleware, setup_middleware
 
-INTERNAL_SECRET = "test-internal-secret"
-SIGNING_KEY = "test-sandbox-signing-key-that-is-32-bytes+"
-
 # every chunk the /stream endpoint's generator produces, so a test can tell "the caller stopped
 # receiving" apart from "the service stopped producing"
 _CHUNKS_PRODUCED: list[int] = []
 
 
-def _mint(audience="results-api", **over):
-    iat = int(time.time())
-    claims = {
-        "iss": "chat-backend",
-        "aud": audience,
-        "sub": "user@finngen.fi",
-        "sid": "session-abc",
-        "jti": "exec-123",
-        "iat": iat,
-        "exp": iat + 300,
-        "scope": "query:views",
-    }
-    claims.update(over)
-    return jwt.encode(claims, SIGNING_KEY, algorithm="HS256")
-
-
 @pytest.fixture(autouse=True)
 def sandbox_config(monkeypatch):
-    monkeypatch.setattr(config, "internal_api_secret", INTERNAL_SECRET)
-    monkeypatch.setattr(config, "sandbox_token_signing_key", SIGNING_KEY)
-    monkeypatch.setattr(config, "allowed_email_domains", {"finngen.fi"})
-    monkeypatch.setattr(config, "allowed_emails", set())
+    configure_credentials(monkeypatch)
     monkeypatch.setattr(config, "require_auth", True)
 
 
@@ -72,56 +48,6 @@ def clean_chunk_log():
     _CHUNKS_PRODUCED.clear()
     yield
     _CHUNKS_PRODUCED.clear()
-
-
-class _Response:
-    """The ASGI app is driven directly: httpx (and so TestClient) is not installed here."""
-
-    def __init__(self, status: int, body: bytes, headers: list, messages: list):
-        self.status_code, self.content, self.headers = status, body, headers
-        self.messages = messages
-
-    def json(self):
-        return json.loads(self.content)
-
-
-def _call(api, path, query="", headers=(), spec_version="2.3") -> _Response:
-    messages = []
-    received = []
-
-    async def receive():
-        if not received:
-            received.append(True)
-            return {"type": "http.request", "body": b"", "more_body": False}
-        # a real client does not disconnect here; blocking forever is what lets
-        # StreamingResponse's listen_for_disconnect task behave as it does in production
-        await asyncio.Event().wait()
-
-    async def send(message):
-        messages.append(message)
-
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0", "spec_version": spec_version},
-        "http_version": "1.1",
-        "method": "GET",
-        "scheme": "http",
-        "path": path,
-        "raw_path": path.encode(),
-        "query_string": query.encode(),
-        "root_path": "",
-        "headers": [(k.lower().encode(), v.encode()) for k, v in headers],
-        "client": ("testclient", 50000),
-        "server": ("testserver", 80),
-        "state": {},
-    }
-    asyncio.run(api(scope, receive, send))
-
-    start = next(m for m in messages if m["type"] == "http.response.start")
-    body = b"".join(
-        bytes(m.get("body", b"")) for m in messages if m["type"] == "http.response.body"
-    )
-    return _Response(start["status"], body, start["headers"], messages)
 
 
 @pytest.fixture
@@ -163,11 +89,6 @@ def client():
         return JSONResponse({"payload": "x" * 50_000}, status_code=404)
 
     return api
-
-
-def _get(client, path, token=None, spec_version="2.3", **params):
-    headers = [("Authorization", f"Bearer {token}")] if token else []
-    return _call(client, path, urlencode(params), headers, spec_version=spec_version)
 
 
 # --- a sandbox execution gets the tight cap -------------------------------------------------

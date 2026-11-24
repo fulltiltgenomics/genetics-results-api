@@ -234,6 +234,10 @@ def _register_services():
         from app.services.gene_disease_data import GeneDiseaseData
         return GeneDiseaseData()
 
+    def create_gene_summary_access():
+        from app.services.gene_summary_access import GeneSummaryAccess
+        return GeneSummaryAccess()
+
     # other services
     def create_finemapped():
         from app.services.finemapped import Finemapped
@@ -326,6 +330,11 @@ def _register_services():
         "router; this is a decision to revisit, not a property to rely on",
     )
     container.register("gene_disease_data", create_gene_disease_data, Warm.THREAD)
+    container.register(
+        "gene_summary_access", create_gene_summary_access, Warm.NONE,
+        "construction touches nothing and there is nothing to prefetch: each request reads "
+        "one small object, and the session opens on the first",
+    )
     # finemapped, metadata, ld_datafetch and datafetch each name a module that is not in
     # app/services/, so those factories raise ImportError the moment anything resolves
     # them; no `container.get` in the tree asks for these names. declared rather than
