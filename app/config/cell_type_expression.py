@@ -41,6 +41,23 @@ per_dataset_columns = _GENE_COLUMNS + ["source_gene_id"] + [
     "mean_log1p_cp10k", "frac_expressing", "donor_pseudobulk_mean_cp10k",
 ]
 
+# appended to the summary level by this API; not a column of the file. A pooled row is thinly
+# supported when it has few donors or cells, and held to a higher bar when one dataset is its
+# only source: across the 2026-11-09 release a single dataset's value sat a median 1.4x from the
+# pooled value whatever its donor count, and single-dataset rows reached a gene's top five 1.6x
+# as often as rows pooled from five or more. The gene page and the chat tool hide flagged rows
+# unless asked, so the rule lives here once rather than in each of them.
+SUPPORT_COLUMN = "low_support"
+MIN_DONORS, MIN_CELLS = 5, 200
+SINGLE_DATASET_MIN_DONORS, SINGLE_DATASET_MIN_CELLS = 10, 500
+
+
+def low_support(n_cells: int, n_donors: int, n_datasets: int) -> bool:
+    if n_donors < MIN_DONORS or n_cells < MIN_CELLS:
+        return True
+    return n_datasets < 2 and (n_donors < SINGLE_DATASET_MIN_DONORS or n_cells < SINGLE_DATASET_MIN_CELLS)
+
+
 # appended to the per-dataset level by this API; not a column of the file
 STATUS_COLUMN = "status"
 STATUS_PRESENT = "present"
@@ -51,14 +68,14 @@ _types = {
     "source_gene_ids": str, "source_gene_id": str, "dataset_id": str,
     "n_cells": int, "n_donors": int, "n_datasets": int, "donor_pseudobulk_n_donors": int,
     "mean_log1p_cp10k": float, "frac_expressing": float,
-    "donor_pseudobulk_mean_cp10k": float, "tau": float, "spatial": bool,
+    "donor_pseudobulk_mean_cp10k": float, "tau": float, "spatial": bool, SUPPORT_COLUMN: bool,
 }
 
 
 def _schema(columns: list[str]) -> dict[str, type]:
     return {c: _types.get(c, str) for c in columns}
 
-summary_header_schema = _schema(summary_columns)
+summary_header_schema = _schema(summary_columns + [SUPPORT_COLUMN])
 per_dataset_header_schema = _schema(per_dataset_columns + [STATUS_COLUMN])
 
 _profile = load_profile_module("cell_type_expression")

@@ -217,9 +217,25 @@ class TestLevels:
         assert response.headers["x-dataset-version"] == "2026-10-13-120000"
         rows = tsv_rows(response)
         assert rows and {r["gene_name"] for r in rows} == {"WASH7P"}
-        assert list(rows[0]) == config.summary_columns
+        assert list(rows[0]) == config.summary_columns + [config.SUPPORT_COLUMN]
         # both metrics and the secondary one are carried through untouched
         assert {"mean_log1p_cp10k", "frac_expressing", "donor_pseudobulk_mean_cp10k"} <= set(rows[0])
+
+    def test_low_support_flags_thin_and_single_dataset_rows(self, loaded):
+        rows = json.loads(body(call(loaded, "WASH7P", format="json")))
+        assert {r["low_support"] for r in rows} == {True, False}
+        for r in rows:
+            assert r["low_support"] is config.low_support(r["n_cells"], r["n_donors"], r["n_datasets"])
+        tsv = tsv_rows(call(loaded, "WASH7P"))
+        assert [r["low_support"] for r in tsv] == [str(r["low_support"]).lower() for r in rows]
+
+    @pytest.mark.parametrize("cells,donors,datasets,low", [
+        (200, 5, 2, False), (199, 5, 2, True), (200, 4, 2, True),
+        # one dataset is held to the higher bar on both counts
+        (500, 10, 1, False), (499, 10, 1, True), (500, 9, 1, True), (10**6, 9, 1, True),
+    ])
+    def test_low_support_rule_is_inclusive_at_its_thresholds(self, cells, donors, datasets, low):
+        assert config.low_support(cells, donors, datasets) is low
 
     def test_summary_json_is_typed_and_na_is_null(self, loaded):
         rows = json.loads(body(call(loaded, "WASH7P", format="json")))
@@ -285,7 +301,7 @@ class TestLevels:
 async def _collect(access, gene) -> str:
     stream = await access.stream_summary(access.release, [gene])
     lines = b"".join([c async for c in stream]).decode().splitlines()
-    assert lines[0].split("\t") == config.summary_columns
+    assert lines[0].split("\t") == config.summary_columns + [config.SUPPORT_COLUMN]
     return "\n".join(lines[1:])
 
 

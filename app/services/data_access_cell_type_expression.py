@@ -290,12 +290,15 @@ class CellTypeExpressionAccess(GCloudTabixBase):
                 yield fields
 
     async def stream_summary(self, release: Release, genes: list[dict]) -> AsyncGenerator[bytes, None]:
-        header = ("\t".join(config.summary_columns) + "\n").encode()
+        columns = config.summary_columns
+        cells, donors, datasets = (columns.index(c) for c in ("n_cells", "n_donors", "n_datasets"))
+        header = ("\t".join(columns + [config.SUPPORT_COLUMN]) + "\n").encode()
 
         async def gen() -> AsyncGenerator[bytes, None]:
             yield header
             async for fields in self._rows(release.summary, genes):
-                yield b"\t".join(fields) + b"\n"
+                low = config.low_support(int(fields[cells]), int(fields[donors]), int(fields[datasets]))
+                yield b"\t".join(fields + [b"true" if low else b"false"]) + b"\n"
 
         return gen()
 
