@@ -219,6 +219,13 @@ def on_request_resources() -> set[str]:
     return {r for r, flags in by_resource.items() if flags == {True}}
 
 
+def get_default_resources(data_type: str | None = None) -> list[str]:
+    """The resources a cross-resource query covers when the request names none:
+    `get_resources` without the on-request ones, which answer only when asked for."""
+    hidden = on_request_resources()
+    return [r for r in get_resources(data_type) if r not in hidden]
+
+
 def dataset_products(dataset_id: str) -> dict:
     """Determine which products a dataset supports (credible sets, summary stats, colocalization)."""
     products: dict = {}

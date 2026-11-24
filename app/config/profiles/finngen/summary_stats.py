@@ -600,4 +600,23 @@ data_files = [
             "info": "info",
         },
     },
+    {
+        "id": "finngen_phenotype_pca_r14_sumstats",
+        "dataset_id": "finngen_phenotype_pca_r14",
+        "resource": "finngen_phenotype_pca",
+        "data_source": "gcloud",
+        "prefix": "gs://finngen-commons/results_api_data/sumstats/finngen_phenotype_pca/r14/",
+        "suffix": ".gz",
+        "column_mapping": {
+            "chrom": "chr",
+            "pos": "pos",
+            "ref": "ref",
+            "alt": "alt",
+            "pval": "pval",
+            "mlogp": "mlog10p",
+            "beta": "beta",
+            "sebeta": "se",
+            "af_alt": "af",
+        },
+    },
 ]
