@@ -50,7 +50,7 @@ variant_annotation_sources = {
         "version": "R14",
     },
     "gnomad": {
-        "file": "gs://daly-genetics-results/gnomad/gnomad.genomes.exomes.v4.1.1.sites.vep115.tsv.bgz",
+        "file": "gs://daly-genetics-results/gnomad/gnomad.genomes.exomes.v4.1.1.sites.vep115.canonical.tsv.bgz",
         "version": "4.1.1",
         # gnomad cpra layout differs from finngen: chr=0,pos=1,ref=2,alt=3
         "cpra_cols": [0, 1, 2, 3],
