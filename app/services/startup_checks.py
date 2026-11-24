@@ -162,6 +162,7 @@ def _collect_mapping_files() -> list[tuple[str, str]]:
     yet) and the phenotype-markdown template (a per-request {resource}/{phenocode} path).
     """
     import app.config.common as config
+    import app.config.gene_summary as gene_summary
     from app.config.gene_disease import gene_disease
     from app.config.genes import genes
 
@@ -180,6 +181,9 @@ def _collect_mapping_files() -> list[tuple[str, str]]:
     for key, cfg in gene_disease.items():
         if isinstance(cfg, dict) and "file" in cfg:
             files.append((f"gene_disease:{key}", cfg["file"]))
+
+    if gene_summary.prefix is not None:
+        files.append(("gene_summary:manifest", gene_summary.prefix + gene_summary.MANIFEST_FILE))
 
     # curated variant sets served by the variant_set router
     for name, cfg in config.variant_set_files.items():
