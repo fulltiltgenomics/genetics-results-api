@@ -200,8 +200,8 @@ Pinned by `tests/test_columns_header.py` (offline lane).
    start before the first release exists, and the route answers 503 until it does.
 8. **A release checked once at boot (protein structure)**: the same pointer pattern as item 7,
    as `PROTEIN_STRUCTURE_RELEASE_POINTER` (empty counts as unset). Only a profile with an
-   `app/config/profiles/<profile>/protein_structure.py` can switch it on at all — daly has one
-   with no default pointer, finngen has none, so an env value there is ignored. The pointer
+   `app/config/profiles/<profile>/protein_structure.py` can switch it on at all — daly and finngen
+   each have one with no default pointer; an env value on a profile without one is ignored. The pointer
    names a release of genetics-results-munge's protein structure contract; the slice results-api
    checks against is copied into `app/config/protein_structure_contract.py` (a copy, not an
    import, compared with the munge module by `tests/test_protein_structure.py` when a checkout

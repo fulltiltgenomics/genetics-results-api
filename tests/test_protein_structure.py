@@ -211,8 +211,8 @@ class TestConfig:
         ("daly", "gs://b/protein_structure_staging/releases/CURRENT", "gs://b/protein_structure_staging/releases/CURRENT"),
         ("daly", "", None),
         ("daly", None, None),
-        # finngen has no protein_structure module, so even a set env cannot switch it on
-        ("finngen", "gs://b/protein_structure/releases/CURRENT", None),
+        ("finngen", "gs://b/protein_structure/releases/CURRENT", "gs://b/protein_structure/releases/CURRENT"),
+        ("finngen", "", None),
         ("finngen", None, None),
     ])
     def test_pointer_resolution(self, monkeypatch, profile, env, expected):
@@ -229,20 +229,25 @@ class TestConfig:
             monkeypatch.undo()
             importlib.reload(config)
 
-    def test_daly_names_no_pointer(self):
-        from app.config.profiles.daly import protein_structure as daly
+    @pytest.mark.parametrize("profile", ["daly", "finngen"])
+    def test_no_profile_names_a_pointer(self, profile):
+        module = importlib.import_module(f"app.config.profiles.{profile}.protein_structure")
 
-        assert daly.release_pointer is None
+        assert module.release_pointer is None
+        # scores fail closed: a predictor under a licence not named here is left out
+        assert (module.served_licences, module.served_score_licences) == (None, frozenset({"CC-BY-4.0", "CC-BY-NC-4.0"}))
 
-    def test_daly_serves_every_licence_and_a_profile_without_the_feature_has_no_say(self, monkeypatch):
+    def test_a_profile_without_the_module_cannot_be_switched_on(self, monkeypatch):
         from app.config import profile as profile_loader
 
-        # scores fail closed: a predictor under a licence not named here is left out
-        assert (config.served_licences, config.served_score_licences) == (None, frozenset({"CC-BY-4.0", "CC-BY-NC-4.0"}))
-        monkeypatch.setattr(profile_loader, "CONFIG_PROFILE", "finngen")
+        def absent(name):
+            raise ModuleNotFoundError(name=f"app.config.profiles.other.{name}")
+
+        monkeypatch.setattr(profile_loader, "load_profile_module", absent)
+        monkeypatch.setenv("PROTEIN_STRUCTURE_RELEASE_POINTER", "gs://b/protein_structure/releases/CURRENT")
         try:
-            finngen = importlib.reload(config)
-            assert (finngen.release_pointer, finngen.served_score_licences) == (None, None)
+            other = importlib.reload(config)
+            assert (other.release_pointer, other.served_score_licences) == (None, None)
         finally:
             monkeypatch.undo()
             importlib.reload(config)
