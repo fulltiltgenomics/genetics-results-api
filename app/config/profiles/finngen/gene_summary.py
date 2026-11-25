@@ -1,3 +1,3 @@
-"""FinnGen profile: no AI gene summaries; the route is not registered."""
+"""FinnGen profile: AI gene summaries, the IBD pilot."""
 
-prefix = None
+prefix = "gs://finngen-commons/results_api_data/gene_summaries/ibd_pilot_2026-11-23/"

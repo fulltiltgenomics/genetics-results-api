@@ -3,7 +3,7 @@
 hgnc_file = "gs://finngen-commons/results_api_data/mapping_files/hgnc_complete_set.txt"
 
 rsid_db = {
-    "file": "gs://finngen-commons/results_api_data/gnomad/gnomad.genomes.exomes.v4.0.rsid.v2.tsv.gz",
+    "file": "gs://finngen-commons/results_api_data/gnomad/gnomad.genomes.exomes.v4.1.1.rsid.tsv.gz",
 }
 
 dataset_mapping_files = [
@@ -43,7 +43,7 @@ variant_annotation_sources = {
         "version": "R14",
     },
     "gnomad": {
-        "file": "gs://finngen-commons/gnomad/gnomad.genomes.exomes.v4.1.1.sites.vep115.tsv.bgz",
+        "file": "gs://finngen-commons/gnomad/gnomad.genomes.exomes.v4.1.1.sites.vep115.canonical.tsv.bgz",
         "version": "4.1.1",
         # gnomad cpra layout differs from finngen: chr=0,pos=1,ref=2,alt=3
         "cpra_cols": [0, 1, 2, 3],

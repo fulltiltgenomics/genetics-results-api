@@ -126,11 +126,11 @@ data_files = [
         "example_pheno_or_study": "IL5RA",
         "gencode_version": 49,
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ukb_ppp/20251024_gnomad411/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/ukb_ppp/20251024_gnomad411_canonical/glob-5c4b82b4bcd4288199af76c4cdfd7763/",
             "suffix_95": ".SUSIE.munged.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ukb_ppp/20251024_gnomad411/UKB_PPP_credible_sets.tsv.gz",
-            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/ukb_ppp/20251024_gnomad411/UKB_PPP_credible_sets.qtl.tsv.gz",
-            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/ukb_ppp/20251024_gnomad411/credible_set_stats.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/ukb_ppp/20251024_gnomad411_canonical/UKB_PPP_credible_sets.tsv.gz",
+            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/ukb_ppp/20251024_gnomad411_canonical/UKB_PPP_credible_sets.qtl.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/ukb_ppp/20251024_gnomad411_canonical/credible_set_stats.tsv",
         },
     },
     {
@@ -172,10 +172,10 @@ data_files = [
         "example_pheno_or_study": "QTD000605",
         "gencode_version": 39,
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r8_gnomad411/individual/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r8_gnomad411_canonical/individual/",
             "suffix_95": ".SUSIE.munged.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r8_gnomad411/eQTL_Catalogue_R8.tsv.gz",
-            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r8_gnomad411/eQTL_Catalogue_R8.qtl.tsv.gz",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r8_gnomad411_canonical/eQTL_Catalogue_R8.tsv.gz",
+            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/eqtl_catalogue/r8_gnomad411_canonical/eQTL_Catalogue_R8.qtl.tsv.gz",
         },
     },
     {
@@ -213,10 +213,10 @@ data_files = [
         "gencode_version": 49,
         # published FINEMAP credible sets, served alongside the pgc_scz pseudo ones above
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/pgc_scz_finemap/2022_gnomad411/individual/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/pgc_scz_finemap/2022_gnomad411_canonical/individual/",
             "suffix_95": ".FINEMAP.munged.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/pgc_scz_finemap/2022_gnomad411/PGC_SCZ_2022_credible_sets.tsv.gz",
-            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/pgc_scz_finemap/2022_gnomad411/credible_set_stats.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/pgc_scz_finemap/2022_gnomad411_canonical/PGC_SCZ_2022_credible_sets.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/pgc_scz_finemap/2022_gnomad411_canonical/credible_set_stats.tsv",
         },
     },
     {
@@ -266,9 +266,9 @@ data_files = [
         "example_pheno_or_study": "GCST004602",
         "gencode_version": 49,
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/open_targets/202609/individual/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/open_targets/202609_canonical/individual/",
             "suffix_95": ".SUSIE.munged.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets/202609/Open_Targets_26.09_credible_sets.tsv.gz",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets/202609_canonical/Open_Targets_26.09_credible_sets.tsv.gz",
         },
     },
     {
@@ -282,10 +282,10 @@ data_files = [
         "example_pheno_or_study": "GTEx_v10_lung_ge",
         "gencode_version": 39,
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/open_targets_qtl/202609/individual/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/open_targets_qtl/202609_canonical/individual/",
             "suffix_95": ".SUSIE.munged.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets_qtl/202609/Open_Targets_QTL_26.09_credible_sets.tsv.gz",
-            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets_qtl/202609/Open_Targets_QTL_26.09_credible_sets.qtl.tsv.gz",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets_qtl/202609_canonical/Open_Targets_QTL_26.09_credible_sets.tsv.gz",
+            "all_cs_qtl_file": "gs://finngen-commons/results_api_data/credible_sets/open_targets_qtl/202609_canonical/Open_Targets_QTL_26.09_credible_sets.qtl.tsv.gz",
         },
     },
     {
@@ -298,10 +298,10 @@ data_files = [
         # published SuSiE credible sets for the 249 Nightingale NMR metabolic traits. No
         # all_cs_qtl_file: the traits are metabolites, so there is no gene to index them by.
         "cs": {
-            "prefix": "gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026_gnomad411/individual/",
+            "prefix": "gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026_gnomad411_canonical/individual/",
             "suffix_95": ".SUSIE.munged.tsv",
-            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026_gnomad411/nmr_ukbb_est_credible_sets.tsv.gz",
-            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026_gnomad411/credible_set_stats.tsv",
+            "all_cs_file": "gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026_gnomad411_canonical/nmr_ukbb_est_credible_sets.tsv.gz",
+            "stats_file": "gs://finngen-commons/results_api_data/credible_sets/nmr_ukbb_est/2026_gnomad411_canonical/credible_set_stats.tsv",
         },
     },
     # sandbox custom GWAS fine-mapping, read from the pipeline's own SuSiE outputs and

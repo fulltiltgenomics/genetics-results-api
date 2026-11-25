@@ -26,6 +26,7 @@ exome_data_files = [
             "version": "2026",
             "prefix": "gs://finngen-commons/results_api_data/exome_results/ibd/IBD_exome_",
             "suffix": "_variant_results.munged.mlog10p_gt4.tsv.gz",
+            "all_exome_file": "gs://finngen-commons/results_api_data/exome_results/ibd/IBD_exome_variant_results.munged.mlog10p_gt4.tsv.gz",
         },
     },
 ]
