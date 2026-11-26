@@ -2,7 +2,7 @@
 AI gene summaries: configuration.
 
 A release is a bucket folder holding one `<SYMBOL>.json` per summarized gene, keyed by HGNC
-approved symbol, and a `manifest.json`. genetics-results-munge scripts/gene_summary/publish.py
+approved symbol, and a `manifest.json`. genetics-results-workflows gene_summary/publish.py
 writes both. One object per gene, so a refresh uploads only the genes whose evidence changed
 and a running server serves them without a restart.
 """
