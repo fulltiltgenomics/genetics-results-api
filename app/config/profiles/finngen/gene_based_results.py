@@ -22,6 +22,19 @@ gene_based_data_files = [
         },
     },
     {
+        "id": "schema1_gene_based",
+        "dataset_id": "schema1_gene_based",
+        "resource": "schema1",
+        "data_source": "gcloud",
+        "example_pheno_or_study": "SCZ",
+        "gencode_version": 39,
+        "gene_based": {
+            "file": "gs://finngen-commons/results_api_data/exome_results/schema1/SCHEMA1_gene_results.munged.tsv.gz",
+            "prefix": "gs://finngen-commons/results_api_data/exome_results/schema1/gene_burden_per_trait/",
+            "suffix": ".tsv.gz",
+        },
+    },
+    {
         "id": "schema_gene_based",
         "dataset_id": "schema_gene_based",
         "resource": "schema2",
